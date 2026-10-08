@@ -1,0 +1,193 @@
+Build a production-ready AI service layer for a SaaS app called **"Context"** — an AI-powered onboarding intelligence system.
+
+The goal is to implement multiple AI tools (not just one), each exposed via clean backend functions.
+
+Use:
+
+* Node.js (TypeScript)
+* OpenAI API (or compatible LLM)
+
+---
+
+🎯 CORE IDEA:
+
+Transform company data (docs, teams, tasks) into actionable intelligence using multiple AI capabilities.
+
+---
+
+🧠 REQUIRED AI TOOLS:
+
+---
+
+1. CONTEXT BRIEF GENERATOR
+
+Function:
+generateContextBrief(input)
+
+Input:
+
+* user role
+* team data
+* documents
+* tasks
+
+Output (strict JSON):
+{
+team,
+goal,
+keyPerson,
+suggestedReading,
+nextAction,
+whyThisMatters,
+confidence,
+explanation,
+sources
+}
+
+---
+
+2. SMART Q&A
+
+Function:
+askQuestion(question, contextData)
+
+Goal:
+Answer user questions about company knowledge.
+
+Rules:
+
+* Answer clearly
+* Use provided context only
+* If unknown → say "Not enough data"
+
+Output:
+{
+answer,
+confidence,
+sources
+}
+
+---
+
+3. DOCUMENT EXPLAINER
+
+Function:
+explainDocument(doc, role)
+
+Goal:
+Explain document based on user role.
+
+Output:
+{
+summary,
+keyPoints[],
+simplifiedExplanation,
+relevanceForRole
+}
+
+---
+
+4. TASK BREAKDOWN AI
+
+Function:
+breakdownTask(task)
+
+Goal:
+Convert task into actionable steps.
+
+Output:
+{
+steps[],
+dependencies[],
+estimatedEffort,
+requiredKnowledge
+}
+
+---
+
+5. RELATIONSHIP EXPLAINER (UNIQUE FEATURE)
+
+Function:
+explainRelationship(entityId, graph)
+
+Goal:
+Explain how something connects in the system.
+
+Output:
+{
+explanation,
+relatedEntities[],
+impact
+}
+
+---
+
+6. DAILY CONTEXT FEED
+
+Function:
+generateDailyFocus(userData)
+
+Goal:
+Tell user what to focus on today.
+
+Output:
+{
+priorities[],
+recommendedDocs[],
+suggestedActions[]
+}
+
+---
+
+7. CONFUSION RESOLVER
+
+Function:
+simplifyConcept(input)
+
+Goal:
+Explain complex concept in simple terms.
+
+Output:
+{
+simpleExplanation,
+analogy,
+keyTakeaways[]
+}
+
+---
+
+⚠️ GLOBAL AI RULES:
+
+* Always return valid JSON
+* No markdown
+* No extra text
+* Use structured prompts internally
+* Avoid hallucination
+* Include confidence score where applicable
+
+---
+
+🧩 IMPLEMENTATION DETAILS:
+
+* Create separate functions for each tool
+* Use strong prompt engineering
+* Keep temperature low (0.3–0.5)
+* Parse responses safely
+* Add retry logic
+* Ensure consistent output formats
+
+---
+
+🎯 FINAL EXPECTATION:
+
+This AI layer should feel like:
+
+* A senior engineer guiding the user
+* Not just a text generator
+* Smart, contextual, and actionable
+
+---
+
+💡 ONE LINE:
+
+"Build an AI system that understands company context and guides users intelligently across tasks, knowledge, and decisions."

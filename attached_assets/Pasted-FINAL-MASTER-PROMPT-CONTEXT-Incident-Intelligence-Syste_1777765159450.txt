@@ -1,0 +1,332 @@
+FINAL MASTER PROMPT — CONTEXT (Incident Intelligence System)
+
+Act as a Senior Staff Engineer, Product Designer, and AI Systems Architect.
+
+Build a production-ready SaaS platform:
+
+🚨 CONTEXT — Real-Time Incident Intelligence System
+🧠 CORE MISSION
+
+Context is a real-time reasoning engine for distributed systems.
+
+It continuously answers:
+
+What is failing → where it started → how it is spreading → what to do next
+
+This is NOT:
+
+a monitoring dashboard
+a log viewer
+a chatbot wrapper
+
+This IS:
+
+A system that constructs, updates, and explains failure causality in real time.
+
+🔥 PRODUCT TRUTH (NON-NEGOTIABLE)
+Every output must be:
+causal (not descriptive)
+time-aware
+graph-grounded
+No vague AI responses
+No static summaries
+Everything must connect to:
+dependency graph
+event timeline
+incident state
+🧱 SYSTEM ARCHITECTURE
+🔧 Backend
+Node.js (TypeScript)
+Express
+PostgreSQL (source of truth)
+Redis (cache + streaming state)
+WebSockets (real-time updates)
+🗄️ DATA MODELS (FINAL)
+services
+id: uuid
+name: string
+status: healthy | at_risk | degraded | failing
+owner_team: string
+criticality: high | medium | low
+created_at: timestamp
+service_dependencies
+id
+source_service_id
+target_service_id
+dependency_type: sync | async | db | external
+service_events
+id
+service_id
+type: deploy | error | latency | alert | recovery
+severity: low | medium | high | critical
+timestamp
+metadata: jsonb
+incidents
+id
+title
+severity
+status: active | resolved
+root_cause_service_id
+start_time
+end_time
+confidence_score
+incident_edges (CRITICAL)
+id
+incident_id
+from_service
+to_service
+reason
+timestamp
+
+👉 Stores actual causal propagation, not just inferred data
+
+⚡ CORE INTELLIGENCE SYSTEM
+1. 🔍 ROOT CAUSE ENGINE (MANDATORY)
+
+Pipeline:
+
+Detect failing service
+Traverse upstream dependencies (DFS/BFS)
+Correlate:
+first error timestamps
+recent deployments
+Identify:
+earliest failure node
+Build propagation chain
+Output (STRICT FORMAT)
+{
+  "root_cause": "database",
+  "propagation": [
+    "database → payments",
+    "payments → checkout"
+  ],
+  "confidence": 0.91
+}
+2. ⚠️ RISK ENGINE
+
+Rules:
+
+If A fails → downstream = at-risk
+If latency spike → degraded
+Use short sliding window (5–15 min)
+3. 🚨 INCIDENT ENGINE
+Group events by:
+time proximity
+shared dependency graph
+Create + update incident continuously
+Merge overlapping failures
+4. 🧠 AI REASONING ENGINE (STRICT)
+
+Endpoint:
+
+POST /ai/incident-ask
+
+Input Context
+graph snapshot
+incident state
+last N events (time-sorted)
+user query
+Output (REQUIRED SHAPE)
+{
+  "answer": "Checkout is failing due to database errors propagating through Payments.",
+  "reasoning": [
+    "Database errors started at 10:02",
+    "Payments depends on Database",
+    "Checkout depends on Payments"
+  ],
+  "impact": [
+    "Checkout API failure",
+    "Payment processing delays"
+  ],
+  "actions": [
+    "Rollback latest DB deployment",
+    "Restart DB connection pool"
+  ],
+  "confidence": 0.89
+}
+HARD RULES
+No hallucination
+Every reasoning step must map to:
+event OR dependency edge
+Include confidence scoring
+🔌 API DESIGN
+Ingestion
+POST /ingest/services
+POST /ingest/events
+POST /ingest/dependencies
+Intelligence
+GET /graph
+GET /timeline
+GET /incidents
+POST /root-cause
+AI
+POST /ai/query
+Real-time
+WS: /live
+🎨 FRONTEND (React + Tailwind + Framer Motion)
+🏠 LANDING PAGE (HIGH IMPACT)
+Hero
+
+Headline:
+
+Understand why your system is failing — instantly
+
+Subtext:
+
+Not dashboards. Not alerts. Real-time causality.
+
+CTA:
+[ Run Live Incident ]
+
+HERO VISUAL (CRITICAL)
+Animated dependency graph
+Failure spreads visually:
+Database → Payments → Checkout
+Highlight:
+“Root cause identified”
+Sections
+Failure propagation visualization
+Before vs After (Monitoring vs Context)
+Core features
+Demo trigger
+🧭 DASHBOARD
+1. 🔎 OVERVIEW
+Health summary:
+healthy / at-risk / failing
+Risk cards
+🚨 INCIDENT BRIEF (CORE FEATURE)
+
+Must be structured + prominent:
+
+Root Cause:
+Database failure
+
+Impact:
+Checkout unavailable
+
+Propagation:
+Database → Payments → Checkout
+
+Recommended Actions:
+1. Rollback DB deployment
+2. Restart connection pool
+
+Confidence:
+91%
+2. 🌐 GRAPH VIEW
+Force-directed graph
+Live updates
+Node click → detail panel:
+status
+events
+owner
+dependencies
+3. 🕒 TIMELINE
+Unified stream:
+events
+alerts
+deployments
+Sorted + severity-colored
+4. 🤖 AI ASSISTANT
+
+Chat UI:
+
+Example:
+
+Why is checkout failing?
+
+Response must include:
+
+reasoning chain
+impact
+actions
+confidence
+🎮 DEMO SYSTEM (MANDATORY)
+
+Button:
+
+👉 Simulate Incident
+
+Scenario
+Database deployment fails
+Error rate spikes
+Payments degrade
+Checkout fails
+System must:
+detect incident automatically
+compute root cause
+render propagation graph
+update UI in real time
+generate incident brief
+⚡ ADVANCED FEATURES
+🧑‍💻 Ownership Mapping
+Each service shows owning team
+“Who to notify”
+📘 Runbooks
+Failure → suggested actions
+⚡ Real-Time Engine
+WebSockets push:
+graph updates
+incidents
+risks
+🧠 Confidence Scoring
+
+Based on:
+
+timestamp alignment
+graph consistency
+event density
+🔮 Predictive Insight (WINNING FEATURE)
+
+“Auth service likely to fail in ~2 minutes”
+
+Based on:
+
+propagation trend
+upstream degradation
+🧪 SEED DATA
+
+Services:
+
+Checkout
+Payments
+Auth
+Database
+
+Dependencies:
+
+Checkout → Payments
+Payments → Database
+Auth → Database
+🏗️ FOLDER STRUCTURE
+Backend
+/server
+  /modules
+    /graph
+    /incidents
+    /events
+    /risk
+    /ai
+  /routes
+  /db
+Frontend
+/client
+  /components
+  /features
+    /overview
+    /graph
+    /timeline
+    /incident
+    /ai
+  /store
+  /hooks
+🚫 DO NOT BUILD
+onboarding systems
+documentation tools
+generic dashboards
+fluff AI features
+🏆 SUCCESS CRITERIA
+
+The product must feel like:
+
+“This system understands my production system better than my team during an incident.”

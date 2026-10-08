@@ -1,0 +1,623 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: context
+    description: Onboarding context operations
+  - name: openai
+    description: AI chat operations
+  - name: insights
+    description: Incident intelligence operations
+  - name: ingest
+    description: Data ingestion and webhook operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterBody"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "409":
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginBody"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /context/brief:
+    get:
+      operationId: getContextBrief
+      tags: [context]
+      summary: Get personalized context brief
+      parameters:
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [backend, frontend, pm]
+          required: false
+      responses:
+        "200":
+          description: Context brief for the given role
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContextBrief"
+
+  /context/team:
+    get:
+      operationId: getContextTeam
+      tags: [context]
+      summary: Get recommended team members
+      parameters:
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [backend, frontend, pm]
+          required: false
+      responses:
+        "200":
+          description: List of relevant team members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamMember"
+
+  /context/documents:
+    get:
+      operationId: getContextDocuments
+      tags: [context]
+      summary: Get AI-recommended documents
+      parameters:
+        - in: query
+          name: role
+          schema:
+            type: string
+            enum: [backend, frontend, pm]
+          required: false
+      responses:
+        "200":
+          description: List of recommended documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContextDocument"
+
+  /openai/conversations:
+    post:
+      operationId: createConversation
+      tags: [openai]
+      summary: Create a new conversation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConversationBody"
+      responses:
+        "201":
+          description: Conversation created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConversationResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /openai/conversations/{id}/messages:
+    get:
+      operationId: getConversationMessages
+      tags: [openai]
+      summary: Get messages for a conversation
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MessageResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: sendMessage
+      tags: [openai]
+      summary: Send a message (SSE streaming response)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageBody"
+      responses:
+        "200":
+          description: Streamed AI response (text/event-stream)
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /insights/summary:
+    get:
+      operationId: getInsightsSummary
+      tags: [insights]
+      summary: Get overview summary
+      responses:
+        "200":
+          description: Overview metrics, active incidents, and risks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightsSummaryResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /insights/risks:
+    get:
+      operationId: getInsightsRisks
+      tags: [insights]
+      summary: Get service risks
+      responses:
+        "200":
+          description: List of current service risks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightsRisksResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /insights/graph:
+    get:
+      operationId: getInsightsGraph
+      tags: [insights]
+      summary: Get topology graph
+      responses:
+        "200":
+          description: Nodes and edges representing service topology
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightsGraphResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /insights/root-cause:
+    get:
+      operationId: getInsightsRootCause
+      tags: [insights]
+      summary: Get latest root cause analysis
+      responses:
+        "200":
+          description: Root cause details and recommended action
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InsightsRootCauseResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /ingest/webhook:
+    post:
+      operationId: ingestWebhook
+      tags: [ingest]
+      summary: Ingest webhook alert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookPayload"
+      responses:
+        "200":
+          description: Webhook received successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          description: Invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    SuccessResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required:
+        - ok
+
+    RegisterBody:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        name:
+          type: string
+        role:
+          type: string
+          enum: [backend, frontend, pm]
+      required:
+        - email
+        - password
+        - name
+
+    LoginBody:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - email
+        - name
+        - role
+        - createdAt
+
+    ContextBrief:
+      type: object
+      properties:
+        keyInsight:
+          type: string
+        nextAction:
+          type: string
+        whyMatters:
+          type: string
+        confidence:
+          type: integer
+        suggestedPerson:
+          type: object
+          properties:
+            name:
+              type: string
+            role:
+              type: string
+          required:
+            - name
+            - role
+        reasoning:
+          type: array
+          items:
+            type: string
+      required:
+        - keyInsight
+        - nextAction
+        - whyMatters
+        - confidence
+        - suggestedPerson
+        - reasoning
+
+    TeamMember:
+      type: object
+      properties:
+        initials:
+          type: string
+        name:
+          type: string
+        role:
+          type: string
+        color:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        why:
+          type: string
+      required:
+        - initials
+        - name
+        - role
+        - color
+        - tags
+        - why
+
+    ContextDocument:
+      type: object
+      properties:
+        name:
+          type: string
+        why:
+          type: string
+      required:
+        - name
+        - why
+
+    CreateConversationBody:
+      type: object
+      properties:
+        title:
+          type: string
+      required:
+        - title
+
+    ConversationResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - title
+        - createdAt
+
+    MessageResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        conversationId:
+          type: integer
+        role:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - conversationId
+        - role
+        - content
+        - createdAt
+
+    SendMessageBody:
+      type: object
+      properties:
+        content:
+          type: string
+        role:
+          type: string
+          enum: [backend, frontend, pm]
+      required:
+        - content
+
+    InsightsSummaryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+      required:
+        - success
+        - data
+
+    InsightsRisksResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+      required:
+        - success
+        - data
+
+    InsightsGraphResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+      required:
+        - success
+        - data
+
+    InsightsRootCauseResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+      required:
+        - success
+
+    WebhookPayload:
+      type: object
+      properties:
+        service:
+          type: string
+        event:
+          type: string
+        severity:
+          type: string
+        message:
+          type: string
+      required:
+        - service
+        - event

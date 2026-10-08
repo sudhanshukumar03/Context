@@ -1,0 +1,148 @@
+Create a modern, minimal, and visually elegant web app UI called **"Context"** — an AI-powered onboarding intelligence system that helps new employees understand company context instantly.
+
+🎯 Goal:
+Design a clean, professional, and less flashy interface that feels intelligent, calm, and trustworthy — not overly bold or noisy. The UI should impress hackathon judges by being clear, purposeful, and product-focused.
+
+---
+
+🧠 CORE IDEA:
+The app transforms scattered company knowledge (docs, teams, tools) into a personalized “Context Brief” for each user.
+
+---
+
+🔥 HERO SECTION (VERY IMPORTANT):
+
+Instead of a chatbot, create a **strong visual storytelling intro**:
+
+* Show a **split-screen or transition UI**:
+
+  * Left: “Chaos”
+
+    * Messy docs, Slack overload, confusion
+    * Text: “3 weeks to understand anything”
+  * Right: “Clarity”
+
+    * Clean dashboard with insights
+    * Text: “Understand everything in minutes”
+
+* Add a bold, simple headline:
+  👉 “From Zero Context to Clear Action — Instantly”
+
+* Subtext:
+  “AI that understands your company and tells you exactly what matters.”
+
+* CTA button:
+  👉 “See How It Works”
+
+---
+
+⚡ DEMO FLOW (AUTO VISUAL — NO CHATBOT):
+
+When user clicks CTA:
+
+Step 1: Show “Uploading company data…”
+Step 2: AI processing animation (clean, subtle — no flashy effects)
+Step 3: Show output:
+
+📄 “Your Context Brief”
+
+* Team: Payments
+* Goal: Reduce API latency
+* Who to talk to: Sarah (Tech Lead)
+* What to read: API Guide
+
+👉 This is the KEY MOMENT
+
+---
+
+🧩 MAIN DASHBOARD:
+
+Keep it minimal and structured:
+
+1. 🧠 Context Brief Card (Top Priority)
+
+   * Key Insight
+   * Next Action
+   * Suggested Person
+
+2. 🕸️ Context Graph (Interactive)
+
+   * Nodes: You, Team, Docs, Tasks
+   * On click → show relationships (side panel)
+
+3. 👥 Team Intelligence
+
+   * Who is relevant to you
+   * Expertise tags
+
+4. 📚 Smart Documents
+
+   * Recommended reading (based on role)
+
+---
+
+🧠 ADD THIS (VERY IMPORTANT):
+
+👉 “Why this suggestion?”
+
+* Based on: Docs + Team + Activity
+* Confidence score (e.g. 87%)
+
+This makes it feel like REAL AI.
+
+---
+
+🎯 PERSONALIZATION:
+
+Add role selector:
+
+* Frontend Dev / Backend / PM
+
+UI updates based on role.
+
+---
+
+📊 IMPACT SECTION:
+
+Show simple metrics:
+
+* “70% faster onboarding”
+* “3x faster task clarity”
+* “Less confusion, more execution”
+
+---
+
+🎨 DESIGN STYLE:
+
+* Minimal, clean, Apple/Notion-like
+* Soft gradients (not too bright)
+* Plenty of spacing
+* Smooth micro-interactions
+* Dark mode preferred
+* No clutter, no over-animation
+
+---
+
+🚫 AVOID:
+
+* No unnecessary chatbot intro
+* No overly flashy UI
+* No confusing animations
+* No fake complexity
+
+---
+
+🏆 FINAL FEEL:
+
+The product should feel like:
+👉 “This actually solves a real problem”
+👉 “This could be a startup”
+👉 “This is not just a demo”
+
+---
+
+💡 ONE-LINER FOR REFERENCE:
+
+“Context is an AI system that turns company chaos into clear, personalized action.”
+
+---

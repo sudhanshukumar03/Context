@@ -1,0 +1,236 @@
+Build a production-ready SaaS web application called “Context” — an AI-powered Incident Intelligence System that not only shows system health, but explains, predicts, and resolves incidents in real time.
+
+🎯 CORE GOAL
+
+Transform raw system signals (logs, metrics, dependencies) into:
+
+A single clear root cause
+A live understanding of cascading failures
+Predictions of what will break next
+AI-assisted resolution actions
+
+This is NOT monitoring.
+
+This is a real-time decision-making system for engineers.
+
+🧩 CORE SYSTEM ARCHITECTURE
+1. 🧠 ROOT CAUSE ENGINE (NEW — CRITICAL)
+
+Create a central engine that:
+
+Ingests:
+Service health states
+Dependency graph
+Timeline events
+Computes:
+Most probable root cause
+Impacted services
+Failure propagation chain
+Output format:
+type RootCause = {
+  cause: string;
+  confidence: number;
+  impactedServices: string[];
+  cascadePath: string[];
+  estimatedLoss: string;
+  suggestedFixes: string[];
+};
+UI REQUIREMENT:
+
+Add a sticky “Root Cause Panel” at the top of Overview
+
+Must display:
+
+🔥 Root Cause (bold, human-readable)
+📉 Impact (services + revenue)
+🔗 Cascade chain (visual)
+🛠 Suggested actions (buttons)
+2. 🤖 ACTIVE AI INCIDENT COMMANDER (UPGRADE)
+
+Upgrade AI Assistant from passive → active system.
+
+Capabilities:
+✅ Auto Insights (no user input)
+Detect retry storms
+Detect dependency failures
+Detect anomaly patterns
+✅ Explainability
+
+Every AI conclusion must include:
+
+“Why this happened”
+“What data was used”
+✅ Actionable Commands
+
+Add buttons:
+
+“Apply rollback”
+“Throttle retries”
+“Restart service”
+
+Simulate backend execution with state updates.
+
+3. 🌐 INTERACTIVE DEPENDENCY GRAPH (UPGRADE)
+
+Current graph → make it investigation tool
+
+Add:
+🔹 Node Click Interaction
+
+Clicking a node opens a right-side inspection panel
+
+Panel shows:
+
+Service name
+Status
+Dependencies
+Recent errors
+Related timeline events
+🔹 Failure Propagation Animation
+
+When a service fails:
+
+Animate edges lighting up
+Show cascade direction
+🔹 Predictive Highlighting
+
+Color nodes:
+
+Red = failing
+Orange = next likely to fail
+Yellow = at risk
+4. 🕒 INTELLIGENT TIMELINE (UPGRADE)
+
+Convert raw logs → structured incident story
+
+Add AI grouping:
+IncidentPhase = [
+  "Trigger",
+  "Amplification",
+  "Impact",
+  "Mitigation"
+];
+UI:
+
+Group events into collapsible sections:
+
+⚡ Trigger (what started it)
+🔥 Amplification (what worsened it)
+💥 Impact (user-facing damage)
+🛠 Mitigation (fix attempts)
+5. 🔮 PREDICTION ENGINE (NEW)
+
+Create a lightweight prediction system:
+
+Logic:
+If dependency is degraded → propagate risk
+If retries spike → predict overload
+If DB near limit → predict failure
+Output:
+type Prediction = {
+  service: string;
+  riskLevel: "low" | "medium" | "high";
+  timeToFailure: string;
+};
+UI:
+Add “⚠️ Likely Next Failures” section
+Highlight nodes in graph
+6. 👤 ROLE-BASED CONTEXT (RE-INTRODUCE — IMPORTANT)
+
+Add role selector:
+
+Backend Engineer
+SRE
+Manager
+Behavior:
+👨‍💻 Engineer:
+Detailed logs
+Fix suggestions
+🧑‍💼 Manager:
+Revenue impact
+ETA
+Simple explanation
+7. ⚡ REAL-TIME SIMULATION ENGINE
+
+Even if mock data:
+
+Stream events every 2–5 seconds
+Update:
+Timeline
+Graph states
+Root cause
+Add “LIVE” indicator
+8. 🎬 DEMO MODE (VERY IMPORTANT)
+
+Add a “🎥 Run Demo Scenario” button
+
+Scenario Flow:
+System healthy
+Webhook misconfigured
+Payments API fails
+Retry storm begins
+Database degrades
+Checkout impacted
+AI detects root cause
+User clicks fix
+System recovers
+9. 🎨 UI/UX (KEEP YOUR STYLE, ADD POWER)
+
+Maintain:
+
+Dark theme
+Clean SaaS look
+
+Enhance:
+
+Subtle glow for active incidents
+Smooth transitions
+Pulsing alerts
+Animated graph edges
+10. 🧱 TECH STACK
+Frontend:
+React + TypeScript
+Tailwind CSS
+Framer Motion
+Zustand (state)
+Backend (mock or real):
+Node.js
+WebSocket (for live updates)
+AI Layer:
+Rule-based + simulated LLM responses
+🧠 KEY DIFFERENTIATION (MUST BE CLEAR)
+
+This system must:
+
+❌ Not just show logs
+❌ Not just show dashboards
+
+✅ It must:
+
+Explain incidents
+Connect signals
+Predict failures
+Suggest actions
+🏁 FINAL OUTPUT EXPECTATION
+
+The app should feel like:
+
+“An AI SRE that understands everything happening in your system and tells you exactly what to do.”
+
+⚡ OPTIONAL (IF TIME)
+Slack integration simulation
+Incident report auto-generation
+“Explain like I’m a CEO” button
+🧨 FINAL LINE (IMPORTANT)
+
+Do NOT build a static UI.
+
+Build a living system where everything reacts to incidents in real time.
+
+✅ DONE
+
+If you implement even 80% of this, your project becomes:
+
+🏆 Hackathon Winner
+💼 Investor-ready demo
+🧠 Actually differentiated product

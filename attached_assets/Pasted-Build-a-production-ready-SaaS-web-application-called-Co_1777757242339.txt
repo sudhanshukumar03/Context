@@ -1,0 +1,199 @@
+Build a production-ready SaaS web application called “Context” — a real-time Company Intelligence Engine focused on incident intelligence for engineering teams.
+
+🎯 CORE GOAL
+
+Create a system that:
+
+Understands relationships between services, teams, tasks, and deployments
+Explains why incidents happen (causality, not just data)
+Predicts potential failures before they occur
+Provides clear, explainable, and actionable insights
+❗ IMPORTANT CONSTRAINTS
+Write clean, modular, production-level code
+Use TypeScript everywhere (frontend)
+Follow scalable folder structure
+Do NOT build a demo — build a real SaaS foundation
+Avoid overengineering UI — focus on clarity + intelligence
+🧱 TECH STACK
+Frontend
+React (TypeScript)
+Tailwind CSS
+Zustand (state management)
+React Query
+WebSockets (real-time updates)
+Backend
+FastAPI (Python)
+PostgreSQL (structured data)
+Redis (caching + background jobs)
+AI + Data Layer
+Neo4j (graph relationships)
+Weaviate (vector search)
+OpenAI API (LLM reasoning)
+🏗️ CORE FEATURES (BUILD IN THIS ORDER)
+1. 🔐 AUTH SYSTEM
+Signup / Login
+JWT-based authentication
+Basic role system (admin, user)
+2. 📥 DATA INGESTION LAYER (SIMPLIFIED MVP)
+
+Create APIs to ingest:
+
+Services (e.g., Checkout, Payments)
+Tasks (like Jira issues)
+Events (deployments, failures)
+Messages (Slack-like text)
+
+Endpoints:
+
+POST /upload/services
+POST /upload/tasks
+POST /upload/events
+POST /upload/messages
+3. 🧬 CONTEXT GRAPH ENGINE
+
+Use Neo4j to build relationships:
+
+Entities:
+
+Service
+Task
+Event
+User
+
+Relationships:
+
+DEPENDS_ON
+CAUSED_BY
+ASSIGNED_TO
+RELATED_TO
+4. 🔎 HYBRID RETRIEVAL (G-RAG)
+
+When user asks a question:
+
+Query Neo4j → relationship paths
+Query Weaviate → relevant semantic content
+Combine results
+Rank using:
+recency
+relationship strength
+semantic similarity
+5. 🤖 AI ENDPOINTS
+POST /ai/ask
+
+Input:
+
+{ "question": "Why is checkout failing?" }
+
+Output:
+
+{
+  "answer": "...",
+  "confidence": 0.82,
+  "sources": ["event_123", "task_456"],
+  "reasoning": "Checkout depends on Payments API which failed after deployment."
+}
+POST /ai/explain
+
+Explains relationships:
+
+Input:
+
+{ "entityA": "Checkout", "entityB": "Database" }
+
+Output:
+
+Graph path explanation
+6. 🔮 BASIC PREDICTION SYSTEM (MVP)
+
+Implement simple logic:
+
+If service A depends on B
+And B recently failed or deployed
+→ flag A as “at risk”
+
+Endpoint:
+
+GET /insights/risks
+7. 📊 FRONTEND (CLEAN + INTELLIGENT UI)
+Pages:
+1. Dashboard
+Show:
+active risks
+recent events
+suggested insights
+2. Graph View (IMPORTANT)
+Visualize relationships
+Click nodes → show connections
+Highlight “failure paths”
+3. AI Assistant Panel
+Input box
+Show:
+answer
+confidence
+reasoning
+4. Timeline View
+Combined feed:
+events
+tasks
+messages
+🎬 DEMO FLOW (MUST WORK)
+
+Seed the system with sample data:
+
+Checkout service depends on Payments
+Payments had a recent failed deployment
+Slack message mentions issue
+
+User asks:
+
+“Why is checkout failing?”
+
+System must:
+
+identify Payments as root cause
+show dependency
+explain reasoning
+⚡ PERFORMANCE REQUIREMENTS
+Use async APIs
+Cache repeated queries (Redis)
+Avoid blocking operations
+🧠 UX REQUIREMENTS
+Minimal, clean, professional
+No clutter
+Focus on:
+clarity
+trust
+explainability
+🗂️ PROJECT STRUCTURE
+Backend
+/app
+  /api
+  /services
+  /models
+  /graph
+  /ai
+  /workers
+Frontend
+/src
+  /components
+  /pages
+  /store
+  /hooks
+  /services
+🚀 FINAL EXPECTATION
+
+The app should feel like:
+
+A senior engineer explaining system failures
+A real-time intelligence dashboard
+A decision-making assistant
+🧠 FINAL INSTRUCTION
+
+Build this step-by-step, ensuring:
+
+Each feature works before moving forward
+Code is clean and modular
+APIs are testable
+UI is functional and intuitive
+
+If something is unclear, make reasonable engineering decisions and continue building.

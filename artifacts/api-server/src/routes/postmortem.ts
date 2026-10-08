@@ -1,0 +1,154 @@
+import { Router, type Request, type Response } from "express";
+import { eq, desc, gte, and, inArray } from "drizzle-orm";
+import { db, services, serviceDependencies, serviceEvents, serviceMessages } from "@workspace/db";
+import { requireAuth } from "../middleware/auth.js";
+import { ok, fail } from "../lib/response.js";
+
+const router = Router();
+
+// ── POST /insights/postmortem ─────────────────────────────────────────────────
+// Generates an AI-authored incident post-mortem from live incident data
+
+router.post("/insights/postmortem", requireAuth, async (req: Request, res: Response) => {
+  const orgId = req.auth!.organizationId ?? 0;
+  const since = new Date(Date.now() - 72 * 60 * 60 * 1000);
+
+  try {
+    const [allServices, allEvents, allMessages] = await Promise.all([
+      db.select().from(services).where(eq(services.organizationId, orgId)),
+      db.select().from(serviceEvents)
+        .where(and(eq(serviceEvents.organizationId, orgId), gte(serviceEvents.createdAt, since)))
+        .orderBy(desc(serviceEvents.createdAt))
+        .limit(60),
+      db.select().from(serviceMessages)
+        .where(and(eq(serviceMessages.organizationId, orgId), gte(serviceMessages.createdAt, since)))
+        .orderBy(desc(serviceMessages.createdAt))
+        .limit(40),
+    ]);
+
+    const orgSvcIds = allServices.map((s) => s.id);
+    const orgDeps = orgSvcIds.length
+      ? await db.select().from(serviceDependencies).where(inArray(serviceDependencies.serviceId, orgSvcIds))
+      : [];
+
+    const allDeps = orgDeps;
+    const svcMap = new Map(allServices.map((s) => [s.id, s]));
+
+    if (!allEvents.length && !allMessages.length) {
+      fail(res, "No incident data found. Run the demo first.", 422);
+      return;
+    }
+
+    // Build rich context string
+    const serviceCtx = allServices
+      .map((s) => `- ${s.name} [${s.status.toUpperCase()}] (team: ${s.ownerTeam ?? "unknown"}, criticality: ${s.criticality})`)
+      .join("\n");
+
+    const depCtx = orgDeps
+      .filter((d) => svcMap.has(d.serviceId) && svcMap.has(d.dependsOnId))
+      .map((d) => `- ${svcMap.get(d.serviceId)!.name} → depends on → ${svcMap.get(d.dependsOnId)!.name}`)
+      .join("\n");
+
+    const eventCtx = [...allEvents]
+      .reverse()
+      .map((e) => {
+        const svcName = e.serviceId ? (svcMap.get(e.serviceId)?.name ?? "unknown") : "system";
+        return `[${new Date(e.createdAt).toISOString()}] [${e.severity.toUpperCase()}] ${svcName}: ${e.title}${e.description ? ` — ${e.description}` : ""}`;
+      })
+      .join("\n");
+
+    const msgCtx = [...allMessages]
+      .reverse()
+      .map((m) => `[${new Date(m.createdAt).toISOString()}] #${m.channel} @${m.author}: ${m.content}`)
+      .join("\n");
+
+    // Identify incident window
+    const criticalEvents = allEvents.filter((e) => e.severity === "critical" || e.type === "failure");
+    const recoveryEvents = allEvents.filter((e) => e.type === "recovery");
+    const incidentStart = criticalEvents.at(-1)?.createdAt;
+    const incidentEnd = recoveryEvents[0]?.createdAt;
+    const durationMin = incidentStart && incidentEnd
+      ? Math.round((new Date(incidentEnd).getTime() - new Date(incidentStart).getTime()) / 60000)
+      : null;
+
+    const systemPrompt = `You are a senior SRE writing an incident post-mortem for an engineering team.
+You have full access to the incident timeline, team communications, and service dependency graph.
+Write a thorough, blameless post-mortem in standard format.
+
+SERVICE GRAPH:
+${serviceCtx || "No services."}
+
+DEPENDENCIES:
+${depCtx || "None."}
+
+INCIDENT TIMELINE (chronological):
+${eventCtx || "No events."}
+
+TEAM COMMUNICATIONS:
+${msgCtx || "No messages."}
+
+${durationMin !== null ? `INCIDENT DURATION: approximately ${durationMin} minutes` : ""}
+
+Write the post-mortem in this EXACT Markdown structure (do not deviate):
+
+# Incident Post-Mortem: [incident title]
+
+**Date:** [date from timeline]
+**Duration:** [X minutes / hours]
+**Severity:** [P0/P1/P2]
+**Status:** [Resolved / Ongoing]
+
+## Summary
+[2-3 sentence executive summary of what happened, the blast radius, and how it was resolved]
+
+## Timeline
+[Bullet list of key events in chronological order, each with timestamp and short description]
+
+## Root Cause
+[1-2 paragraphs: the exact technical root cause, how it was introduced, and why it propagated]
+
+## Cascading Impact
+[Bullet list: which services were affected and why — trace the dependency chain explicitly]
+
+## Contributing Factors
+[3-5 bullet points: systemic or process issues that allowed this to happen]
+
+## Resolution
+[What was done to resolve the incident, in order]
+
+## Detection Gap
+[How long before the issue was detected, and what monitoring was missing]
+
+## Action Items
+| # | Action | Owner | Priority | Due |
+|---|--------|-------|----------|-----|
+[3-6 concrete, specific action items with realistic owners/priorities]
+
+## Lessons Learned
+[3 bullet points — one each for: what went well, what went wrong, and what was surprising]
+
+---
+*Generated by Context — AI Incident Intelligence*`;
+
+    const { openai } = await import("@workspace/integrations-openai-ai-server");
+
+    const response = await openai.chat.completions.create({
+      model: process.env.GEMINI_MODEL || process.env.OPENAI_MODEL || "gemini-2.0-flash",
+      temperature: 0.3,
+      max_tokens: 1800,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: "Generate the post-mortem now." },
+      ],
+    });
+
+    const markdown = response.choices[0]?.message?.content ?? "# Post-mortem generation failed.";
+
+    ok(res, { markdown, generatedAt: new Date().toISOString() });
+  } catch (err) {
+    req.log.error({ err }, "postmortem error");
+    fail(res, "Post-mortem generation failed", 500);
+  }
+});
+
+export default router;

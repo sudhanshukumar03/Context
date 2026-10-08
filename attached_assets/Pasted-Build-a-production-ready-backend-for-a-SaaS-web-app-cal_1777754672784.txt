@@ -1,0 +1,286 @@
+Build a production-ready backend for a SaaS web app called **"Context"** — an AI-powered onboarding intelligence system that transforms company knowledge into personalized "Context Briefs".
+
+---
+
+🎯 CORE BACKEND RESPONSIBILITY:
+
+The backend should:
+
+* Ingest company data (documents, team info, tasks)
+* Process and structure relationships
+* Generate AI-powered "Context Briefs"
+* Serve clean, structured APIs for the frontend dashboard
+
+---
+
+🧠 TECH STACK (PREFERRED):
+
+* Runtime: Node.js (TypeScript)
+* Framework: Express or Fastify
+* Database: PostgreSQL
+* ORM: Prisma
+* AI Integration: OpenAI API (or compatible LLM)
+* Auth: JWT-based authentication
+* File handling: Multer or UploadThing
+* Background jobs: BullMQ (or simple queue system)
+* Caching: Redis (optional but preferred)
+
+---
+
+📦 CORE FEATURES:
+
+1. 🔐 AUTH SYSTEM
+
+* User signup/login
+* JWT authentication
+* Role selection:
+
+  * frontend
+  * backend
+  * product
+
+---
+
+2. 📂 DATA INGESTION
+
+API to upload:
+
+* Documents (PDF, text)
+* Team data (JSON)
+* Task data
+
+Endpoints:
+POST /upload/docs
+POST /upload/team
+POST /upload/tasks
+
+Store:
+
+* Raw content
+* Parsed structured content
+
+---
+
+3. 🧠 CONTEXT ENGINE (CORE LOGIC)
+
+Create a service that:
+
+* Extracts:
+
+  * Teams
+  * Goals
+  * People
+  * Documents
+* Builds relationships between them
+
+Example:
+
+* User → Team
+* Team → Docs
+* Docs → Tasks
+
+Store this as a **graph-like structure** in DB.
+
+---
+
+4. 🤖 AI CONTEXT BRIEF GENERATION
+
+Endpoint:
+POST /generate-brief
+
+Input:
+
+* userId
+* role
+
+Process:
+
+* Fetch relevant:
+
+  * team
+  * docs
+  * tasks
+* Send structured prompt to LLM
+
+Expected Output:
+{
+"team": "Payments",
+"goal": "Reduce API latency",
+"keyPerson": "Sarah (Tech Lead)",
+"suggestedReading": "API Architecture Guide",
+"nextAction": "Review latency logs",
+"whyThisMatters": "...",
+"confidence": 0.87
+}
+
+Store generated brief in DB.
+
+---
+
+5. 🕸️ CONTEXT GRAPH API
+
+Endpoint:
+GET /context-graph
+
+Return:
+Nodes:
+
+* user
+* team
+* docs
+* tasks
+
+Edges:
+
+* relationships between them
+
+Format optimized for frontend visualization.
+
+---
+
+6. 👥 TEAM INTELLIGENCE
+
+Endpoint:
+GET /team
+
+Return:
+
+* name
+* role
+* expertise tags
+
+---
+
+7. 📚 SMART DOCUMENTS
+
+Endpoint:
+GET /documents/recommended
+
+Return:
+
+* title
+* reason (why relevant for user)
+
+---
+
+8. 🧠 TRUST LAYER
+
+Every AI response must include:
+
+* explanation:
+  "Based on team structure, documents, and activity patterns"
+* confidence score
+* source references (doc IDs, team IDs)
+
+---
+
+9. ⚡ DEMO FLOW SUPPORT
+
+Create endpoint:
+POST /demo/run
+
+Simulate:
+
+1. "Uploading knowledge"
+2. "Understanding relationships"
+3. Return mock Context Brief
+
+Use time delays to mimic real processing.
+
+---
+
+🗄️ DATABASE DESIGN (PRISMA MODELS):
+
+User:
+
+* id
+* email
+* password
+* role
+
+TeamMember:
+
+* id
+* name
+* role
+* expertise[]
+
+Document:
+
+* id
+* title
+* content
+* tags[]
+
+Task:
+
+* id
+* title
+* description
+* teamId
+
+ContextBrief:
+
+* id
+* userId
+* content (JSON)
+* confidence
+* createdAt
+
+---
+
+⚡ PERFORMANCE:
+
+* Use async processing for AI calls
+* Cache repeated results
+* Avoid blocking APIs
+
+---
+
+🧩 CODE STRUCTURE:
+
+/src
+/controllers
+/routes
+/services
+- ai.service.ts
+- context.service.ts
+/middleware
+/utils
+/prisma
+
+---
+
+🔒 SECURITY:
+
+* Validate inputs (Zod or Joi)
+* Protect routes with auth middleware
+* Sanitize file uploads
+
+---
+
+📡 RESPONSE STYLE:
+
+All APIs must return:
+{
+success: true,
+data: {},
+error: null
+}
+
+---
+
+🎯 FINAL EXPECTATION:
+
+The backend should feel like:
+
+* scalable SaaS architecture
+* clean and modular
+* easy to extend
+* production-quality (not hackathon messy code)
+
+---
+
+💡 ONE LINE:
+
+"Context backend turns raw company data into structured intelligence and actionable clarity."

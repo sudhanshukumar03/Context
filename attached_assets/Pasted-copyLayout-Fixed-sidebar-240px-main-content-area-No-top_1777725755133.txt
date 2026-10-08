@@ -1,0 +1,58 @@
+copyLayout: Fixed sidebar (240px) + main content area. No top nav bar.
+
+--- SIDEBAR ---
+Logo + "Onboard" wordmark at top (16px, font-weight 600)
+User avatar + name + role at bottom (avatar initials, small)
+Nav items with Lucide icons (active state: indigo bg, white text):
+  - LayoutDashboard — Dashboard (active)
+  - FileText — My Brief
+  - Users — Team Context
+  - FolderOpen — Documents
+  - Settings — Settings
+Divider line before Settings.
+
+--- MAIN CONTENT ---
+1. Welcome header
+   "Good morning, Alex." (dynamic: morning/afternoon/evening based on Date())
+   Subtext: "Here's your context for this week."
+   Right side: "Last updated 2 hours ago" in muted text + refresh icon
+
+2. AI Brief Card (full width, indigo gradient border, NOT fill)
+   Title: "This Week's Context" with a Sparkles icon (indigo)
+   Three metric tiles inside:
+     - Key insight: "The Payments team is shipping Auth v2 this sprint."
+     - Focus area: "Backend infrastructure — review PRD in /docs"
+     - Suggested action: "Intro call with Sarah Chen (Tech Lead) recommended"
+   Each tile: icon + label + value. Tiles in 3-col grid.
+   Loading skeleton state: 3 gray animated pulse bars. Show for 1.5s on mount.
+
+3. Context Graph (600×300px, canvas or SVG mock)
+   Nodes: You (center, indigo) → Team (purple) → Projects (teal) → Docs (slate)
+   Edges: solid lines with arrowheads
+   Node labels: 12px, truncated at 14 chars
+   On hover: node highlights + tooltip shows "3 connected items"
+   This is a STATIC MOCK — no real graph library needed. Use SVG with hardcoded positions.
+
+4. Team Section (horizontal scroll row, 5 members)
+   Each member card: initials avatar + name + role + "Why they matter" one-liner
+   Example: "Sarah Chen · Tech Lead · Owns the backend you'll be working in"
+   Card width: 220px fixed. Gap: 12px.
+
+5. Documents Section (table layout)
+   Columns: Name | Tag | Last Modified | Action
+   Tags: "Read First" (indigo), "Important" (amber), "Optional" (slate)
+   Action: "Preview →" opens an inline slide-over panel (right side) with a 3-sentence AI-generated summary
+   Show 5 documents.
+
+--- AI CHAT PANEL (right drawer, toggled by MessageCircle FAB) ---
+Width: 360px, slides in from right.
+Header: "Ask Onboard" + X close button
+Suggested prompts (chips, clickable):
+  "Who leads the Payments team?"
+  "What's the team's current sprint focus?"
+  "Where do I find the system design docs?"
+Clicking a prompt populates the input and triggers a simulated AI response.
+AI response: streams word by word (setInterval, 40ms per word).
+Show typing indicator (3 animated dots) before stream starts.
+Input: fixed at bottom of panel. Placeholder: "Ask anything about your company…"
+Chat history persists during the session (useState).

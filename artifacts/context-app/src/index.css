@@ -1,0 +1,101 @@
+@layer theme, base, clerk, components, utilities;
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+  html {
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+    padding: 0;
+    background-color: #f1f5f9;
+    color: #0f172a;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+  html.dark body {
+    background-color: rgb(2 6 23);
+    color: #fff;
+  }
+}
+
+/* ── CSS Theme Tokens ─────────────────────────────────────────────────────── */
+:root {
+  --ctx-bg:       #f1f5f9;
+  --ctx-bg-alpha: rgba(241,245,249,0.93);
+  --ctx-surface:  rgba(255,255,255,0.88);
+  --ctx-text:     #0f172a;
+  --ctx-text-2:   #475569;
+  --ctx-border:   rgba(15,23,42,0.09);
+  --ctx-input-bg: #e2e8f0;
+}
+html.dark {
+  --ctx-bg:       rgb(2,6,23);
+  --ctx-bg-alpha: rgba(2,6,23,0.92);
+  --ctx-surface:  rgba(255,255,255,0.03);
+  --ctx-text:     #ffffff;
+  --ctx-text-2:   #94a3b8;
+  --ctx-border:   rgba(255,255,255,0.06);
+  --ctx-input-bg: rgba(30,41,59,0.6);
+}
+
+/* ── Light-mode text overrides ────────────────────────────────────────────────
+   In dark mode the app uses text-white heavily for headings/values.
+   In light mode we remap those to legible dark tones, but preserve white text
+   that sits on a coloured background (indigo, red, emerald, amber buttons).
+   ──────────────────────────────────────────────────────────────────────────── */
+html:not(.dark) [class~="text-white"]:not([class*="bg-indigo"]):not([class*="bg-red-5"]):not([class*="bg-emerald-5"]):not([class*="bg-violet"]) {
+  color: #1e293b;
+}
+html:not(.dark) [class~="text-slate-300"] {
+  color: #475569;
+}
+html:not(.dark) [class~="text-slate-400"] {
+  color: #475569;
+}
+html:not(.dark) [class~="text-slate-500"] {
+  color: #64748b;
+}
+html:not(.dark) [class~="text-slate-600"] {
+  color: #94a3b8;
+}
+html:not(.dark) [class~="text-slate-700"] {
+  color: #94a3b8;
+}
+
+/* Tab underline colour in light mode */
+html:not(.dark) .border-indigo-500 {
+  border-color: #6366f1;
+}
+
+/* Role-selector dropdown in light mode */
+html:not(.dark) .ctx-dropdown {
+  background: #ffffff;
+  border-color: rgba(15,23,42,0.1);
+  box-shadow: 0 8px 30px rgba(15,23,42,0.12);
+}
+
+/* Search input in light mode */
+html:not(.dark) .ctx-input {
+  background: #e2e8f0;
+  border-color: rgba(15,23,42,0.1);
+  color: #0f172a;
+}
+html:not(.dark) .ctx-input::placeholder {
+  color: #94a3b8;
+}
+
+/* Engineer terminal block in light mode */
+html:not(.dark) .ctx-terminal {
+  background: #1e293b;
+}
+html:not(.dark) .ctx-terminal [class~="text-slate-600"] {
+  color: #94a3b8;
+}

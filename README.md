@@ -21,8 +21,6 @@ pnpm install
 - `artifacts/mockup-sandbox` — UI mockup and component preview app
 - `lib/` — shared API, database, Zod, and AI integration packages
 - `scripts/` — workspace utility scripts
-- `attached_assets/` — project-provided assets and prompt references
-- `screenshots/` — captured project screenshots
 - Root workspace configuration and documentation
 
 ## Intentionally excluded

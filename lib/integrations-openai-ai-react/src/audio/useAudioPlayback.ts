@@ -1,33 +1,48 @@
 /**
  * React hook for streaming audio playback using AudioWorklet.
  * Supports real-time PCM16 audio streaming from SSE responses.
- * Includes sequence buffer for reordering out-of-order chunks.
+ * Includes sequence buffer for reordering out-of-order chunks and automatic cleanup.
  */
-import { useRef, useCallback, useState } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 import { decodePCM16ToFloat32 } from "./audio-utils";
 
-export type PlaybackState = "idle" | "playing" | "ended";
+export type PlaybackState = "idle" | "initializing" | "playing" | "ended" | "error";
+
+export interface AudioPlaybackOptions {
+  workletPath: string;
+  sampleRate?: number;
+  maxBufferGap?: number;
+  onEnded?: () => void;
+  onError?: (err: Error) => void;
+}
 
 /**
  * Reorders audio chunks that may arrive out of sequence.
- * Buffers chunks until they can be played in correct order.
- *
- * Example: If chunks arrive as seq 2, seq 0, seq 1:
- * - seq 2 arrives → buffered (waiting for seq 0)
- * - seq 0 arrives → played immediately, then check buffer
- * - seq 1 arrives → played immediately (seq 0 done), seq 2 now plays
+ * Includes packet gap recovery to prevent buffer lockups if an intermediate packet drops.
  */
-class SequenceBuffer {
+export class SequenceBuffer {
   private pending = new Map<number, string[]>();
   private nextSeq = 0;
+  private maxGap: number;
+
+  constructor(maxGap = 10) {
+    this.maxGap = maxGap;
+  }
 
   /** Add chunk with sequence number, returns chunks ready to play in order */
   push(seq: number, data: string): string[] {
-    // Store the chunk under its sequence number
     if (!this.pending.has(seq)) {
       this.pending.set(seq, []);
     }
     this.pending.get(seq)!.push(data);
+
+    // Gap recovery: If nextSeq dropped and buffer grows beyond threshold, skip to min available
+    if (!this.pending.has(this.nextSeq) && this.pending.size > this.maxGap) {
+      const minAvailable = Math.min(...this.pending.keys());
+      if (minAvailable > this.nextSeq) {
+        this.nextSeq = minAvailable;
+      }
+    }
 
     // Drain consecutive ready sequences
     const ready: string[] = [];
@@ -45,32 +60,78 @@ class SequenceBuffer {
   }
 }
 
-export function useAudioPlayback(workletPath: string) {
+export function useAudioPlayback(optionsOrPath: string | AudioPlaybackOptions) {
+  const options: AudioPlaybackOptions =
+    typeof optionsOrPath === "string" ? { workletPath: optionsOrPath } : optionsOrPath;
+
+  const { workletPath, sampleRate = 24000, maxBufferGap = 10 } = options;
+
   const [state, setState] = useState<PlaybackState>("idle");
+  const [error, setError] = useState<Error | null>(null);
+
   const ctxRef = useRef<AudioContext | null>(null);
   const workletRef = useRef<AudioWorkletNode | null>(null);
   const readyRef = useRef(false);
-  const seqBufferRef = useRef(new SequenceBuffer());
+  const seqBufferRef = useRef(new SequenceBuffer(maxBufferGap));
+
+  // Lifecycle cleanup: close AudioContext and disconnect node on unmount
+  useEffect(() => {
+    return () => {
+      readyRef.current = false;
+      seqBufferRef.current.reset();
+      if (workletRef.current) {
+        workletRef.current.disconnect();
+        workletRef.current = null;
+      }
+      if (ctxRef.current && ctxRef.current.state !== "closed") {
+        ctxRef.current.close().catch(() => {});
+        ctxRef.current = null;
+      }
+    };
+  }, []);
 
   const init = useCallback(async () => {
     if (readyRef.current) return;
     if (!workletPath) {
-      throw new Error("workletPath is required for audio playback");
+      const err = new Error("workletPath is required for audio playback");
+      setError(err);
+      setState("error");
+      throw err;
     }
 
-    const ctx = new AudioContext({ sampleRate: 24000 });
-    await ctx.audioWorklet.addModule(workletPath);
-    const worklet = new AudioWorkletNode(ctx, "audio-playback-processor");
-    worklet.connect(ctx.destination);
+    try {
+      setState("initializing");
+      const ctx = new AudioContext({ sampleRate });
 
-    worklet.port.onmessage = (e) => {
-      if (e.data.type === "ended") setState("idle");
-    };
+      // Handle suspended audio context (browser autoplay policies)
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
 
-    ctxRef.current = ctx;
-    workletRef.current = worklet;
-    readyRef.current = true;
-  }, [workletPath]);
+      await ctx.audioWorklet.addModule(workletPath);
+      const worklet = new AudioWorkletNode(ctx, "audio-playback-processor");
+      worklet.connect(ctx.destination);
+
+      worklet.port.onmessage = (e) => {
+        if (e.data.type === "ended") {
+          setState("idle");
+          options.onEnded?.();
+        }
+      };
+
+      ctxRef.current = ctx;
+      workletRef.current = worklet;
+      readyRef.current = true;
+      setError(null);
+      setState("idle");
+    } catch (err) {
+      const errorObj = err instanceof Error ? err : new Error(String(err));
+      setError(errorObj);
+      setState("error");
+      options.onError?.(errorObj);
+      throw errorObj;
+    }
+  }, [workletPath, sampleRate]);
 
   /** Push audio directly (no sequencing) - for simple streaming */
   const pushAudio = useCallback((base64Audio: string) => {
@@ -104,5 +165,14 @@ export function useAudioPlayback(workletPath: string) {
     setState("idle");
   }, []);
 
-  return { state, init, pushAudio, pushSequencedAudio, signalComplete, clear };
+  return {
+    state,
+    error,
+    isPlaying: state === "playing",
+    init,
+    pushAudio,
+    pushSequencedAudio,
+    signalComplete,
+    clear,
+  };
 }

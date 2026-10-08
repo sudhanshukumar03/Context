@@ -102,101 +102,232 @@ Complete causal timeline and postmortem draft generated automatically.
 
 ---
 
-# How it works
+## Table of contents
 
-The entire architecture operates under four governed principles:
+- [System architecture design](#system-architecture-design)
+  - [Subsystem responsibilities](#subsystem-responsibilities)
+  - [System topology](#system-topology)
+  - [Incident lifecycle state machine](#incident-lifecycle-state-machine)
+  - [Subsystem architecture deep dives](#subsystem-architecture-deep-dives)
+  - [Trust boundaries & security model](#trust-boundaries--security-model)
+- [What's in the box](#whats-in-the-box)
+- [Tech stack](#tech-stack)
+- [Quick start](#quick-start)
+- [API reference](#api-reference)
+- [Project structure](#project-structure)
+- [Testing](#testing)
+- [Decisions worth defending](#decisions-worth-defending)
+- [Why this matters](#why-this-matters)
+- [License](#license)
 
-> **Graphs map causality. AI correlates evidence. Simulators verify fixes. Engineers command.**
+---
 
-| Component | Responsibility | Mutates production? |
-|---|---|:---:|
-| **Dependency Engine** | Maps live topologies, evaluates cascade paths, calculates blast radius | No |
-| **Telemetry Ingestion** | Ingests service events, deployment webhooks, and Slack logs | No |
-| **AI Incident Commander** | Correlates evidence, diagnoses root causes, generates playbooks | **Never** |
-| **Remediation Simulator** | Dry-runs rollbacks, restarts, and throttling before application | In simulation only |
-| **Human Operator** | Reviews reasoning, verifies suggested fixes, executes remediation | **Authorizes** |
+## System architecture design
 
-There is no path from the AI module to an autonomous unreviewed production mutation. The AI investigates, cites evidence, and proposes; the human engineer commands.
+Four invariants govern the entire architecture, and the order matters:
 
-## Architecture
+> **Graphs map causality. Telemetry streams evidence. AI explains root causes. Engineers command.**
+
+### Subsystem responsibilities
+
+| Layer / Subsystem | Primary responsibility | Mutates production? | State storage |
+|---|---|:---:|---|
+| **Telemetry Ingress** | Ingest Kubernetes deploys, PagerDuty alerts, Slack incident logs | No | `service_events`, `service_messages` |
+| **Dependency Graph Engine** | Directional topology mapping, force layout, upstream & downstream blast radius | No | In-memory DAG + `service_dependencies` |
+| **Risk & Cascade Evaluator** | Calculate healthy-service failure probability, detect queue & pool exhaustion | No | Real-time graph computation |
+| **AI Incident Commander** | Multi-hop causal reasoning, log-event correlation, role-based playbook synthesis | **Never** (Read-only) | Ephemeral inference + audit log |
+| **Remediation Sandbox** | Dry-run rollback, throttling, and container restarts in isolated simulation | In simulation only | In-memory simulation state |
+| **Incident Operator (Human)** | Review reasoning, evaluate financial risk, authorize and execute remediation | **Authorizes** | Production cluster |
+
+That table reflects the physical code structure, not an aspiration. There is no code path connecting the AI module to automated production write mutations. The AI investigates, cites evidence, and proposes; the human engineer commands.
+
+### System topology
 
 ```mermaid
 flowchart TB
-    subgraph ext["External Telemetry & Monitoring"]
-        K8S["Kubernetes & CI/CD<br/>deployments & rollouts"]
-        PD["PagerDuty & Alerts<br/>webhooks"]
-        SLACK["Slack / Ops Chat<br/>incident channels"]
-        LLM["OpenAI GPT-4o-mini<br/>structured JSON reasoning"]
+    subgraph ext["External Telemetry & Monitoring Sources"]
+        K8S["Kubernetes & CI/CD<br/>rollouts, deployments, crashloops"]
+        PD["PagerDuty & Monitoring<br/>5xx alerts, latency spikes, health pings"]
+        SLACK["Slack / Ops Chat<br/>#incident-bridge logs & messages"]
+        LLM["OpenAI GPT-4o-mini<br/>structured JSON reasoning & playbooks"]
     end
 
-    subgraph client["Client — Web Dashboard"]
-        APP["React 19 + Vite<br/>Dependency Graph • Causal Timeline<br/>AI Commander • Simulation Controls"]
-    end
-
-    subgraph api["Context API Server — Port 3000"]
+    subgraph client["Client — Web Dashboard (artifacts/context-app)"]
         direction TB
-        AUTH["Clerk Auth + RBAC<br/>Multi-tenant org isolation"]
-        INGEST["Ingestion Engine<br/>services • events • messages • webhooks"]
-        GRAPH["Dependency & Causal Engine<br/>force layout • blast radius • risk scores"]
-        AI_SVC["AI Incident Commander<br/>evidence correlation • root cause • playbooks"]
-        SIM["Simulation Engine<br/>rollback • throttle • restart"]
-        HEALTH["Health Monitor<br/>PostgreSQL connection verification"]
+        GRAPH_UI["Force-Directed Graph<br/>SVG canvas • 50-250% zoom • pulsing edges"]
+        TIME_UI["Causal Incident Timeline<br/>phase grouping: Trigger → Impact → Recovery"]
+        AI_UI["AI Incident Commander<br/>role lenses: Engineer • SRE • Manager"]
+        SIM_UI["Remediation Sandbox<br/>dry-run rollback • throttle • restart"]
+        AUDIO_UI["AudioWorklet Player<br/>low-latency PCM16 • SequenceBuffer recovery"]
     end
 
-    subgraph data["Persistence Layer"]
-        PG[("PostgreSQL 16<br/>via Drizzle ORM")]
-        SCHEMA["Multi-Tenant Schema<br/>services • dependencies • events<br/>messages • audit logs"]
+    subgraph api["Context API Server (artifacts/api-server — :3000)"]
+        direction TB
+        AUTH["Clerk Auth & Multi-Tenant Boundary<br/>JWT verification • orgId scoping • rate limiting"]
+        INGEST["Telemetry Ingestion Pipeline<br/>/api/upload/* • /api/webhook dual-auth"]
+        GRAPH_ENG["Topology & Causal Graph Engine<br/>DAG traversal • cycle detection • blast radius"]
+        AI_SVC["AI Incident Commander Engine<br/>prompt versioning • JSON extraction • confidence scoring"]
+        SIM_ENG["Simulation & Action Engine<br/>isolated state transitions • 8s recovery lifecycle"]
+        HEALTH["Database Health Monitor<br/>SELECT 1 pool verification (/healthz)"]
     end
 
-    APP -->|"JWT Bearer"| AUTH
-    APP --> GRAPH
-    APP --> AI_SVC
-    APP --> SIM
+    subgraph data["Persistence Layer (PostgreSQL 16 via Drizzle ORM)"]
+        PG[("PostgreSQL 16 Database")]
+        T_ORGS["organizations<br/>multi-tenant accounts"]
+        T_USERS["users<br/>Clerk mapping & roles"]
+        T_SVC["services<br/>health & ownership"]
+        T_DEP["service_dependencies<br/>composite unique index"]
+        T_EVT["service_events<br/>deployments & alerts"]
+        T_MSG["service_messages<br/>chat & telemetry logs"]
+        T_TOK["refresh_tokens<br/>atomic rotation"]
+    end
 
-    K8S -->|"event webhooks"| INGEST
-    PD -->|"alert webhooks"| INGEST
+    client -->|"JWT Bearer / Session"| AUTH
+    GRAPH_UI --> GRAPH_ENG
+    TIME_UI --> GRAPH_ENG
+    AI_UI --> AI_SVC
+    SIM_UI --> SIM_ENG
+    AUDIO_UI <..-|"PCM16 SSE stream"| AI_SVC
+
+    K8S -->|"deployment webhooks"| INGEST
+    PD -->|"alert webhooks (?apiKey=...)"| INGEST
     SLACK -->|"message ingestion"| INGEST
 
-    INGEST --> SCHEMA
-    GRAPH --> SCHEMA
-    AI_SVC <-->|"structured prompt & schema"| LLM
-    AI_SVC --> SCHEMA
+    INGEST --> T_EVT
+    INGEST --> T_MSG
+    INGEST --> T_SVC
+    GRAPH_ENG --> T_DEP
+    GRAPH_ENG --> T_SVC
+    AI_SVC <-->|"prompt + topology context"| LLM
+    AI_SVC --> T_EVT
+    SIM_ENG --> T_SVC
     HEALTH --> PG
-    SCHEMA --- PG
+
+    T_ORGS --- PG
+    T_USERS --- PG
+    T_SVC --- PG
+    T_DEP --- PG
+    T_EVT --- PG
+    T_MSG --- PG
+    T_TOK --- PG
 
     classDef core fill:#EFF6FF,stroke:#2563EB,stroke-width:2px,color:#0F172A
     classDef ai fill:#F5F3FF,stroke:#7C3AED,stroke-width:2px,color:#0F172A
     classDef safe fill:#ECFDF5,stroke:#059669,stroke-width:2px,color:#0F172A
-    class GRAPH,INGEST core
+    classDef db fill:#FEF3C7,stroke:#B45309,stroke-width:2px,color:#0F172A
+    class GRAPH_ENG,INGEST core
     class AI_SVC ai
-    class SIM safe
+    class SIM_ENG safe
+    class PG,T_ORGS,T_USERS,T_SVC,T_DEP,T_EVT,T_MSG,T_TOK db
 ```
 
-### One incident, start to finish
+### Incident lifecycle state machine
 
-Every incident follows a deterministic causal pipeline:
+Every incident transitions through deterministic states. No state transition bypasses human authorization.
+
+```mermaid
+flowchart TD
+    S0["NORMAL (Healthy Baseline)<br/>All microservices reporting green"] -->|"Deployment or failure event ingested"| S1["DETECTED<br/>Anomaly flagged in service_events"]
+    S1 --> S2["EVALUATING_TOPOLOGY<br/>DAG evaluated for downstream blast radius"]
+    S2 --> S3{"Cascade threshold<br/>exceeded?"}
+    S3 -->|"No"| S0
+    S3 -->|"Yes"| S4["INCIDENT_ACTIVE<br/>Incident banner triggered with live revenue ticker"]
+    S4 --> S5["AI_CORRELATING<br/>Causal analysis correlates deployment diffs + error logs"]
+    S5 --> S6["ROOT_CAUSE_ISOLATED<br/>Primary failure node identified with confidence %"]
+    S6 --> S7["PLAYBOOK_PROPOSED<br/>Role-specific fixes generated (Engineer • SRE • Manager)"]
+    S7 --> S8["SIMULATION_SANDBOX<br/>Operator triggers dry-run rollback or throttle"]
+    S8 --> S9{"Simulation<br/>effective?"}
+    S9 -->|"No"| S7
+    S9 -->|"Yes"| S10["PENDING_HUMAN_COMMAND<br/>Validated kubectl remediation command presented"]
+    S10 -->|"Operator executes command"| S11["RECOVERY_VERIFIED<br/>Health checks pass, cascade resolves"]
+    S11 --> S0
+
+    classDef normal fill:#ECFDF5,stroke:#059669,stroke-width:2px,color:#0F172A
+    classDef warn fill:#FEF3C7,stroke:#D97706,stroke-width:2px,color:#0F172A
+    classDef crit fill:#FEF2F2,stroke:#DC2626,stroke-width:2px,color:#0F172A
+    classDef ai fill:#F5F3FF,stroke:#7C3AED,stroke-width:2px,color:#0F172A
+    classDef action fill:#EFF6FF,stroke:#2563EB,stroke-width:2px,color:#0F172A
+
+    class S0,S11 normal
+    class S1,S2,S8,S9 warn
+    class S4 crit
+    class S5,S6,S7 ai
+    class S10 action
+```
+
+### Subsystem architecture deep dives
+
+#### 1. Ingestion & normalization layer
+- **Dual authentication**: Ingestion endpoints (`/api/upload/*`, `/api/webhook`) support Clerk session tokens, `x-api-key` headers, and `?apiKey=` query parameters for monitoring tools like PagerDuty.
+- **Organization resolution**: Automatically maps external API keys to internal multi-tenant tenant IDs (`users.organizationId`).
+- **Idempotent event processing**: Duplicate webhook submissions are discarded at the database layer using conflict targets.
+
+#### 2. Dependency graph & causal topological engine
+- **Directed Acyclic Graph (DAG)**: Models services as vertices and dependencies as directed edges (`depends_on_id` $\rightarrow$ `service_id`).
+- **Force simulation**: Layout physics computed in WebWorker/`useMemo` (140 iterations) ensuring responsive rendering even with 100+ services.
+- **Blast radius calculator**: Traverses downstream edges from failing nodes to calculate cascade exposure and monetary revenue impact.
+- **At-risk dependency alerts**: Evaluates healthy services connected to failing dependencies before upstream timeouts occur.
+
+#### 3. AI Incident Commander
+- **Strictly read-only tools**: AI operates with read-only access to topology graphs, service metrics, and deployment diffs.
+- **Structured JSON output**: Models are instructed via JSON schema definitions. Responses are extracted using regex boundaries (`/\{[\s\S]*\}/`) to eliminate markdown preamble parse failures.
+- **Role-based lenses**:
+  - **Engineer lens**: `kubectl rollout undo`, container restart commands, stack traces, and pod logs.
+  - **SRE lens**: MTTR metrics, blast radius percentages, upstream bottlenecks, and action simulation.
+  - **Manager lens**: Financial revenue loss at risk, plain-English incident summaries, and customer impact statements.
+
+#### 4. Remediation sandbox & simulation engine
+- **Dry-run isolation**: Allows operators to test rollbacks, container restarts, or traffic throttling in a sandbox before executing changes in production clusters.
+- **8-second recovery lifecycle**: Simulates realistic distributed system recovery delays to confirm dependent service health stabilization.
+- **Multi-tenant scoping**: Enforces `and(eq(services.id, serviceId), eq(services.organizationId, orgId))` on all simulation updates to eliminate cross-tenant IDOR vulnerabilities.
+
+#### 5. Real-time audio streaming pipeline
+- **Low-latency PCM16 decoding**: Streams synthesized voice briefings from the AI Incident Commander using Server-Sent Events (SSE).
+- **AudioWorklet thread isolation**: Offloads audio playback to a dedicated browser `AudioWorkletNode` (`audio-playback-processor`), preventing main-thread UI jank.
+- **Packet gap recovery**: Custom `SequenceBuffer` reorders out-of-sequence chunks and automatically advances past lost packets if buffer size exceeds `maxGap` (default 10), preventing audio playback freezes.
+
+### Trust boundaries & security model
 
 ```mermaid
 flowchart LR
-    A["Deploy / Alert<br/>webhook received"] --> B["Ingest & Scope<br/>by organizationId"]
-    B --> C["Update Graph<br/>status & dependencies"]
-    C --> D["Evaluate Risk<br/>blast radius & at-risk deps"]
-    D --> E{"Incident<br/>detected?"}
-    E -->|"No"| F["Healthy state maintained"]
-    E -->|"Yes"| G["Activate Incident Banner<br/>live duration & revenue counter"]
-    G --> H["AI Commander Analysis<br/>correlate logs + topology"]
-    H --> I["Isolate Root Cause<br/>confidence score & cascade path"]
-    I --> J["Generate Playbook<br/>Engineer • SRE • Manager views"]
-    J --> K["Simulate Remediation<br/>test rollback or throttle"]
-    K --> L["Operator Approval<br/>execute fix & verify recovery"]
+    subgraph untrusted["Untrusted External Zone"]
+        CLIENT["Browser Client / Third-Party Webhook"]
+    end
 
-    classDef alert fill:#FEF2F2,stroke:#DC2626,stroke-width:2px,color:#0F172A
-    classDef success fill:#ECFDF5,stroke:#059669,stroke-width:2px,color:#0F172A
-    classDef step fill:#F0F9FF,stroke:#0284C7,stroke-width:2px,color:#0F172A
-    class A,G alert
-    class F,L success
-    class B,C,D,H,I,J,K step
+    subgraph perimeter["Perimeter Security Gateway"]
+        AUTH_GW["Clerk JWT Verification & Rate Limiter<br/>• Extracts clerkUserId cryptographically<br/>• Resolves internal organizationId<br/>• Rejects unauthenticated traffic (401)"]
+    end
+
+    subgraph tenant["Isolated Tenant Boundary (organizationId)"]
+        direction TB
+        ROUTE["API Route Handler<br/>• Rejects cross-tenant serviceId (404/403)<br/>• Validates payload schemas via Zod"]
+        DB_QUERY["Drizzle ORM Scoped Query<br/>• WHERE organization_id = req.auth.orgId<br/>• inArray(service_id, orgServiceIds)"]
+    end
+
+    subgraph ai_boundary["AI Isolation Boundary"]
+        AI_READ["Read-Only Context Builder<br/>• Passes tenant-scoped logs only<br/>• Cannot execute commands or write DB"]
+    end
+
+    CLIENT -->|"HTTP / REST"| AUTH_GW
+    AUTH_GW -->|"Authenticated req.auth"| ROUTE
+    ROUTE --> DB_QUERY
+    ROUTE --> AI_READ
+
+    classDef un fill:#FEF2F2,stroke:#DC2626,stroke-width:2px,color:#0F172A
+    classDef gw fill:#FEF3C7,stroke:#D97706,stroke-width:2px,color:#0F172A
+    classDef iso fill:#ECFDF5,stroke:#059669,stroke-width:2px,color:#0F172A
+    classDef ai fill:#F5F3FF,stroke:#7C3AED,stroke-width:2px,color:#0F172A
+
+    class CLIENT un
+    class AUTH_GW gw
+    class ROUTE,DB_QUERY iso
+    class AI_READ ai
 ```
+
+1. **Multi-tenant scoping derived server-side**: `organizationId` is never accepted from request parameters or client-supplied bodies. It is extracted strictly from the authenticated Clerk session JWT.
+2. **Composite edge isolation**: The `service_dependencies` table contains no separate `organizationId` column. Every dependency query must be filtered with `inArray(serviceDependencies.serviceId, orgServiceIds)` to prevent cross-tenant topological leakage.
+3. **Atomic token rotation**: Refresh token revocation and issuance execute in single atomic queries (`WHERE is_revoked = false AND token_hash = ...`) to prevent concurrency race conditions.
+4. **Prompt injection defense**: Incoming log messages and alerts are treated as pure data strings passed into isolated JSON schema fields. The AI has zero write access to production databases.
 
 ---
 

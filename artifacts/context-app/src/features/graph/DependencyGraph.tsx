@@ -127,31 +127,37 @@ export function GraphView({
       <style>{`
         @keyframes dash-flow { to { stroke-dashoffset: -24; } }
         .edge-active { animation: dash-flow 1.2s linear infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .edge-active { animation: none !important; stroke-dasharray: none !important; }
+        }
       `}</style>
 
       {/* Zoom controls */}
       <div className="absolute top-3 left-3 z-10 flex items-center gap-1 rounded-lg border border-white/10 bg-slate-900/80 backdrop-blur-sm p-1">
         <button
           onClick={() => setZoom((z) => Math.min(2.5, z + 0.25))}
-          className="p-1 text-slate-400 hover:text-white transition-colors"
+          className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-slate-400 hover:text-white transition-colors rounded"
           title="Zoom in"
+          aria-label="Zoom in dependency graph"
         >
-          <ZoomIn size={12} />
+          <ZoomIn size={14} />
         </button>
-        <span className="text-[10px] text-slate-600 font-mono px-1 min-w-[36px] text-center">
+        <span className="text-[10px] text-slate-400 font-mono px-1 min-w-[36px] text-center" aria-live="polite">
           {Math.round(zoom * 100)}%
         </span>
         <button
           onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
-          className="p-1 text-slate-400 hover:text-white transition-colors"
+          className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-slate-400 hover:text-white transition-colors rounded"
           title="Zoom out"
+          aria-label="Zoom out dependency graph"
         >
-          <ZoomOut size={12} />
+          <ZoomOut size={14} />
         </button>
         <button
           onClick={() => setZoom(1)}
-          className="p-1 text-slate-400 hover:text-white transition-colors text-[10px]"
+          className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-slate-400 hover:text-white transition-colors rounded text-xs"
           title="Reset zoom"
+          aria-label="Reset dependency graph zoom to 100%"
         >
           ↺
         </button>
@@ -175,15 +181,13 @@ export function GraphView({
           <marker id="arr-hi" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
             <path d="M0,0 L0,6 L8,3 z" fill="#6366f1" />
           </marker>
-          {nodes.map((n) => (
-            <filter key={`g-${n.id}`} id={`g-${n.id}`}>
-              <feGaussianBlur stdDeviation="4" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          ))}
+          <filter id="node-glow">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
 
         {edges.map((e) => {
@@ -224,9 +228,19 @@ export function GraphView({
           return (
             <g
               key={n.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`${n.label} service, status ${n.status}`}
+              aria-pressed={isSel}
               transform={`translate(${pos.x},${pos.y})`}
-              className="cursor-pointer"
+              className="cursor-pointer focus:outline-none"
               onClick={() => setSelected(isSel ? null : n)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setSelected(isSel ? null : n);
+                }
+              }}
               style={{ opacity: faded ? 0.18 : 1, transition: "opacity 0.25s" }}
             >
               {(n.status === "failing" || n.status === "at_risk") && (
@@ -244,7 +258,7 @@ export function GraphView({
                 fill="#0f172a"
                 stroke={color}
                 strokeWidth={isSel ? 2.5 : n.status !== "healthy" ? 2 : 1.5}
-                filter={isSel || n.status !== "healthy" ? `url(#g-${n.id})` : undefined}
+                filter={isSel || n.status !== "healthy" ? "url(#node-glow)" : undefined}
                 style={{ transition: "stroke 0.4s" }}
               />
               <foreignObject x={-10} y={-10} width={20} height={20}>

@@ -11,7 +11,8 @@
     transition: background-color 0.25s ease, color 0.25s ease;
   }
   body {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     margin: 0;
@@ -46,28 +47,9 @@ html.dark {
   --ctx-input-bg: rgba(30,41,59,0.6);
 }
 
-/* ── Light-mode text overrides ────────────────────────────────────────────────
-   In dark mode the app uses text-white heavily for headings/values.
-   In light mode we remap those to legible dark tones, but preserve white text
-   that sits on a coloured background (indigo, red, emerald, amber buttons).
-   ──────────────────────────────────────────────────────────────────────────── */
-html:not(.dark) [class~="text-white"]:not([class*="bg-indigo"]):not([class*="bg-red-5"]):not([class*="bg-emerald-5"]):not([class*="bg-violet"]) {
+/* ── Light-mode typography adjustments ─────────────────────────────────────── */
+html:not(.dark) [class~="text-white"]:not([class*="bg-indigo"]):not([class*="bg-emerald"]):not([class*="bg-violet"]):not([class*="bg-amber"]):not([class*="bg-rose"]):not([class*="bg-red"]) {
   color: #1e293b;
-}
-html:not(.dark) [class~="text-slate-300"] {
-  color: #475569;
-}
-html:not(.dark) [class~="text-slate-400"] {
-  color: #475569;
-}
-html:not(.dark) [class~="text-slate-500"] {
-  color: #64748b;
-}
-html:not(.dark) [class~="text-slate-600"] {
-  color: #94a3b8;
-}
-html:not(.dark) [class~="text-slate-700"] {
-  color: #94a3b8;
 }
 
 /* Tab underline colour in light mode */

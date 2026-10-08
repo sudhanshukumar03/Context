@@ -71,7 +71,11 @@ export function DemoScenarioPanel({
             <p className="text-[11px] text-slate-500">Checkout → Payments → Database incident</p>
           </div>
         </div>
-        <button onClick={onClose} className="text-slate-600 hover:text-slate-300">
+        <button
+          onClick={onClose}
+          aria-label="Close demo scenario"
+          className="text-slate-400 hover:text-slate-200 p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center rounded-lg hover:bg-white/5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        >
           <X size={14} />
         </button>
       </div>
@@ -82,7 +86,14 @@ export function DemoScenarioPanel({
           <span>Progress</span>
           <span>{currentStep >= 0 ? currentStep + 1 : 0}/{SCENARIO_STEPS.length} steps</span>
         </div>
-        <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
+        <div
+          className="h-1.5 rounded-full bg-white/8 overflow-hidden"
+          role="progressbar"
+          aria-valuenow={Math.round(progress)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Scenario progress"
+        >
           <motion.div
             className="h-full rounded-full bg-indigo-500"
             animate={{ width: `${progress}%` }}

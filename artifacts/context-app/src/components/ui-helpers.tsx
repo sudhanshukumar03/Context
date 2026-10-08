@@ -15,10 +15,22 @@ export function Card({
 }) {
   return (
     <motion.div
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
       whileHover={onClick ? { y: -2, transition: { duration: 0.15 } } : undefined}
       whileTap={onClick ? { scale: 0.99 } : undefined}
-      className={`rounded-2xl backdrop-blur-sm ${onClick ? "cursor-pointer" : ""} ${className}`}
+      className={`rounded-2xl backdrop-blur-sm ${onClick ? "cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" : ""} ${className}`}
       style={{
         background: "var(--ctx-surface)",
         border: "1px solid var(--ctx-border)",

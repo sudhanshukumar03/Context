@@ -1,116 +1,126 @@
-# Context — Real-time Incident Intelligence SaaS
+# Context project specification
 
-## Overview
+Technical architecture, API specification, and data model reference for the Context incident intelligence platform.
 
-pnpm workspace monorepo. Context is an AI-powered **incident intelligence SaaS** for engineering teams. It understands relationships between services, explains why incidents happen (causality, not just data), predicts potential failures before they occur, and provides clear, explainable, actionable insights.
+## Table of contents
 
-## Stack
+- [System overview](#system-overview)
+- [Technology stack](#technology-stack)
+- [Monorepo layout](#monorepo-layout)
+- [Authentication model](#authentication-model)
+- [API endpoints](#api-endpoints)
+- [Database schema](#database-schema)
+- [Incident simulation demo flow](#incident-simulation-demo-flow)
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Auth**: Clerk (via `@clerk/express` + `@clerk/react`)
-- **AI**: OpenAI GPT-4o-mini (standard OpenAI API via `OPENAI_API_KEY`)
-- **Validation**: Zod
-- **Build**: esbuild
+## System overview
 
-## Key Commands
+Context is an incident intelligence platform for engineering and site reliability teams. It correlates dependency graphs, telemetry events, and deployment records to establish causal chains during outages rather than surfacing isolated alerts.
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run typecheck:libs` — typecheck composite libs only (run after schema changes)
+- **Causality detection**: Pinpoints root causes across upstream and downstream service dependencies.
+- **Blast radius prediction**: Computes healthy service failure probabilities based on traffic dependencies.
+- **Explainable mitigation**: Outputs step-by-step remediation commands tailored to user roles (Engineer, SRE, Manager).
 
-## Artifacts
+## Technology stack
 
-- `artifacts/api-server` — Express backend at `/api`
-- `artifacts/context-app` — React + Vite frontend at `/`
+| Layer | Technology | Details |
+|---|---|---|
+| Runtime | Node.js 24 | Target execution runtime across services |
+| Package manager | pnpm 10 | Monorepo workspace orchestration |
+| Language | TypeScript 5.9 | Strict type checking with project references |
+| Backend | Express 5 | REST API server with Helmet and rate limiting |
+| Frontend | React 19 + Vite 7 | Client SPA with Tailwind CSS and Framer Motion |
+| Database | PostgreSQL + Drizzle ORM | Relational persistence with cascade constraints |
+| Authentication | Clerk | `@clerk/express` and `@clerk/react` integration |
+| AI reasoning | OpenAI GPT-4o-mini | Structured JSON analysis and natural language chat |
+| Testing | Vitest 5 | Unit and integration testing |
 
-## Auth Pattern
+## Monorepo layout
 
-Clerk auth via `getAuth(req)`. `requireAuth` middleware in `api-server/src/middleware/auth.ts` auto-provisions a DB user + org on first authenticated API call.
+```text
+.
+├── artifacts/
+│   ├── api-server/         # Express API running on port 3000
+│   ├── context-app/        # React client running on port 5173
+│   ├── context-demo-video/ # Automated demonstration video renderer
+│   └── mockup-sandbox/     # Component design testing sandbox
+├── lib/
+│   ├── api-client-react/   # Generated TanStack Query client hooks
+│   ├── api-spec/           # OpenAPI 3.0 schema definitions
+│   ├── api-zod/            # Shared Zod validation schemas
+│   ├── db/                 # Drizzle database models and pool connection
+│   ├── integrations-openai-ai-react/  # AudioWorklet streaming hooks
+│   └── integrations-openai-ai-server/ # OpenAI client SDK utilities
+└── scripts/                # Development scripts and utilities
+```
 
-`req.auth` shape: `{ userId: number, clerkUserId: string, organizationId: number | null, role: string }`
+## Authentication model
 
-## API Endpoints
+Context supports Clerk JWT authentication with dual fallback options for automated webhooks and local development.
 
-### Auth (no auth required)
-- `POST /api/auth/register` / `POST /api/auth/login` / `POST /api/auth/logout` / `GET /api/auth/me`
+- **Clerk user resolution**: Validates Bearer tokens via `getAuth(req)` and auto-provisions user records and default organizations on first request.
+- **Context shape**: Attaches `req.auth` with `{ userId: number, clerkUserId: string, organizationId: number, role: string }`.
+- **API key authentication**: Allows ingestion endpoints to authenticate using `x-api-key` headers or `?apiKey=` query parameters.
+- **Local development bypass**: Bypasses auth checks only when `ALLOW_DEV_AUTH_BYPASS=true` is set and external keys are unavailable.
 
-### Data Ingestion (requires auth)
-- `POST /api/upload/services` — ingest services with dependency graph (body: `{ services: [{ name, description?, status?, dependencies?: string[] }] }`)
-- `POST /api/upload/events` — ingest events (type: deployment|failure|recovery|alert|info, severity: info|warning|critical)
-- `POST /api/upload/messages` — ingest Slack-like messages
+> [!WARNING]
+> Multi-tenant boundary rules require every service, event, and dependency query to be scoped by `req.auth.organizationId`.
 
-### Incident Insights (requires auth)
-- `GET /api/insights/risks` — at-risk services with reasoning + recent events. Returns `{ risks, services }`
-- `GET /api/insights/root-cause` — identifies root cause, cascade path, impacted services, estimated loss. Returns `{ cause, confidence, cascadePath, impactedServices, estimatedLoss, suggestedFixes, incidentStartedAt, incidentMinutes }`
-- `GET /api/insights/predictions` — predictions for healthy services at risk of failure
-- `GET /api/insights/graph` — dependency graph: `{ nodes: [{ id, label, status, color, description, ownerTeam, criticality }], edges }`
-- `GET /api/insights/timeline` — combined chronological feed (query: `?limit=50`)
-- `POST /api/insights/simulate-action` — trigger rollback/restart/throttle on a service
-- `POST /api/ai/auto-insights` — rule-based auto-detected insights
-- `POST /api/ai/incident-ask` — AI Q&A. Returns `{ answer, confidence, sources, reasoning[], impact[], actions[] }`
+## API endpoints
 
-### Demo
-- `POST /api/demo/reset` — wipe org's services/events/messages
-- `POST /api/demo/advance` — advance 9-step incident scenario (body: `{ step: 0..8 }`)
+### Ingestion
 
-## DB Schema
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/upload/services` | Ingest microservice definitions and upstream dependencies |
+| `POST` | `/api/upload/events` | Ingest deployment, failure, and recovery events |
+| `POST` | `/api/upload/messages` | Ingest operational messages and chat context |
+| `POST` | `/api/webhook` | Ingest external monitoring webhooks from PagerDuty or custom alerts |
 
-Tables in `lib/db/src/schema/`:
-- `organizations` — id, name, created_at
-- `users` — id, clerkUserId (UNIQUE), email, name, role, organizationId, created_at
-- `services` — id, organizationId, name, description, status (healthy|at_risk|degraded|failing), owner_team, criticality (high|medium|low), metadata, created_at, updated_at
-- `service_dependencies` — id, serviceId, dependsOnId, created_at (org-scoped: always filter by org services)
-- `service_events` — id, organizationId, serviceId, type, title, description, severity, created_at
-- `service_messages` — id, organizationId, serviceId, content, author, channel, created_at
+### Incident insights
 
-**Security note**: `service_dependencies` has no `organizationId` column. Always filter deps using `inArray(serviceId, orgServiceIds)` to prevent cross-org data leaks.
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/insights/risks` | Retrieve at-risk services, risk scores, and recent events |
+| `GET` | `/api/insights/root-cause` | Retrieve root cause diagnosis, cascade paths, and estimated loss |
+| `GET` | `/api/insights/predictions` | Calculate failure probabilities for currently healthy services |
+| `GET` | `/api/insights/graph` | Retrieve dependency nodes and directional edges for visualization |
+| `GET` | `/api/insights/timeline` | Fetch chronological event feed grouped by incident phase |
+| `POST` | `/api/insights/simulate-action` | Simulate rollback, restart, or throttling actions on a service |
+| `POST` | `/api/ai/incident-ask` | Query AI Incident Commander for root cause Q&A and playbooks |
 
-## Frontend Dashboard
+### Health and demo
 
-Four tabs (all data live from API):
-1. **Overview** — service health counts (healthy/at_risk/degraded/failing), root cause panel with incident duration badge + estimated loss, prediction panel, active risk cards, all services list
-2. **Graph** — force-directed SVG dependency visualization with zoom controls (50–250%); click nodes for details panel; animated pulsing edges on failure; predicted-failure highlighting
-3. **Timeline** — chronological feed with search/filter, grouped into incident phases (Trigger → Amplification → Impact → Mitigation → Recovery). Toggle raw feed view.
-4. **AI Commander** — chat UI with role-aware suggestions; AI returns structured answer with reasoning chain, impact list, actionable buttons, and confidence bar. Each AI response has a copy button.
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/healthz` | Database connectivity health check returning 200 or 503 |
+| `POST` | `/api/demo/reset` | Clear services and events for the current organization |
+| `POST` | `/api/demo/advance` | Advance the live 9-step incident simulation scenario |
 
-**Incident status banner** — appears below the tab bar whenever `hasIncident` is true: shows pulsing red badge, live elapsed time counter (updates every second), affected service count, and estimated revenue loss.
+## Database schema
 
-**Role-based views** (Engineer / SRE / Manager):
-- **Engineer**: full technical detail + kubectl fix commands (rollout undo, restart, logs) with copy-to-clipboard
-- **SRE**: full picture — blast radius, MTTR, cascade path, action buttons
-- **Manager**: executive summary card with service count / elapsed / confidence metrics; plain-English summary; revenue impact front-and-center; no action buttons
+Tables are declared in `lib/db/src/schema/` using Drizzle ORM.
 
-## Demo Flow
+| Table | Primary key | Key columns | Purpose |
+|---|---|---|---|
+| `organizations` | `id` | `name`, `created_at` | Multi-tenant customer accounts |
+| `users` | `id` | `clerk_user_id`, `email`, `organization_id`, `role` | User accounts tied to Clerk identities |
+| `services` | `id` | `organization_id`, `name`, `status`, `criticality` | Registered services and operational statuses |
+| `service_dependencies` | `id` | `service_id`, `depends_on_id` | Directed dependency relationships between services |
+| `service_events` | `id` | `organization_id`, `service_id`, `type`, `severity` | Deployment, alert, and failure audit log |
+| `service_messages` | `id` | `organization_id`, `service_id`, `content`, `channel` | Service communications and alert logs |
+| `refresh_tokens` | `id` | `user_id`, `token_hash`, `is_revoked`, `expires_at` | Session rotation and revocation tracking |
 
-1. Sign up / sign in via Clerk
-2. Click **▶ Run Demo** — auto-switches to Overview tab, starts 9-step live incident scenario every 4.5s
-3. Incident banner appears instantly with live duration counter
-4. Graph tab: animated edges light up as failures propagate; zoom in/out to inspect
-5. Timeline tab: search "database" to filter events; grouped phases auto-expand
-6. AI Commander: ask "Why is Checkout failing?" — structured reasoning + kubectl commands (Engineer view)
+> [!NOTE]
+> `service_dependencies` uses a composite unique index on `(service_id, depends_on_id)`. Scope dependency queries using `inArray(service_dependencies.serviceId, orgServiceIds)` to preserve tenant isolation.
 
-## Performance & Optimization Notes
+## Incident simulation demo flow
 
-- `computeLayout` (force simulation, 140 iterations) wrapped in `useMemo` — only recomputes on node/edge/dimension changes, not re-renders
-- `ResizeObserver` on GraphView parent fires debounce-free; layout recalc is fast due to useMemo
-- Dark mode preference persisted to `localStorage` under key `ctx-theme`
-- All endpoint `serviceDependencies` queries are org-scoped (prevents cross-org data leaks)
+The platform includes a 9-step live simulation demonstrating failure cascade and recovery.
 
-## Landing Page
-
-- Animated `HeroGraph` with 6-phase looping scenario (healthy → db fails → cascade → checkout impacted → root cause badge → recovery)
-- Headline: "Understand why your system is failing — instantly"
-- Subtext: "Not dashboards. Not alerts. Real-time causality."
-
-## Environment Variables
-
-- `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` — PostgreSQL
-- `SESSION_SECRET` — express-session secret
-- `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` — Clerk authentication keys
-- `OPENAI_API_KEY` — OpenAI API key
-- `OPENAI_MODEL` — (Optional) OpenAI model (defaults to `gpt-4o-mini`)
-- `OPENAI_BASE_URL` — (Optional) Custom base URL for OpenAI API or proxy
+1. **Baseline**: All microservices report healthy status.
+2. **Trigger**: Database latency spikes following a faulty deployment.
+3. **Amplification**: Upstream connection pools exhaust, failing dependent auth and catalog services.
+4. **Impact**: Checkout service fails, generating revenue loss metrics.
+5. **Detection**: Root cause analysis flags the initial database deployment with 94% confidence.
+6. **Mitigation**: Operator triggers simulated rollback on the offending service.
+7. **Recovery**: Dependent services reconnect and return to healthy status.

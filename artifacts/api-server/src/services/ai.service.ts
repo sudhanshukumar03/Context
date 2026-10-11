@@ -391,7 +391,7 @@ export async function simplifyConcept(input: SimplifyConceptInput): Promise<Simp
   });
 }
 
-// --- Utility: log AI errors ---
+/** Logs safe tool failure metadata using the request logger when available. */
 export function logAiError(toolName: string, err: unknown, req?: Request): void {
   const requestLogger = req?.log ?? logger;
   requestLogger.error({

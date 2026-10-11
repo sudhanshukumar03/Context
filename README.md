@@ -456,11 +456,21 @@ Base path: `/api`. All endpoints except `/api/auth/*` and `/healthz` require Bea
 | `POST` | `/api/demo/reset` | Clear services and events for the current organization |
 | `POST` | `/api/demo/advance` | Step through the 9-stage incident simulation scenario |
 
+### Onboarding AI tools
+
+The authenticated endpoints `/api/ai/brief`, `/api/ai/ask`, `/api/ai/explain-doc`, `/api/ai/breakdown-task`, `/api/ai/explain-relationship`, `/api/ai/daily-focus`, and `/api/ai/simplify` retain the `{ success, data, error }` envelope. Their model responses must satisfy the tool's output structure; missing content, malformed JSON, invalid field types, and confidence values outside 0–100 are rejected. Additional fields on valid objects are preserved.
+
+Q&A uses supplied context or organization documents. When neither provides context, it returns `{ answer: "Not enough data", confidence: 0, sources: [] }` without a provider call. Relationship explanations select complete direct connections within a 1,500-character JSON budget, shorten node/edge labels, and tell the model how many connections were omitted.
+
+Each provider attempt has a 15-second timeout. The service makes at most three attempts for invalid model output, connection failures, HTTP 408/409/429 or server failures; permanent errors stop immediately unless the provider explicitly requests a retry. SDK retries are disabled for these calls. Provider backoff hints are capped at five seconds, and a provider instruction not to retry is respected.
+
+Identical in-flight requests share work only for the same organization, user, endpoint, and serialized request body. Completed results are not cached. Each API process allows four active tool operations per tenant and 32 total; excess requests use the existing tool-specific HTTP 500 failure envelope. These limits and duplicate protection do not coordinate across API replicas. Failure logs include request/organization IDs and safe tool, model, attempt and status metadata, without prompts, document contents, model responses, or raw provider errors.
+
 ### Contract invariants
 
 1. **Multi-tenant scoping is mandatory**: `service_dependencies` has no separate `organizationId` column. All dependency queries must be filtered with `inArray(serviceDependencies.serviceId, orgServiceIds)` to prevent cross-tenant edge leakage.
 2. **Atomic token rotation**: Refresh tokens rotate atomically using conditional updates to prevent concurrent reuse.
-3. **Resilient AI parsing**: Model output is parsed using regex JSON extractors to prevent crashes from conversational preambles.
+3. **AI output validation**: JSON extraction tolerates conversational preambles. The onboarding AI tools also validate extracted output with Zod before returning success; invalid output follows the bounded retry policy and existing error envelope. Incident-analysis routes use their separate parsers.
 
 ---
 

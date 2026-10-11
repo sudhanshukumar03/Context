@@ -96,4 +96,3 @@ Dependencies
 Services and workers
 - Observability: missing structured logging, errors thrown without context, no health checks
 - Concurrency: double-submitted requests, two workers processing the same job
-

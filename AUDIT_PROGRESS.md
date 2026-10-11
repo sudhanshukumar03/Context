@@ -10,14 +10,15 @@
 - Test safety: inspected tests do not contact databases, queues, caches, or APIs; SDK construction only. No .env loaded or server run.
 - Sandbox: normal checks failed on child-process spawning; approved escalated reruns passed. Branch creation also required approved escalation.
 - Findings/evidence: `AUDIT_REPORT.md`; highest risks are unchecked model outputs and fabricated Q&A context. Additional context truncation, retry policy, logging correlation, concurrency, and test gaps recorded.
-- Approved items: user said “go on and fix it”; authorizes the six in-scope changes in AUDIT_PLAN.md, including their described failure/context/concurrency behavior. No data/persisted contract changes.
-- Completed commits: none. Files added: instructions, report, progress. Runtime files unchanged.
+- Approved items: user said "go on and fix it"; authorizes the six in-scope changes in AUDIT_PLAN.md, including their described failure/context/concurrency behavior. No data/persisted contract changes.
+- Completed commits: preparatory records and six implementation items listed below; final documentation uses a separate `docs:` commit.
 - Preparatory commit: `9b03290` audit records/plan; verification PASS: 16 tests, workspace types, API build (683 ms).
 - Item 1: `69add34` characterization; verification PASS: 29 tests / 7 files, workspace types, API build (1265 ms).
 - Item 2: `6df28ff` response validation; verification PASS: 45 tests / 7 files, workspace types, API build (625 ms).
 - Item 3: `e34f2a5` evidence context; verification PASS: 49 tests / 7 files, workspace types, API build (933 ms).
 - Item 4: `35354f7` classified retries/deadlines; verification PASS: 63 tests / 7 files, workspace types, API build (563 ms). Installed SDK defaults confirmed locally: 2 retries, 600000 ms timeout; overridden per call only.
 - Item 5: `b71671f` duplicate/concurrency protection; verification PASS: 70 tests / 8 files, workspace types, API build (622 ms). Promise gates prove duplicate sharing and cleanup; limits tested across tenants.
-- Current stage: Step 3 authorized; start with characterization tests, then execute AUDIT_PLAN.md. Expected audit artifacts are the only dirty files.
-- Resume: read these three audit files, check branch/status against this recorded state, then act on user approval. Do not treat these expected audit artifacts as unexplained dirty changes or rerun completed baseline checks without a reason.
-- Documentation: no runtime-change-induced stale entries yet. Existing README health path mismatch is noticed, not touched. After approved code changes, enumerate affected README/docstring/example-config entries and fix in a separate `docs:` commit.
+- Item 6: `18890eb` safe request correlation; verification PASS: 78 tests / 8 files, workspace types, API build (1491 ms), entry 3,974,663 bytes. Every route's error log is tested for correlation and absence of private values.
+- Current stage: all six approved items complete and verified. Documentation reviewed and updated separately; no further implementation is authorized/needed.
+- Resume: inspect AUDIT_REPORT.md final report and this completed commit list; do not repeat discovery, baseline or implementation. Any further work needs a new scope/request.
+- Documentation: README parsing invariant updated and scoped tool behavior documented; safe logging doc comment updated. Example config and other docstrings have no new stale entries. Existing health path mismatch remains noticed, not touched. Final commit title: `docs: document hardened AI tools and audit outcome`.

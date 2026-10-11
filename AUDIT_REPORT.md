@@ -54,6 +54,33 @@ Health checks: a database health route exists (`routes/health.ts:6`, `router.get
 
 ## Approval boundary and documentation
 
-Step 1 is complete. No fixes, plan, or commits have been approved. Per the supplied audit instructions, stop here for findings approval before Step 2; Step 2 requires separate plan approval before implementation. The first plan item must characterize existing behavior.
+The sections above preserve the initial baseline and findings. The subsequent user instruction, "go on and fix it", authorized the six changes in AUDIT_PLAN.md. Implementation is complete; verification results and remaining limits follow.
 
-Documentation caused by changes: no stale README, docstring, or example-config entries caused by runtime changes, because none were made. During execution, list and fix any such entries in a separate `docs:` commit. Updated audit requirements are in `AUDIT_INSTRUCTIONS.md`; resume state is in `AUDIT_PROGRESS.md`.
+Updated audit requirements are in `AUDIT_INSTRUCTIONS.md`; resume state and completed commits are in `AUDIT_PROGRESS.md`.
+
+## Final report
+
+| Metric | Before | After |
+|---|---|---|
+| Test files / tests | 5 / 16 passing | 8 / 78 passing |
+| Direct scope tests | 0 | 62 service/route/execution tests added |
+| Type errors | 0 | 0 (full workspace check passed) |
+| API build | PASS, 5328 ms | PASS, 1491 ms on last code verification; warm build, not a performance claim |
+| API entry bundle | 3,967,076 bytes | 3,974,663 bytes; **worse: +7,587 bytes (+0.19%)**, validation/execution support |
+| Vitest duration | 3.63 s | 1.59 s on last code verification; timings not comparable benchmarks |
+| Lint / numeric coverage | Unmeasured | Unmeasured; no lint command / coverage instrumentation added |
+
+All six changes are committed separately, within the diff cap. Tests, workspace types and API build passed after each commit. No dependencies, database schema, migrations, persisted formats, route names, or existing response envelopes changed. New response schemas validate ephemeral model output, preserving additional valid fields.
+
+| Changed | How to manually verify on a disposable local setup |
+|---|---|
+| Characterization and regression coverage | Run `pnpm test`: exported service functions and actual local HTTP routes are exercised with mocked provider/database/authentication. |
+| Invalid/missing model output is rejected | Stub provider output to `{}`, an empty response or an invalid confidence; observe bounded retries then the existing tool-specific 500 envelope. Valid response objects retain their fields. |
+| Evidence-only Q&A and complete relationship context | Ask without supplied/org context: receive "Not enough data", confidence 0, empty sources, no provider call. Inspect a large relationship prompt: JSON parses, target/direct neighbors included, omissions counted. |
+| Classified retries and timeout | Stub a 401: one call; stub repeated 503: three calls. Check request options: timeout 15000, maxRetries 0. Unit tests use virtual time, not live providers. |
+| Duplicate and bounded concurrent work | Keep a mocked call pending and submit an identical request: one provider invocation and matching replies. A different tenant/user/path/body uses separate work. Fifth distinct active tenant operation fails; completion/failure releases the slot. |
+| Request correlation without sensitive logs | Fail any of the seven tools; request log has tool/model/request/organization/attempt/status/error classification, with no prompt, document, response or raw provider error. |
+
+Left alone and why: provider readiness probes require an operational decision; no job worker exists in this scope. Cross-replica deduplication needs coordination outside this in-process fix. Provider model defaults/client selection, separate brief jobs, and existing README health-path drift are out of scope. Unbounded input-field resource impact remains suspected; existing global rate/body-size limits still apply. Numeric coverage and provider-specific live behavior remain unverified; no external resources were contacted.
+
+Documentation review: README's AI parsing invariant was stale after validation/retry changes; corrected and onboarding tool behavior documented in a separate `docs:` commit. The logging utility comment was updated to describe safe request-scoped metadata. No example-config entry or other existing docstring became stale: no config key/signature contract was removed. Existing health-path documentation was noticed, not touched.

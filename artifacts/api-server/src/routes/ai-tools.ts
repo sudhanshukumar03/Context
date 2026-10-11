@@ -90,7 +90,7 @@ router.post("/ai/brief", requireAuth, async (req: Request, res: Response) => {
     }));
     ok(res, result);
   } catch (err) {
-    logAiError("brief", err);
+    logAiError("brief", err, req);
     fail(res, "Brief generation failed", 500);
   }
 });
@@ -112,7 +112,7 @@ router.post("/ai/ask", requireAuth, async (req: Request, res: Response) => {
     const result = await runAiTool(req, () => askQuestion({ question: parsed.data.question, contextData }));
     ok(res, result);
   } catch (err) {
-    logAiError("ask", err);
+    logAiError("ask", err, req);
     fail(res, "Q&A failed", 500);
   }
 });
@@ -142,7 +142,7 @@ router.post("/ai/explain-doc", requireAuth, async (req: Request, res: Response) 
     const result = await runAiTool(req, () => explainDocument({ title, content, role: parsed.data.role }));
     ok(res, result);
   } catch (err) {
-    logAiError("explain-doc", err);
+    logAiError("explain-doc", err, req);
     fail(res, "Document explanation failed", 500);
   }
 });
@@ -161,7 +161,7 @@ router.post("/ai/breakdown-task", requireAuth, async (req: Request, res: Respons
     }));
     ok(res, result);
   } catch (err) {
-    logAiError("breakdown-task", err);
+    logAiError("breakdown-task", err, req);
     fail(res, "Task breakdown failed", 500);
   }
 });
@@ -176,7 +176,7 @@ router.post("/ai/explain-relationship", requireAuth, async (req: Request, res: R
     const result = await runAiTool(req, () => explainRelationship(parsed.data));
     ok(res, result);
   } catch (err) {
-    logAiError("explain-relationship", err);
+    logAiError("explain-relationship", err, req);
     fail(res, "Relationship explanation failed", 500);
   }
 });
@@ -205,7 +205,7 @@ router.post("/ai/daily-focus", requireAuth, async (req: Request, res: Response) 
     }));
     ok(res, result);
   } catch (err) {
-    logAiError("daily-focus", err);
+    logAiError("daily-focus", err, req);
     fail(res, "Daily focus generation failed", 500);
   }
 });
@@ -220,7 +220,7 @@ router.post("/ai/simplify", requireAuth, async (req: Request, res: Response) => 
     const result = await runAiTool(req, () => simplifyConcept(parsed.data));
     ok(res, result);
   } catch (err) {
-    logAiError("simplify", err);
+    logAiError("simplify", err, req);
     fail(res, "Simplification failed", 500);
   }
 });

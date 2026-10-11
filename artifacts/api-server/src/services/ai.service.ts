@@ -1,6 +1,7 @@
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { logger } from "../lib/logger.js";
 import { z } from "zod";
+import type { Request } from "express";
 
 const MODEL = process.env.GEMINI_MODEL || process.env.OPENAI_MODEL || "gemini-2.0-flash";
 const TEMPERATURE = 0.3;
@@ -391,6 +392,17 @@ export async function simplifyConcept(input: SimplifyConceptInput): Promise<Simp
 }
 
 // --- Utility: log AI errors ---
-export function logAiError(toolName: string, err: unknown): void {
-  logger.error({ err, tool: toolName }, "AI tool error");
+export function logAiError(toolName: string, err: unknown, req?: Request): void {
+  const requestLogger = req?.log ?? logger;
+  requestLogger.error({
+    tool: toolName,
+    model: MODEL,
+    requestId: req?.id,
+    organizationId: req?.auth?.organizationId,
+    attempts: err instanceof AiOperationError ? err.attempts : undefined,
+    status: providerStatus(err),
+    errorType: err instanceof AiOperationError
+      ? err.cause instanceof InvalidAiResponseError ? "invalid_model_response" : "provider_error"
+      : "operation_error",
+  }, "AI tool error");
 }

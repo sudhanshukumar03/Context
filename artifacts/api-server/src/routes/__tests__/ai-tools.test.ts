@@ -4,7 +4,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { setImmediate } from "node:timers/promises";
 
-const mocks = vi.hoisted(() => ({ create: vi.fn(), error: vi.fn(), docs: [] as object[] }));
+const mocks = vi.hoisted(() => ({ create: vi.fn(), error: vi.fn(), requestError: vi.fn(), docs: [] as object[] }));
 vi.mock("@workspace/integrations-openai-ai-server", () => ({
   openai: { chat: { completions: { create: mocks.create } } },
 }));
@@ -28,7 +28,7 @@ let baseURL: string;
 beforeAll(async () => {
   const app = express();
   app.use(express.json());
-  app.use((req, _res, next) => { Object.assign(req, { log: { error: mocks.error }, id: "test-request" }); next(); });
+  app.use((req, _res, next) => { Object.assign(req, { log: { error: mocks.requestError }, id: "test-request" }); next(); });
   app.use("/api", router);
   server = await new Promise<Server>((resolve) => {
     const listener = app.listen(0, "127.0.0.1", () => resolve(listener));
@@ -46,6 +46,26 @@ async function post(path: string, body: object) {
 }
 
 describe("AI route characterization", () => {
+  it.each([
+    { tool: "brief", body: { role: "backend" } },
+    { tool: "ask", body: { question: "private question", contextData: "private context" } },
+    { tool: "explain-doc", body: { title: "private title", content: "private document" } },
+    { tool: "breakdown-task", body: { title: "private title", description: "private description" } },
+    { tool: "explain-relationship", body: { entityId: "a", entityLabel: "private label", graph: { nodes: [], edges: [] } } },
+    { tool: "daily-focus", body: { recentActivity: ["private activity"] } },
+    { tool: "simplify", body: { concept: "private concept" } },
+  ])("correlates $tool failures without logging private input or provider messages", async ({ tool, body }) => {
+    mocks.create.mockRejectedValue(Object.assign(new Error("private provider body or API key"), { status: 401 }));
+    const result = await post(`/ai/${tool}`, body);
+    expect(result.status).toBe(500);
+    expect(mocks.requestError).toHaveBeenCalledWith({
+      tool, model: expect.any(String), requestId: "test-request", organizationId: 10,
+      attempts: 1, status: 401, errorType: "provider_error",
+    }, "AI tool error");
+    expect(mocks.error).not.toHaveBeenCalled();
+    expect(JSON.stringify(mocks.requestError.mock.calls)).not.toContain("private");
+    expect(JSON.stringify(result.body)).not.toContain("private");
+  });
   it("shares model work for simultaneous identical HTTP requests", async () => {
     let release!: () => void;
     let started!: () => void;

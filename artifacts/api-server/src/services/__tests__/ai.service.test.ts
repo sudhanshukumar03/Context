@@ -8,7 +8,7 @@ vi.mock("../../lib/logger.js", () => ({ logger: { error: mocks.error } }));
 
 import {
   askQuestion, breakdownTask, explainDocument, explainRelationship,
-  generateContextBrief, generateDailyFocus, simplifyConcept,
+  generateContextBrief, generateDailyFocus, simplifyConcept, logAiError,
 } from "../ai.service.js";
 
 const qa = { answer: "Read the runbook", confidence: 80, sources: ["runbook"] };
@@ -140,6 +140,11 @@ describe("evidence context", () => {
 });
 
 describe("provider retry policy", () => {
+  it("logs safe metadata for callers without a request logger", () => {
+    logAiError("ask", new Error("private provider data"));
+    expect(mocks.error).toHaveBeenCalledWith(expect.objectContaining({ tool: "ask", errorType: "operation_error" }), "AI tool error");
+    expect(JSON.stringify(mocks.error.mock.calls)).not.toContain("private");
+  });
   it.each([400, 401, 403, 404, 422])("does not retry permanent HTTP %i failures", async (status) => {
     mocks.create.mockRejectedValue(Object.assign(new Error("secret provider body"), { status }));
     await expect(askQuestion({ question: "Next?", contextData: "Runbook" })).rejects.toMatchObject({

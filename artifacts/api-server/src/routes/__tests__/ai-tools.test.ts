@@ -45,6 +45,13 @@ async function post(path: string, body: object) {
 }
 
 describe("AI route characterization", () => {
+  it("keeps the existing failure envelope for permanent provider errors", async () => {
+    mocks.create.mockRejectedValue(Object.assign(new Error("sensitive provider details"), { status: 401 }));
+    expect(await post("/ai/ask", { question: "Next?", contextData: "Runbook" })).toEqual({ status: 500, body: {
+      success: false, data: null, error: "Q&A failed",
+    } });
+    expect(mocks.create).toHaveBeenCalledOnce();
+  });
   it("never invents company context when organization documents are absent", async () => {
     expect(await post("/ai/ask", { question: "What is my team?" })).toEqual({ status: 200, body: {
       success: true, data: { answer: "Not enough data", confidence: 0, sources: [] }, error: null,

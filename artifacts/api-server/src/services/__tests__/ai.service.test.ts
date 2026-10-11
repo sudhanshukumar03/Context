@@ -138,3 +138,58 @@ describe("evidence context", () => {
     }
   });
 });
+
+describe("provider retry policy", () => {
+  it.each([400, 401, 403, 404, 422])("does not retry permanent HTTP %i failures", async (status) => {
+    mocks.create.mockRejectedValue(Object.assign(new Error("secret provider body"), { status }));
+    await expect(askQuestion({ question: "Next?", contextData: "Runbook" })).rejects.toMatchObject({
+      tool: "ask", attempts: 1, status,
+    });
+    expect(mocks.create).toHaveBeenCalledOnce();
+  });
+
+  it.each([408, 409, 429, 500, 503])("limits transient HTTP %i failures to three attempts", async (status) => {
+    vi.useFakeTimers();
+    mocks.create.mockRejectedValue(Object.assign(new Error("unavailable"), { status }));
+    const assertion = expect(askQuestion({ question: "Next?", contextData: "Runbook" })).rejects.toMatchObject({
+      tool: "ask", attempts: 3, status,
+    });
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(mocks.create).toHaveBeenCalledTimes(3);
+    expect(mocks.create.mock.calls[0][1]).toEqual({ timeout: 15_000, maxRetries: 0 });
+  });
+
+  it("honors a provider directive not to retry", async () => {
+    mocks.create.mockRejectedValue(Object.assign(new Error("unavailable"), {
+      status: 503, headers: new Headers({ "x-should-retry": "false" }),
+    }));
+    await expect(askQuestion({ question: "Next?", contextData: "Runbook" })).rejects.toMatchObject({ attempts: 1 });
+    expect(mocks.create).toHaveBeenCalledOnce();
+  });
+
+  it("caps provider-requested backoff and recovers after a transient failure", async () => {
+    vi.useFakeTimers();
+    mocks.create.mockRejectedValueOnce(Object.assign(new Error("busy"), {
+      status: 429, headers: new Headers({ "retry-after": "100" }),
+    })).mockResolvedValue(response(JSON.stringify(qa)));
+    const assertion = expect(askQuestion({ question: "Next?", contextData: "Runbook" })).resolves.toEqual(qa);
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(mocks.create).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    await assertion;
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries SDK connection timeouts without leaking their message in the operation error", async () => {
+    vi.useFakeTimers();
+    class APIConnectionTimeoutError extends Error {}
+    mocks.create.mockRejectedValue(new APIConnectionTimeoutError("private request content"));
+    const assertion = expect(askQuestion({ question: "Next?", contextData: "Runbook" })).rejects.toThrow(
+      "AI ask failed after 3 attempt(s): provider request failed",
+    );
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(mocks.create).toHaveBeenCalledTimes(3);
+  });
+});

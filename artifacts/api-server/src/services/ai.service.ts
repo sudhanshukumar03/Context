@@ -5,6 +5,7 @@ import { z } from "zod";
 const MODEL = process.env.GEMINI_MODEL || process.env.OPENAI_MODEL || "gemini-2.0-flash";
 const TEMPERATURE = 0.3;
 const MAX_TOKENS = 1024;
+const ATTEMPT_TIMEOUT_MS = 15_000;
 
 class InvalidAiResponseError extends Error {
   constructor() { super("Model response does not match the expected output"); }
@@ -39,19 +40,54 @@ function safeParseJson<T>(raw: string, schema: z.ZodType<T>): T {
   return result.data;
 }
 
-async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
-  let lastErr: unknown;
+function providerStatus(err: unknown): number | undefined {
+  return typeof err === "object" && err !== null && "status" in err && typeof err.status === "number"
+    ? err.status : undefined;
+}
+
+function providerHeaders(err: unknown): Headers | undefined {
+  return typeof err === "object" && err !== null && "headers" in err && err.headers instanceof Headers
+    ? err.headers : undefined;
+}
+
+function isRetryable(err: unknown): boolean {
+  if (err instanceof InvalidAiResponseError) return true;
+  const override = providerHeaders(err)?.get("x-should-retry");
+  if (override === "false") return false;
+  if (override === "true") return true;
+  const status = providerStatus(err);
+  if (status !== undefined) return [408, 409, 429].includes(status) || status >= 500;
+  return err instanceof Error && ["APIConnectionError", "APIConnectionTimeoutError"].includes(err.constructor.name);
+}
+
+function retryDelay(err: unknown, attempt: number): number {
+  const headers = providerHeaders(err);
+  const milliseconds = headers?.get("retry-after-ms");
+  const seconds = headers?.get("retry-after");
+  const requested = milliseconds !== null && milliseconds !== undefined ? Number(milliseconds)
+    : seconds ? (Number.isFinite(Number(seconds)) ? Number(seconds) * 1000 : Date.parse(seconds) - Date.now()) : NaN;
+  return Number.isFinite(requested) && requested >= 0 ? Math.min(requested, 5000) : 800 * (attempt + 1);
+}
+
+class AiOperationError extends Error {
+  readonly status: number | undefined;
+  constructor(readonly tool: keyof typeof outputSchemas, readonly attempts: number, cause: unknown) {
+    const detail = cause instanceof InvalidAiResponseError ? cause.message : "provider request failed";
+    super(`AI ${tool} failed after ${attempts} attempt(s): ${detail}`, { cause });
+    this.status = providerStatus(cause);
+  }
+}
+
+async function withRetry<T>(tool: keyof typeof outputSchemas, fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await fn();
     } catch (err) {
-      lastErr = err;
-      if (attempt < maxAttempts - 1) {
-        await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
-      }
+      if (attempt === maxAttempts - 1 || !isRetryable(err)) throw new AiOperationError(tool, attempt + 1, err);
+      await new Promise((r) => setTimeout(r, retryDelay(err, attempt)));
     }
   }
-  throw lastErr;
+  throw new Error("AI retry policy requires at least one attempt");
 }
 
 async function callAi(systemPrompt: string, userMessage: string): Promise<string> {
@@ -63,7 +99,7 @@ async function callAi(systemPrompt: string, userMessage: string): Promise<string
       { role: "system", content: systemPrompt },
       { role: "user", content: userMessage },
     ],
-  });
+  }, { timeout: ATTEMPT_TIMEOUT_MS, maxRetries: 0 });
   const content = response.choices[0]?.message?.content;
   if (!content?.trim()) throw new InvalidAiResponseError();
   return content;
@@ -107,7 +143,7 @@ export async function generateContextBrief(input: ContextBriefInput): Promise<Co
 
   const userMsg = `Role: ${roleLabel}\n\nTeam:\n${teamText}\n\nDocuments:\n${docsText}\n\nTasks:\n${tasksText}`;
 
-  return withRetry(async () => {
+  return withRetry("brief", async () => {
     const raw = await callAi(BRIEF_SYSTEM, userMsg);
     return safeParseJson(raw, outputSchemas.brief);
   });
@@ -141,7 +177,7 @@ export async function askQuestion(input: AskQuestionInput): Promise<AskQuestionO
   }
   const userMsg = `CONTEXT:\n${input.contextData.slice(0, 3000)}\n\nQUESTION: ${input.question}`;
 
-  return withRetry(async () => {
+  return withRetry("ask", async () => {
     const raw = await callAi(QA_SYSTEM, userMsg);
     return safeParseJson(raw, outputSchemas.ask);
   });
@@ -175,7 +211,7 @@ export async function explainDocument(input: ExplainDocumentInput): Promise<Expl
   const roleLabel = input.role === "pm" ? "Product Manager" : input.role === "frontend" ? "Frontend Developer" : "Backend Developer";
   const userMsg = `Role: ${roleLabel}\n\nDocument Title: ${input.title}\n\nContent:\n${input.content.slice(0, 2000)}`;
 
-  return withRetry(async () => {
+  return withRetry("document", async () => {
     const raw = await callAi(DOC_EXPLAINER_SYSTEM, userMsg);
     return safeParseJson(raw, outputSchemas.document);
   });
@@ -210,7 +246,7 @@ export async function breakdownTask(input: BreakdownTaskInput): Promise<Breakdow
   const roleLabel = input.role ? (input.role === "pm" ? "Product Manager" : input.role === "frontend" ? "Frontend Developer" : "Backend Developer") : "Engineer";
   const userMsg = `Role: ${roleLabel}\n\nTask: ${input.title}\n\nDescription: ${input.description}`;
 
-  return withRetry(async () => {
+  return withRetry("task", async () => {
     const raw = await callAi(TASK_BREAKDOWN_SYSTEM, userMsg);
     return safeParseJson(raw, outputSchemas.task);
   });
@@ -275,7 +311,7 @@ export async function explainRelationship(input: ExplainRelationshipInput): Prom
   const graphText = relationshipContext(input);
   const userMsg = `Entity: ${input.entityLabel} (id: ${input.entityId})\n\nGraph:\n${graphText}`;
 
-  return withRetry(async () => {
+  return withRetry("relationship", async () => {
     const raw = await callAi(RELATIONSHIP_SYSTEM, userMsg);
     return safeParseJson(raw, outputSchemas.relationship);
   });
@@ -314,7 +350,7 @@ export async function generateDailyFocus(input: DailyFocusInput): Promise<DailyF
 
   const userMsg = `Role: ${roleLabel}\n\nRecent Activity: ${activityText}\nPending Tasks: ${tasksText}\nTeam Updates: ${updatesText}`;
 
-  return withRetry(async () => {
+  return withRetry("daily", async () => {
     const raw = await callAi(DAILY_FOCUS_SYSTEM, userMsg);
     return safeParseJson(raw, outputSchemas.daily);
   });
@@ -348,7 +384,7 @@ export async function simplifyConcept(input: SimplifyConceptInput): Promise<Simp
   const contextHint = input.context ? `\n\nAdditional context: ${input.context}` : "";
   const userMsg = `Concept: ${input.concept}${roleHint}${contextHint}`;
 
-  return withRetry(async () => {
+  return withRetry("simplify", async () => {
     const raw = await callAi(SIMPLIFY_SYSTEM, userMsg);
     return safeParseJson(raw, outputSchemas.simplify);
   });

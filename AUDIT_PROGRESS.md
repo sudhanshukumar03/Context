@@ -15,6 +15,7 @@
 - Preparatory commit: `9b03290` audit records/plan; verification PASS: 16 tests, workspace types, API build (683 ms).
 - Item 1: `69add34` characterization; verification PASS: 29 tests / 7 files, workspace types, API build (1265 ms).
 - Item 2: `6df28ff` response validation; verification PASS: 45 tests / 7 files, workspace types, API build (625 ms).
+- Item 3: `e34f2a5` evidence context; verification PASS: 49 tests / 7 files, workspace types, API build (933 ms).
 - Current stage: Step 3 authorized; start with characterization tests, then execute AUDIT_PLAN.md. Expected audit artifacts are the only dirty files.
 - Resume: read these three audit files, check branch/status against this recorded state, then act on user approval. Do not treat these expected audit artifacts as unexplained dirty changes or rerun completed baseline checks without a reason.
 - Documentation: no runtime-change-induced stale entries yet. Existing README health path mismatch is noticed, not touched. After approved code changes, enumerate affected README/docstring/example-config entries and fix in a separate `docs:` commit.

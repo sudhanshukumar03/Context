@@ -136,6 +136,9 @@ OUTPUT FORMAT:
 {"answer":"string","confidence":85,"sources":["string"]}`;
 
 export async function askQuestion(input: AskQuestionInput): Promise<AskQuestionOutput> {
+  if (!input.contextData.trim()) {
+    return { answer: "Not enough data", confidence: 0, sources: [] };
+  }
   const userMsg = `CONTEXT:\n${input.contextData.slice(0, 3000)}\n\nQUESTION: ${input.question}`;
 
   return withRetry(async () => {
@@ -235,8 +238,41 @@ STRICT RULES:
 OUTPUT FORMAT:
 {"explanation":"string","relatedEntities":[{"id":"string","label":"string","relationship":"string"}],"impact":"string"}`;
 
+function relationshipContext(input: ExplainRelationshipInput): string {
+  const nodesById = new Map(input.graph.nodes.map((node) => [node.id, node]));
+  const directEdges = input.graph.edges.filter((edge) => edge.from === input.entityId || edge.to === input.entityId);
+  const shortenNode = (node: ExplainRelationshipInput["graph"]["nodes"][number]) => ({
+    ...node, label: node.label.slice(0, 80), type: node.type.slice(0, 40),
+  });
+  const target = nodesById.get(input.entityId);
+  let context = {
+    nodes: target ? [shortenNode(target)] : [],
+    edges: [] as ExplainRelationshipInput["graph"]["edges"],
+    omittedConnections: directEdges.length,
+  };
+  if (JSON.stringify(context).length > 1500) throw new Error("Relationship entity exceeds context budget");
+  const includedIds = new Set(context.nodes.map((node) => node.id));
+  for (const edge of directEdges) {
+    const newNodes = [...new Set([edge.from, edge.to])]
+      .filter((id) => !includedIds.has(id))
+      .map((id) => nodesById.get(id))
+      .filter((node): node is NonNullable<typeof node> => node !== undefined)
+      .map(shortenNode);
+    const candidate = {
+      nodes: [...context.nodes, ...newNodes],
+      edges: [...context.edges, { ...edge, ...(edge.label === undefined ? {} : { label: edge.label.slice(0, 80) }) }],
+      omittedConnections: context.omittedConnections - 1,
+    };
+    if (JSON.stringify(candidate).length <= 1500) {
+      context = candidate;
+      newNodes.forEach((node) => includedIds.add(node.id));
+    }
+  }
+  return JSON.stringify(context);
+}
+
 export async function explainRelationship(input: ExplainRelationshipInput): Promise<ExplainRelationshipOutput> {
-  const graphText = JSON.stringify(input.graph).slice(0, 1500);
+  const graphText = relationshipContext(input);
   const userMsg = `Entity: ${input.entityLabel} (id: ${input.entityId})\n\nGraph:\n${graphText}`;
 
   return withRetry(async () => {

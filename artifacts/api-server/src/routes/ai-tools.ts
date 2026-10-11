@@ -104,11 +104,8 @@ router.post("/ai/ask", requireAuth, async (req: Request, res: Response) => {
 
   try {
     let contextData = parsed.data.contextData ?? "";
-    if (!contextData && orgId) {
+    if (!contextData.trim() && orgId) {
       contextData = await getOrgContext(orgId);
-    }
-    if (!contextData) {
-      contextData = "Company: Tech startup in the payments space. Teams: Backend (Auth/Payments), Frontend (Design Systems). Current priority: Auth v2 migration.";
     }
 
     const result = await askQuestion({ question: parsed.data.question, contextData });

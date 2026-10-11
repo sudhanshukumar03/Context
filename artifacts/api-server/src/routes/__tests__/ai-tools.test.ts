@@ -45,6 +45,12 @@ async function post(path: string, body: object) {
 }
 
 describe("AI route characterization", () => {
+  it("never invents company context when organization documents are absent", async () => {
+    expect(await post("/ai/ask", { question: "What is my team?" })).toEqual({ status: 200, body: {
+      success: true, data: { answer: "Not enough data", confidence: 0, sources: [] }, error: null,
+    } });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
   it("returns the existing validation error without calling AI", async () => {
     expect(await post("/ai/ask", {})).toEqual({ status: 400, body: {
       success: false, data: null, error: "question is required",

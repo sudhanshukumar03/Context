@@ -108,3 +108,33 @@ describe("model response validation", () => {
     expect(mocks.create).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("evidence context", () => {
+  it.each(["", " \n\t "])("returns insufficient evidence without a provider call for %j", async (contextData) => {
+    expect(await askQuestion({ question: "What is my team?", contextData })).toEqual({
+      answer: "Not enough data", confidence: 0, sources: [],
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("selects complete direct connections even when the target occurs late in a large graph", async () => {
+    mocks.create.mockResolvedValue(response(JSON.stringify({ explanation: "Connected", relatedEntities: [], impact: "Useful" })));
+    const unrelated = Array.from({ length: 40 }, (_, i) => ({ id: `unrelated-${i}`, label: "Unrelated".repeat(50), type: "service" }));
+    const direct = Array.from({ length: 30 }, (_, i) => ({ id: `neighbor-${i}`, label: "Neighbor".repeat(50), type: "service" }));
+    await explainRelationship({ entityId: "target", entityLabel: "Target", graph: {
+      nodes: [...unrelated, ...direct, { id: "target", label: "Target", type: "service" }],
+      edges: direct.map((node, i) => i % 2 ? { from: node.id, to: "target" } : { from: "target", to: node.id }),
+    } });
+    const serialized = mocks.create.mock.calls[0][0].messages[1].content.split("Graph:\n")[1];
+    const graph = JSON.parse(serialized);
+    expect(serialized.length).toBeLessThanOrEqual(1500);
+    expect(graph.nodes.some((node: { id: string }) => node.id === "target")).toBe(true);
+    expect(graph.nodes.some((node: { id: string }) => node.id.startsWith("unrelated"))).toBe(false);
+    expect(graph.edges.length).toBeGreaterThan(0);
+    expect(graph.omittedConnections).toBeGreaterThan(0);
+    expect(graph.edges.length + graph.omittedConnections).toBe(30);
+    for (const edge of graph.edges) {
+      expect(graph.nodes.map((node: { id: string }) => node.id)).toEqual(expect.arrayContaining([edge.from, edge.to]));
+    }
+  });
+});

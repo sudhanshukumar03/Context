@@ -1,0 +1,17 @@
+# Audit progress
+
+- Date: 2026-10-12 (Asia/Calcutta).
+- Branch: `quality/audit-preflight`; initial tree clean, initial HEAD `00ab840`.
+- Scope confirmed by user: AI service and its direct consumers.
+- Exact scope: `artifacts/api-server/src/services/ai.service.ts`, `artifacts/api-server/src/routes/ai-tools.ts`.
+- Focus: all applicable categories; approximately 25-file read budget used. Do not restart discovery or broaden scope without agreement.
+- Instructions: `AUDIT_INSTRUCTIONS.md`, including observability/concurrency checklist, separate documentation commit requirement, and persistent progress requirement.
+- Baseline: `pnpm test` passed (5 files / 16 tests, 3.63 s); `pnpm run typecheck` passed; API build passed (5328 ms, entry 3,967,076 bytes). Lint and numeric coverage unmeasured. No direct service/route tests.
+- Test safety: inspected tests do not contact databases, queues, caches, or APIs; SDK construction only. No .env loaded or server run.
+- Sandbox: normal checks failed on child-process spawning; approved escalated reruns passed. Branch creation also required approved escalation.
+- Findings/evidence: `AUDIT_REPORT.md`; highest risks are unchecked model outputs and fabricated Q&A context. Additional context truncation, retry policy, logging correlation, concurrency, and test gaps recorded.
+- Approved items: user said “go on and fix it”; authorizes the six in-scope changes in AUDIT_PLAN.md, including their described failure/context/concurrency behavior. No data/persisted contract changes.
+- Completed commits: none. Files added: instructions, report, progress. Runtime files unchanged.
+- Current stage: Step 3 authorized; start with characterization tests, then execute AUDIT_PLAN.md. Expected audit artifacts are the only dirty files.
+- Resume: read these three audit files, check branch/status against this recorded state, then act on user approval. Do not treat these expected audit artifacts as unexplained dirty changes or rerun completed baseline checks without a reason.
+- Documentation: no runtime-change-induced stale entries yet. Existing README health path mismatch is noticed, not touched. After approved code changes, enumerate affected README/docstring/example-config entries and fix in a separate `docs:` commit.

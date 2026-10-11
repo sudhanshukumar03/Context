@@ -13,6 +13,7 @@
 - Approved items: user said “go on and fix it”; authorizes the six in-scope changes in AUDIT_PLAN.md, including their described failure/context/concurrency behavior. No data/persisted contract changes.
 - Completed commits: none. Files added: instructions, report, progress. Runtime files unchanged.
 - Preparatory commit: `9b03290` audit records/plan; verification PASS: 16 tests, workspace types, API build (683 ms).
+- Item 1: `69add34` characterization; verification PASS: 29 tests / 7 files, workspace types, API build (1265 ms).
 - Current stage: Step 3 authorized; start with characterization tests, then execute AUDIT_PLAN.md. Expected audit artifacts are the only dirty files.
 - Resume: read these three audit files, check branch/status against this recorded state, then act on user approval. Do not treat these expected audit artifacts as unexplained dirty changes or rerun completed baseline checks without a reason.
 - Documentation: no runtime-change-induced stale entries yet. Existing README health path mismatch is noticed, not touched. After approved code changes, enumerate affected README/docstring/example-config entries and fix in a separate `docs:` commit.

@@ -1,16 +1,42 @@
 import { openai } from "@workspace/integrations-openai-ai-server";
 import { logger } from "../lib/logger.js";
+import { z } from "zod";
 
 const MODEL = process.env.GEMINI_MODEL || process.env.OPENAI_MODEL || "gemini-2.0-flash";
 const TEMPERATURE = 0.3;
 const MAX_TOKENS = 1024;
 
-function safeParseJson<T>(raw: string): T {
+class InvalidAiResponseError extends Error {
+  constructor() { super("Model response does not match the expected output"); }
+}
+
+const confidence = z.number().min(0).max(100);
+const strings = z.array(z.string());
+const outputSchemas = {
+  brief: z.object({ team: z.string(), goal: z.string(), keyPerson: z.string(), suggestedReading: z.string(),
+    nextAction: z.string(), whyThisMatters: z.string(), confidence, explanation: z.string(), sources: strings }).passthrough(),
+  ask: z.object({ answer: z.string(), confidence, sources: strings }).passthrough(),
+  document: z.object({ summary: z.string(), keyPoints: strings, simplifiedExplanation: z.string(), relevanceForRole: z.string() }).passthrough(),
+  task: z.object({ steps: strings, dependencies: strings, estimatedEffort: z.string(), requiredKnowledge: strings }).passthrough(),
+  relationship: z.object({ explanation: z.string(), relatedEntities: z.array(z.object({
+    id: z.string(), label: z.string(), relationship: z.string(),
+  }).passthrough()), impact: z.string() }).passthrough(),
+  daily: z.object({ priorities: z.array(z.object({ title: z.string(), reason: z.string(),
+    urgency: z.enum(["high", "medium", "low"]),
+  }).passthrough()), recommendedDocs: z.array(z.object({ title: z.string(), why: z.string() }).passthrough()), suggestedActions: strings }).passthrough(),
+  simplify: z.object({ simpleExplanation: z.string(), analogy: z.string(), keyTakeaways: strings }).passthrough(),
+};
+
+function safeParseJson<T>(raw: string, schema: z.ZodType<T>): T {
   const match = raw.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
   if (!match) {
-    throw new Error("No JSON object or array found in model response");
+    throw new InvalidAiResponseError();
   }
-  return JSON.parse(match[0]) as T;
+  let parsed: unknown;
+  try { parsed = JSON.parse(match[0]); } catch { throw new InvalidAiResponseError(); }
+  const result = schema.safeParse(parsed);
+  if (!result.success) throw new InvalidAiResponseError();
+  return result.data;
 }
 
 async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
@@ -38,7 +64,9 @@ async function callAi(systemPrompt: string, userMessage: string): Promise<string
       { role: "user", content: userMessage },
     ],
   });
-  return response.choices[0]?.message?.content ?? "{}";
+  const content = response.choices[0]?.message?.content;
+  if (!content?.trim()) throw new InvalidAiResponseError();
+  return content;
 }
 
 // --- 1. Context Brief Generator ---
@@ -81,7 +109,7 @@ export async function generateContextBrief(input: ContextBriefInput): Promise<Co
 
   return withRetry(async () => {
     const raw = await callAi(BRIEF_SYSTEM, userMsg);
-    return safeParseJson<ContextBriefOutput>(raw);
+    return safeParseJson(raw, outputSchemas.brief);
   });
 }
 
@@ -112,7 +140,7 @@ export async function askQuestion(input: AskQuestionInput): Promise<AskQuestionO
 
   return withRetry(async () => {
     const raw = await callAi(QA_SYSTEM, userMsg);
-    return safeParseJson<AskQuestionOutput>(raw);
+    return safeParseJson(raw, outputSchemas.ask);
   });
 }
 
@@ -146,7 +174,7 @@ export async function explainDocument(input: ExplainDocumentInput): Promise<Expl
 
   return withRetry(async () => {
     const raw = await callAi(DOC_EXPLAINER_SYSTEM, userMsg);
-    return safeParseJson<ExplainDocumentOutput>(raw);
+    return safeParseJson(raw, outputSchemas.document);
   });
 }
 
@@ -181,7 +209,7 @@ export async function breakdownTask(input: BreakdownTaskInput): Promise<Breakdow
 
   return withRetry(async () => {
     const raw = await callAi(TASK_BREAKDOWN_SYSTEM, userMsg);
-    return safeParseJson<BreakdownTaskOutput>(raw);
+    return safeParseJson(raw, outputSchemas.task);
   });
 }
 
@@ -213,7 +241,7 @@ export async function explainRelationship(input: ExplainRelationshipInput): Prom
 
   return withRetry(async () => {
     const raw = await callAi(RELATIONSHIP_SYSTEM, userMsg);
-    return safeParseJson<ExplainRelationshipOutput>(raw);
+    return safeParseJson(raw, outputSchemas.relationship);
   });
 }
 
@@ -252,7 +280,7 @@ export async function generateDailyFocus(input: DailyFocusInput): Promise<DailyF
 
   return withRetry(async () => {
     const raw = await callAi(DAILY_FOCUS_SYSTEM, userMsg);
-    return safeParseJson<DailyFocusOutput>(raw);
+    return safeParseJson(raw, outputSchemas.daily);
   });
 }
 
@@ -286,7 +314,7 @@ export async function simplifyConcept(input: SimplifyConceptInput): Promise<Simp
 
   return withRetry(async () => {
     const raw = await callAi(SIMPLIFY_SYSTEM, userMsg);
-    return safeParseJson<SimplifyConceptOutput>(raw);
+    return safeParseJson(raw, outputSchemas.simplify);
   });
 }
 

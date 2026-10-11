@@ -72,3 +72,39 @@ describe("AI service characterization", () => {
     expect(mocks.create.mock.calls[0][0].messages[1].content).toBe(`CONTEXT:\n${"a".repeat(3000)}\n\nQUESTION: Next?`);
   });
 });
+
+describe("model response validation", () => {
+  it.each(cases)("rejects an empty object for $name", async ({ call }) => {
+    vi.useFakeTimers();
+    mocks.create.mockResolvedValue(response("{}"));
+    const assertion = expect(call()).rejects.toThrow("expected output");
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(mocks.create).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([null, "", "   ", "[]", '{"answer":123,"confidence":80,"sources":[]}',
+    '{"answer":"test","confidence":101,"sources":[]}',
+    '{"answer":"test","confidence":80,"sources":[42]}'])("rejects invalid Q&A content %j", async (content) => {
+    vi.useFakeTimers();
+    mocks.create.mockResolvedValue(response(content));
+    const assertion = expect(askQuestion({ question: "Next?", contextData: "Runbook" })).rejects.toThrow("expected output");
+    await vi.runAllTimersAsync();
+    await assertion;
+  });
+
+  it("preserves extra fields in otherwise valid responses", async () => {
+    const output = { ...qa, extra: "Provider extension" };
+    mocks.create.mockResolvedValue(response(JSON.stringify(output)));
+    expect(await askQuestion({ question: "Next?", contextData: "Runbook" })).toEqual(output);
+  });
+
+  it("retries wrong-shaped output and accepts a valid replacement", async () => {
+    vi.useFakeTimers();
+    mocks.create.mockResolvedValueOnce(response("{}")).mockResolvedValue(response(JSON.stringify(qa)));
+    const assertion = expect(askQuestion({ question: "Next?", contextData: "Runbook" })).resolves.toEqual(qa);
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+  });
+});

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import express, { type Request, type Response, type NextFunction } from "express";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { setImmediate } from "node:timers/promises";
 
 const mocks = vi.hoisted(() => ({ create: vi.fn(), error: vi.fn(), docs: [] as object[] }));
 vi.mock("@workspace/integrations-openai-ai-server", () => ({
@@ -45,6 +46,28 @@ async function post(path: string, body: object) {
 }
 
 describe("AI route characterization", () => {
+  it("shares model work for simultaneous identical HTTP requests", async () => {
+    let release!: () => void;
+    let started!: () => void;
+    const startedPromise = new Promise<void>((resolve) => { started = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const output = { answer: "Read", confidence: 80, sources: [] };
+    mocks.create.mockImplementation(async () => {
+      started();
+      await gate;
+      return { choices: [{ message: { content: JSON.stringify(output) } }] };
+    });
+    const first = post("/ai/ask", { question: "Next?", contextData: "Runbook" });
+    await startedPromise;
+    const second = post("/ai/ask", { question: "Next?", contextData: "Runbook" });
+    // Wait until the second HTTP request is received by Express before releasing AI.
+    await new Promise<void>((resolve) => server.once("request", () => { void setImmediate().then(resolve); }));
+    release();
+    const results = await Promise.all([first, second]);
+    expect(results[0]).toEqual(results[1]);
+    expect(results[0].status).toBe(200);
+    expect(mocks.create).toHaveBeenCalledOnce();
+  });
   it("keeps the existing failure envelope for permanent provider errors", async () => {
     mocks.create.mockRejectedValue(Object.assign(new Error("sensitive provider details"), { status: 401 }));
     expect(await post("/ai/ask", { question: "Next?", contextData: "Runbook" })).toEqual({ status: 500, body: {

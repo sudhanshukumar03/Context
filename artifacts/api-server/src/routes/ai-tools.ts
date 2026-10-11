@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db, documents } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
+import { runAiTool } from "./ai-tools-execution.js";
 import {
   generateContextBrief,
   askQuestion,
@@ -83,10 +84,10 @@ router.post("/ai/brief", requireAuth, async (req: Request, res: Response) => {
           .from(documents).where(eq(documents.organizationId, orgId)).limit(8)
       : [];
 
-    const result = await generateContextBrief({
+    const result = await runAiTool(req, () => generateContextBrief({
       role,
       documents: orgDocs,
-    });
+    }));
     ok(res, result);
   } catch (err) {
     logAiError("brief", err);
@@ -108,7 +109,7 @@ router.post("/ai/ask", requireAuth, async (req: Request, res: Response) => {
       contextData = await getOrgContext(orgId);
     }
 
-    const result = await askQuestion({ question: parsed.data.question, contextData });
+    const result = await runAiTool(req, () => askQuestion({ question: parsed.data.question, contextData }));
     ok(res, result);
   } catch (err) {
     logAiError("ask", err);
@@ -138,7 +139,7 @@ router.post("/ai/explain-doc", requireAuth, async (req: Request, res: Response) 
 
     if (!title || !content) { fail(res, "title and content are required"); return; }
 
-    const result = await explainDocument({ title, content, role: parsed.data.role });
+    const result = await runAiTool(req, () => explainDocument({ title, content, role: parsed.data.role }));
     ok(res, result);
   } catch (err) {
     logAiError("explain-doc", err);
@@ -153,11 +154,11 @@ router.post("/ai/breakdown-task", requireAuth, async (req: Request, res: Respons
   if (!parsed.success) { fail(res, "title is required"); return; }
 
   try {
-    const result = await breakdownTask({
+    const result = await runAiTool(req, () => breakdownTask({
       title: parsed.data.title,
       description: parsed.data.description,
       role: parsed.data.role,
-    });
+    }));
     ok(res, result);
   } catch (err) {
     logAiError("breakdown-task", err);
@@ -172,7 +173,7 @@ router.post("/ai/explain-relationship", requireAuth, async (req: Request, res: R
   if (!parsed.success) { fail(res, "entityId, entityLabel, and graph are required"); return; }
 
   try {
-    const result = await explainRelationship(parsed.data);
+    const result = await runAiTool(req, () => explainRelationship(parsed.data));
     ok(res, result);
   } catch (err) {
     logAiError("explain-relationship", err);
@@ -196,12 +197,12 @@ router.post("/ai/daily-focus", requireAuth, async (req: Request, res: Response) 
       teamUpdates = orgDocs.map((d) => `New document: ${d.title}`);
     }
 
-    const result = await generateDailyFocus({
+    const result = await runAiTool(req, () => generateDailyFocus({
       role: parsed.data.role,
       recentActivity: parsed.data.recentActivity,
       pendingTasks: parsed.data.pendingTasks,
       teamUpdates,
-    });
+    }));
     ok(res, result);
   } catch (err) {
     logAiError("daily-focus", err);
@@ -216,7 +217,7 @@ router.post("/ai/simplify", requireAuth, async (req: Request, res: Response) => 
   if (!parsed.success) { fail(res, "concept is required"); return; }
 
   try {
-    const result = await simplifyConcept(parsed.data);
+    const result = await runAiTool(req, () => simplifyConcept(parsed.data));
     ok(res, result);
   } catch (err) {
     logAiError("simplify", err);

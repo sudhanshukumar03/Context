@@ -892,13 +892,23 @@ function RiskCard({ risk: r, role, onAction }: { risk: RiskEntry; role: Role; on
 // ── Copy Button ───────────────────────────────────────────────────────────────
 function CopyButton({ text, className = "" }: { text: string; className?: string }) {
   const [copied, setCopied] = useState(false);
+  const [error, setError] = useState(false);
+  const reset = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (reset.current) clearTimeout(reset.current); }, []);
   return (
     <button
-      onClick={() => { navigator.clipboard.writeText(text).catch(() => {}); setCopied(true); setTimeout(() => setCopied(false), 1800); }}
-      title="Copy to clipboard"
-      className={`flex-shrink-0 p-1 rounded transition-colors ${copied ? "text-emerald-400" : "text-slate-600 hover:text-slate-300"} ${className}`}
+      onClick={async () => {
+        try { await navigator.clipboard.writeText(text); setCopied(true); setError(false); }
+        catch { setCopied(false); setError(true); }
+        if (reset.current) clearTimeout(reset.current);
+        reset.current = setTimeout(() => { setCopied(false); setError(false); }, 1800);
+      }}
+      title={error ? "Copy failed; select the text and copy it manually" : copied ? "Copied" : "Copy to clipboard"}
+      className={`flex-shrink-0 min-h-11 min-w-11 flex items-center justify-center rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400 ${copied ? "text-emerald-600" : ""} ${className}`}
+      style={copied ? undefined : { color: "var(--ctx-text-2)" }}
     >
-      {copied ? <Check size={11} /> : <Copy size={11} />}
+      {error ? <AlertCircle size={14} /> : copied ? <Check size={14} /> : <Copy size={14} />}
+      <span className="sr-only" aria-live="polite">{error ? "Copy failed" : copied ? "Copied" : "Copy to clipboard"}</span>
     </button>
   );
 }

@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import crypto from "node:crypto";
 import { getAuth } from "@clerk/express";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db, users, organizations } from "@workspace/db";
 import { fail } from "../lib/response.js";
 import { logger } from "../lib/logger.js";
@@ -31,7 +31,9 @@ declare global {
  * Throws on database write failures.
  */
 async function resolveDbUser(clerkUserId: string): Promise<AuthPayload> {
-  const [existing] = await db
+  return db.transaction(async (tx) => {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(4415, hashtext(${clerkUserId}))`);
+  const [existing] = await tx
     .select()
     .from(users)
     .where(eq(users.clerkUserId, clerkUserId))
@@ -47,7 +49,7 @@ async function resolveDbUser(clerkUserId: string): Promise<AuthPayload> {
   }
 
   // Suffix prevents slug collision when multiple Clerk accounts share similar prefix IDs.
-  const [org] = await db
+  const [org] = await tx
     .insert(organizations)
     .values({
       name: "My Organization",
@@ -57,7 +59,7 @@ async function resolveDbUser(clerkUserId: string): Promise<AuthPayload> {
     .returning();
 
   // Clerk owns credentials; placeholder satisfies non-null DB constraint without storing a valid hash.
-  const [user] = await db
+  const [user] = await tx
     .insert(users)
     .values({
       clerkUserId,
@@ -77,6 +79,7 @@ async function resolveDbUser(clerkUserId: string): Promise<AuthPayload> {
     organizationId: org.id,
     role: user.role,
   };
+  });
 }
 
 /**

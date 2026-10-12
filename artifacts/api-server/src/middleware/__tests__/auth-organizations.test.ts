@@ -2,9 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
 const mocks = vi.hoisted(() => ({ getAuth: vi.fn(), org: vi.fn(), user: { id: 1, role: "backend", organizationId: 10 } }));
 vi.mock("@clerk/express", () => ({ getAuth: mocks.getAuth }));
-vi.mock("@workspace/db", () => ({ users: { clerkUserId: "clerkUserId" }, organizations: {}, db: {
-  select: () => ({ from: () => ({ where: () => ({ limit: async () => [mocks.user] }) }) }),
-} }));
+vi.mock("@workspace/db", () => {
+  const database = { execute: vi.fn().mockResolvedValue([]),
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => [mocks.user] }) }) }),
+  };
+  return { users: { clerkUserId: "clerkUserId" }, organizations: {}, db: { ...database,
+    transaction: async (work: (tx: typeof database) => unknown) => work(database) } };
+});
 vi.mock("../../services/organization-session.js", () => ({ resolveClerkOrganization: mocks.org }));
 vi.mock("../../lib/logger.js", () => ({ logger: { error: vi.fn(), debug: vi.fn() } }));
 import { requireAuth } from "../auth.js";

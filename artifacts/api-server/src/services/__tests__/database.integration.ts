@@ -69,4 +69,13 @@ describe("disposable PostgreSQL verification", () => {
     await pool.query(await readFile("lib/db/migrations/001_webhook_credentials.down.sql", "utf8"));
     expect((await pool.query("SELECT to_regclass('webhook_keys') AS name")).rows[0].name).toBeNull();
   });
+  it("initializes the full schema on an empty disposable database and refuses an existing one", async () => {
+    // setupFiles rejects every URL except the generated loopback-only test DB.
+    await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public");
+    await promisify(execFile)(process.execPath, ["lib/db/initialize.mjs"]);
+    await promisify(execFile)(process.execPath, ["lib/db/migrate.mjs"]);
+    await expect(promisify(execFile)(process.execPath, ["lib/db/initialize.mjs"])).rejects.toThrow("empty database");
+    expect((await pool.query("SELECT to_regclass('documents') AS name")).rows[0].name).toBe("documents");
+    expect((await pool.query("SELECT to_regclass('webhook_keys') AS name")).rows[0].name).toBe("webhook_keys");
+  });
 });

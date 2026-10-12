@@ -19,6 +19,13 @@ assert.equal(page.status, 200); assert.match(await page.text(), /id="root"/);
 const proxied = await fetch(`http://127.0.0.1:${config.dashboardPort}/api/healthz`, { signal: AbortSignal.timeout(10000), redirect: "error" });
 assert.equal(proxied.status, 200); assert.equal((await proxied.json()).status, "ok");
 console.log("PASS: Dashboard and its API proxy respond");
+for (const file of ["config.json", "accounts.env"]) {
+  const target = resolve(root, "tmp/local-test", file).replaceAll("\\", "/");
+  const response = await fetch(`http://127.0.0.1:${config.dashboardPort}/@fs/${target}`,
+    { signal: AbortSignal.timeout(10000), redirect: "error" });
+  assert.equal(response.status, 403, "Local configuration files must not be served by Vite");
+}
+console.log("PASS: Credential and database configuration files are blocked by the development server");
 if (config.authMode === "clerk") {
   for (const path of ["/webhook-keys", "/insights/summary"]) {
     const rejected = await request(path, { headers: { "x-demo-user": "user_local_dev" } });

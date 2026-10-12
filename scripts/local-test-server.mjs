@@ -34,7 +34,8 @@ if (mode === "initialize") {
   const require = createRequire(resolve(appRoot, "package.json"));
   const { createServer } = await import(pathToFileURL(require.resolve("vite")));
   const server = await createServer({ envDir: resolve(root, "tmp/local-test"),
-    server: { host: "127.0.0.1", port: config.dashboardPort, strictPort: true } });
+    server: { host: "127.0.0.1", port: config.dashboardPort, strictPort: true,
+      fs: { deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "**/tmp/local-test/**"] } } });
   await server.listen();
   server.printUrls();
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => void server.close().then(() => process.exit(0)));

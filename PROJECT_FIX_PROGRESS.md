@@ -72,3 +72,10 @@ Completed steps and verification will be appended below.
   preserves the running demo. Real SDK HTTP tests use generated RSA signatures
   and block external fetches; wrong-origin, expired and forged sessions are rejected.
   Actual Clerk login/team testing awaits the user's local test Secret Key.
+- Saved Clerk test keys verified against the real Backend API and matching
+  frontend domain. Next.js Publishable Key aliases supported. Clerk mode started;
+  hosted sign-in form rendered. Test Organizations enabled and optional selection
+  restored after Clerk's activation default; org:admin creator role preserved.
+  Vite private-directory denies verified (403), signed-out/demo-header access
+  rejected (401), and default restart retains Clerk mode. A completed user session
+  and real team/member checks still await browser sign-in.

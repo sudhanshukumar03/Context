@@ -75,10 +75,14 @@ application's **Development** instance, open its **API keys** page, and copy its
 `sk_test_...` Secret Key into `CLERK_SECRET_KEY=`. Keep keys in the file, not chat.
 Both keys must belong to the same instance. Setup never overwrites an existing
 account file. Do not put secret keys in variables beginning with `VITE_`.
+If you copied Clerk's Next.js snippet, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is also
+accepted; the runner maps it to this app's frontend/API variables. Conflicting
+Publishable Keys are rejected.
 See [Clerk's environment variable documentation](https://clerk.com/docs/guides/development/clerk-environment-variables).
 
 ```powershell
 pnpm local:clerk-check
+pnpm local:clerk-verify
 pnpm local:stop
 pnpm local:clerk
 ```
@@ -86,10 +90,17 @@ pnpm local:clerk
 Check keys **before** stopping the demo. Preflight validates key formats, test
 instance prefixes and frontend/API Publishable Key consistency; it does not
 prove live key validity or that the Secret Key belongs to that instance.
+`local:clerk-verify` makes read-only requests to Clerk to verify that the Secret
+Key identifies a development instance and report Organization settings. It never
+prints keys or changes settings. It also matches the Publishable Key's frontend
+domain against that instance's domains. A signed-in API request is still required
+to verify the actual session and dashboard access.
 Clerk mode disables both demo bypass flags and never falls back to demo login.
 Missing/invalid configuration blocks startup. The backend's Secret Key is not
 passed to the dashboard server environment. Unrelated account-file values cannot
 override the generated database connection, ports, session secret or AI configuration.
+The local database/credential directory is blocked from Vite's filesystem routes;
+startup smoke checks verify HTTP 403 for direct configuration-file requests.
 
 Open http://127.0.0.1:31800/sign-in and sign in yourself. Use this same origin
 throughout the session; the API verifies Clerk session origins against its

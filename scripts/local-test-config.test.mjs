@@ -45,6 +45,12 @@ test("Clerk key preflight rejects incomplete, production, mismatched and fronten
   ]) assert.throws(() => validateClerkTestCredentials({ ...testKeys, ...changed }, root));
   assert.throws(() => validateLocalConfig({ ...config, authMode: "anything" }, root));
 });
+test("Clerk setup accepts the Dashboard's Next.js key name but rejects conflicting keys", () => {
+  const copied = { NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: testKeys.CLERK_PUBLISHABLE_KEY,
+    CLERK_SECRET_KEY: testKeys.CLERK_SECRET_KEY };
+  assert.equal(validateClerkTestCredentials(copied, root).publishableKey, testKeys.CLERK_PUBLISHABLE_KEY);
+  assert.throws(() => validateClerkTestCredentials({ ...testKeys, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test_different" }, root));
+});
 test("local demo binds loopback and clears inherited real credentials", () => {
   const env = localEnvironment(config, "api");
   assert.equal(env.HOST, "127.0.0.1");

@@ -2,8 +2,9 @@
 
 Implemented on branch `fix/project-readiness`, in separate verified commits.
 User approved schema/migration files, selected GitHub Actions first, and selected
-Clerk Organizations for team membership. No live migration, deployment, provider
-probe, GitHub installation, invitation or notification was performed.
+Clerk Organizations for team membership. No production migration/deployment, AI
+provider probe, GitHub installation, invitation or notification was performed.
+Clerk development-instance configuration was activated in the subsequent sign-in setup below.
 
 ## Verification
 
@@ -140,5 +141,33 @@ Follow-up checks passed: 159 unit/HTTP tests across 21 files, six Node configura
 checksum tests, workspace type checks and API build. The updated demo restarted
 and passed its real-PostgreSQL HTTP smoke checks. Startup with the missing Clerk
 Secret Key failed before changing the saved demo mode or stopping the running app.
-The user's subsequent "ready" reply was checked, but the saved Secret Key field
-was still empty; live Clerk activation remains pending that local configuration.
+Live Clerk activation was pending local account configuration at this stage.
+
+## Follow-up: Clerk development connection activated
+
+The user subsequently saved the test keys. Their copied Clerk snippet used
+`NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`; the local checker now accepts that alias and
+rejects conflicting Publishable Keys. The app started in saved Clerk mode with
+demo authentication disabled, and its real hosted Clerk sign-in form rendered.
+
+Read-only Clerk Backend API checks confirmed a development instance and matched
+the Publishable Key's frontend domain to that same instance. Organizations were
+disabled and were enabled for the selected team feature. Clerk initially made
+organization selection mandatory during activation; optional selection was
+restored and read back as `force_organization_selection=false`, with creator role
+`org:admin` preserved. This enables both personal and team workspaces. No member
+or invitation mutations were performed. `pnpm local:clerk-verify` repeats only
+the read-only key/domain/settings checks and prints no keys or account identifiers.
+
+Vite's filesystem routes now deny the entire generated database/credential
+directory, preserving standard environment/certificate/git denies. Real local
+startup checks verified HTTP 403 for credential/configuration files and HTTP 401
+for protected endpoints with no session, including fabricated demo headers.
+Restart with `local:start` preserved Clerk mode. Five Node configuration tests
+cover the setup/alias behavior; the previous 159 HTTP/unit tests remain passing.
+
+The inspected browser remains signed out; a completed signed-in dashboard
+session, organization switching and actual
+admin/member behavior still require the requested browser login. Configuration
+activation alone does not complete those live checks. The local app remains at
+http://127.0.0.1:31800; sign in at `/sign-in`.

@@ -4,7 +4,9 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 
 export function validateClerkTestCredentials(accounts, root) {
-  const publishableKey = accounts.CLERK_PUBLISHABLE_KEY?.trim();
+  const publishableKeys = [accounts.CLERK_PUBLISHABLE_KEY, accounts.VITE_CLERK_PUBLISHABLE_KEY,
+    accounts.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY].map(value => value?.trim()).filter(Boolean);
+  const publishableKey = publishableKeys[0];
   const secretKey = accounts.CLERK_SECRET_KEY?.trim();
   if (!publishableKey?.startsWith("pk_test_") || /your|placeholder|xxx/i.test(publishableKey))
     throw new Error("Set a Clerk test Publishable Key in tmp/local-test/accounts.env.");
@@ -13,7 +15,7 @@ export function validateClerkTestCredentials(accounts, root) {
   if (!parsePublishableKey(publishableKey)) throw new Error("The Clerk Publishable Key is invalid.");
   if (!/^sk_test_[A-Za-z0-9_-]{20,}$/.test(secretKey ?? "") || /your|placeholder|xxx/i.test(secretKey))
     throw new Error("Set a Clerk test Secret Key in tmp/local-test/accounts.env. Keep the key out of chat.");
-  if (accounts.VITE_CLERK_PUBLISHABLE_KEY && accounts.VITE_CLERK_PUBLISHABLE_KEY !== publishableKey)
+  if (publishableKeys.some(value => value !== publishableKey))
     throw new Error("Frontend and API Clerk Publishable Keys must match.");
   if (Object.keys(accounts).some(name => name.startsWith("VITE_") && name !== "VITE_CLERK_PUBLISHABLE_KEY"))
     throw new Error("The account file must not contain other VITE_ variables, including secret keys.");

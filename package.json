@@ -13,6 +13,7 @@
     "local:stop": "powershell -NoProfile -File scripts/local-test.ps1 -Action Stop",
     "local:clerk-setup": "node scripts/prepare-local-clerk.mjs",
     "local:clerk-check": "node scripts/local-test-server.mjs check-auth clerk",
+    "local:clerk-verify": "node scripts/verify-local-clerk.mjs",
     "local:clerk": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start -AuthMode clerk",
     "local:demo": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start -AuthMode demo"
   },

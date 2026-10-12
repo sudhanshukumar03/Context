@@ -1,179 +1,65 @@
-import { Router, type Request, type Response } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, services, serviceEvents } from "@workspace/db";
+import { Router } from "express";
+import { z } from "zod";
 import { ok, fail } from "../lib/response.js";
 import { resolveWebhookOrganization } from "../services/webhook-credentials.js";
-
+import { ingestServiceEvent } from "../services/event-ingestion.js";
 const router = Router();
-
-// ── Resolve organization from API key (Clerk user ID) ─────────────────────────
-
-// ── Upsert service by name within an org ──────────────────────────────────────
-
-async function upsertService(orgId: number, name: string): Promise<number> {
-  const [existing] = await db.select({ id: services.id })
-    .from(services)
-    .where(and(eq(services.organizationId, orgId), eq(services.name, name)))
-    .limit(1);
-  if (existing) return existing.id;
-  const [created] = await db.insert(services)
-    .values({ organizationId: orgId, name, status: "healthy" })
-    .returning({ id: services.id });
-  return created.id;
-}
-
-// ── POST /api/ingest/webhook ───────────────────────────────────────────────────
-// Generic webhook format — works with any alerting tool that supports JSON webhooks.
-//
-// Authentication: use a generated webhook key via X-API-Key (preferred) or ?apiKey=.
-// You can find it in the dashboard under Settings → Webhook Integration.
-//
-// Payload shape:
-// {
-//   "service": "Payments API",              ← service name (auto-created if not exists)
-//   "title": "Connection pool at 94%",      ← event title
-//   "description": "...",                   ← optional detail
-//   "severity": "critical",                 ← "info" | "warning" | "critical"
-//   "type": "alert",                        ← "alert" | "failure" | "deployment" | "recovery"
-//   "status": "failing"                     ← optional: update service status
-// }
-
-router.post("/ingest/webhook", async (req: Request, res: Response) => {
-  const orgId = await resolveWebhookOrganization(req);
-  if (!orgId) {
-    fail(res, "Invalid or missing API key. Provide via ?apiKey= query param, X-API-Key, or Authorization header", 401);
-    return;
-  }
-
-  const body = req.body as {
-    service?: string;
-    title?: string;
-    description?: string;
-    severity?: string;
-    type?: string;
-    status?: string;
-  };
-
-  const serviceName = body.service?.trim();
-  const title = body.title?.trim();
-  if (!serviceName || !title) {
-    fail(res, "service and title are required");
-    return;
-  }
-
-  const severity = (["info", "warning", "critical"].includes(body.severity ?? "")
-    ? body.severity : "warning") as "info" | "warning" | "critical";
-  const type = (["alert", "failure", "deployment", "recovery", "info"].includes(body.type ?? "")
-    ? body.type : "alert") as "alert" | "failure" | "deployment" | "recovery" | "info";
-
-  try {
-    const serviceId = await upsertService(orgId, serviceName);
-
-    if (body.status && ["healthy", "at_risk", "degraded", "failing"].includes(body.status)) {
-      await db.update(services)
-        .set({ status: body.status as "healthy" | "at_risk" | "degraded" | "failing", updatedAt: new Date() })
-        .where(eq(services.id, serviceId));
-    }
-
-    await db.insert(serviceEvents).values({
-      organizationId: orgId,
-      serviceId,
-      type,
-      title,
-      description: body.description ?? null,
-      severity,
-    });
-
-    ok(res, { ingested: true, service: serviceName, eventTitle: title });
-  } catch (err) {
-    const logger = (req as { log?: { error: (o: object, m: string) => void } }).log;
-    logger?.error({ err }, "generic webhook error");
-    fail(res, "Webhook ingestion failed", 500);
-  }
+router.use("/ingest/webhook", async (req, res, next) => {
+  const organizationId = await resolveWebhookOrganization(req);
+  if (!organizationId) { fail(res, "Invalid or missing webhook key", 401); return; }
+  res.locals.organizationId = organizationId; next();
 });
-
-// ── POST /api/ingest/webhook/pagerduty ─────────────────────────────────────────
-// Accepts PagerDuty webhook V3 messages format.
-// Configure in PagerDuty: Integrations → Generic Webhook → URL: /api/ingest/webhook/pagerduty?apiKey=<id>
-//
-// Supports: trigger, acknowledge, resolve events
-
-router.post("/ingest/webhook/pagerduty", async (req: Request, res: Response) => {
-  const orgId = await resolveWebhookOrganization(req);
-  if (!orgId) {
-    fail(res, "Invalid or missing API key. Provide via ?apiKey= query param, X-API-Key, or Authorization header", 401);
-    return;
-  }
-
-  const body = req.body as {
-    messages?: Array<{
-      event?: string;
-      payload?: {
-        summary?: string;
-        severity?: string;
-        source?: string;
-        component?: string;
-        custom_details?: Record<string, string>;
-      };
-    }>;
-  };
-
-  const messages = body.messages ?? [];
-  if (!messages.length) {
-    fail(res, "No messages in PagerDuty payload");
-    return;
-  }
-
-  const ingested: string[] = [];
-
-  try {
-    for (const msg of messages) {
-      const event = msg.event ?? "trigger";
-      const payload = msg.payload ?? {};
-      const title = payload.summary ?? "PagerDuty alert";
-      const rawSource = payload.source ?? payload.component ?? "Unknown Service";
-      // Normalise source to a service name
-      const serviceName = rawSource.split(".")[0].replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-
-      const pdSeverityMap: Record<string, "info" | "warning" | "critical"> = {
-        critical: "critical", error: "critical", warning: "warning", info: "info",
-      };
-      const severity = pdSeverityMap[payload.severity ?? "warning"] ?? "warning";
-
-      const typeMap: Record<string, "alert" | "failure" | "recovery"> = {
-        trigger: "alert", acknowledge: "alert", resolve: "recovery",
-      };
-      const type = typeMap[event] ?? "alert";
-
-      const statusMap: Record<string, "healthy" | "degraded" | "failing"> = {
-        trigger: "failing", acknowledge: "degraded", resolve: "healthy",
-      };
-      const status = statusMap[event] ?? "at_risk";
-
-      const serviceId = await upsertService(orgId, serviceName);
-
-      await db.update(services)
-        .set({ status, updatedAt: new Date() })
-        .where(eq(services.id, serviceId));
-
-      await db.insert(serviceEvents).values({
-        organizationId: orgId,
-        serviceId,
-        type,
-        title: `[PagerDuty] ${title}`,
-        description: payload.custom_details ? JSON.stringify(payload.custom_details) : null,
-        severity,
-      });
-
-      ingested.push(serviceName);
-    }
-
-    ok(res, { ingested: true, services: ingested });
-  } catch (err) {
-    const logger = (req as { log?: { error: (o: object, m: string) => void } }).log;
-    logger?.error({ err }, "pagerduty webhook error");
-    fail(res, "PagerDuty webhook ingestion failed", 500);
-  }
+const bounded = z.string().trim().min(1).max(300);
+const genericSchema = z.object({ service: bounded, title: bounded, description: z.string().max(16000).optional(),
+  severity: z.enum(["info", "warning", "critical"]).default("warning"),
+  type: z.enum(["alert", "failure", "deployment", "recovery", "info"]).default("alert"),
+  status: z.enum(["healthy", "at_risk", "degraded", "failing"]).optional(),
+  eventId: bounded.optional(), occurredAt: z.string().datetime({ offset: true }).optional() });
+router.post("/ingest/webhook", async (req, res) => {
+  const parsed = genericSchema.safeParse(req.body);
+  if (!parsed.success) { fail(res, "Invalid webhook payload"); return; }
+  const data = parsed.data;
+  const result = await ingestServiceEvent(res.locals.organizationId, { ...data,
+    externalId: data.eventId ? `generic:${data.eventId}` : undefined,
+    occurredAt: data.occurredAt ? new Date(data.occurredAt) : undefined });
+  ok(res, { ingested: true, service: data.service, eventTitle: data.title, ...result });
 });
-
+const legacySchema = z.object({ messages: z.array(z.object({ id: bounded.optional(), event: z.enum(["trigger", "acknowledge", "resolve"]).default("trigger"),
+  payload: z.object({ summary: bounded.default("PagerDuty alert"), severity: z.enum(["critical", "error", "warning", "info"]).default("warning"),
+    source: bounded.optional(), component: bounded.optional(), custom_details: z.record(z.string().max(16000)).optional() }).default({}),
+})).min(1).max(100) });
+const pagerDutySchema = z.object({ event: z.object({ id: bounded, event_type: bounded,
+  occurred_at: z.string().datetime({ offset: true }), data: z.object({ title: bounded,
+    urgency: z.enum(["high", "low"]).optional(), service: z.object({ name: bounded.optional(), summary: bounded.optional() }) }),
+}) });
+router.post("/ingest/webhook/pagerduty", async (req, res) => {
+  const orgId = res.locals.organizationId as number;
+  const v3 = pagerDutySchema.safeParse(req.body);
+  if (v3.success) {
+    const event = v3.data.event;
+    const status = { "incident.triggered": "failing", "incident.acknowledged": "degraded", "incident.resolved": "healthy" }[event.event_type];
+    if (!status) { ok(res, { ingested: false, ignored: true }); return; }
+    const service = event.data.service.name ?? event.data.service.summary;
+    if (!service) { fail(res, "PagerDuty service name is required"); return; }
+    const result = await ingestServiceEvent(orgId, { service, title: `[PagerDuty] ${event.data.title}`,
+      type: status === "healthy" ? "recovery" : "alert", severity: event.data.urgency === "low" ? "warning" : "critical",
+      status: status as "healthy" | "degraded" | "failing", externalId: `pagerduty:${event.id}`, occurredAt: new Date(event.occurred_at) });
+    ok(res, { ingested: true, services: [service], ...result }); return;
+  }
+  const legacy = legacySchema.safeParse(req.body);
+  if (!legacy.success) { fail(res, "Invalid PagerDuty payload"); return; }
+  const names: string[] = [];
+  for (const message of legacy.data.messages) {
+    const payload = message.payload;
+    const service = (payload.source ?? payload.component ?? "Unknown Service").split(".")[0]
+      .replace(/-/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+    await ingestServiceEvent(orgId, { service, title: `[PagerDuty] ${payload.summary}`,
+      type: message.event === "resolve" ? "recovery" : "alert", severity: payload.severity === "error" ? "critical" : payload.severity,
+      status: message.event === "resolve" ? "healthy" : message.event === "acknowledge" ? "degraded" : "failing",
+      externalId: message.id ? `pagerduty:${message.id}` : undefined,
+      description: payload.custom_details ? JSON.stringify(payload.custom_details) : undefined });
+    names.push(service);
+  }
+  ok(res, { ingested: true, services: names });
+});
 export default router;

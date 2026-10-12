@@ -27,14 +27,14 @@ function stripBase(p: string) { return basePath && p.startsWith(basePath) ? p.sl
 
 async function apiFetch(path: string, token: string | null, options?: RequestInit) {
   const headers: Record<string, string> = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-  const res = await fetch(`/api${path}`, { ...options, headers });
+  const res = await fetch(`/api${path}`, { ...options, headers, signal: options?.signal ?? AbortSignal.timeout(60_000) });
   let json: { success: boolean; data: unknown; error: string | null } | null = null;
   try {
     json = await res.json();
   } catch {
     throw new Error(res.ok ? "The server returned an unexpected response. Please try again." : `Server error (${res.status}). Please try again.`);
   }
-  if (!res.ok) throw new Error(json?.error ?? `API error ${res.status}`);
+  if (!res.ok || !json?.success) throw new Error(json?.error ?? `API error ${res.status}`);
   return json!.data;
 }
 
@@ -1340,6 +1340,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const fetching = useRef(false);
   const [incidentElapsed, setIncidentElapsed] = useState(0);
   const [postmortemLoading, setPostmortemLoading] = useState(false);
 
@@ -1390,6 +1392,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
   }, [incidentStartedAt]);
 
   const fetchAll = useCallback(async () => {
+    if (fetching.current) return;
+    fetching.current = true;
     setRefreshing(true);
     try {
       const token = await getToken();
@@ -1407,7 +1411,12 @@ function Dashboard({ onBack }: { onBack: () => void }) {
         setTimeline(d.timeline ?? []);
       }
       if (rc.status === "fulfilled") setRootCause(rc.value as RootCause | null);
-    } catch { /* ignore */ }
+      const failed = [summary, rc].find((result) => result.status === "rejected");
+      setFetchError(failed?.status === "rejected" ? "Live data could not be refreshed. Previously loaded data may be stale." : null);
+    } catch {
+      setFetchError("Live data could not be refreshed. Please retry.");
+    }
+    fetching.current = false;
     setLoading(false);
     setRefreshing(false);
   }, [getToken]);
@@ -1435,7 +1444,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
       }
       await apiFetch("/demo/advance", token, { method: "POST", body: JSON.stringify({ step }) });
       setLastRefresh(n => n + 1);
-    } catch { /* ignore */ }
+    } catch (error) { setActionFeedback(error instanceof Error ? error.message : "The demo step failed. Please retry."); }
   }, [getToken]);
 
   const handleAction = useCallback(async (action: string, svcName: string) => {
@@ -1446,7 +1455,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
       await apiFetch("/insights/simulate-action", token, { method: "POST", body: JSON.stringify({ action, serviceId: svc.id }) });
       setActionFeedback(`${action} preview: ${svcName} could recover. Live telemetry is unchanged; verify recovery after executing the command.`);
       setTimeout(() => { setActionFeedback(null); setLastRefresh(n => n + 1); }, 8000);
-    } catch { /* ignore */ }
+    } catch (error) { setActionFeedback(error instanceof Error ? error.message : "The simulation preview failed. Please retry."); }
   }, [getToken, services]);
 
   const handleExportPostmortem = useCallback(async () => {
@@ -1686,6 +1695,10 @@ function Dashboard({ onBack }: { onBack: () => void }) {
       </AnimatePresence>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+        {fetchError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <p className="text-sm">{fetchError}</p>
+          <button onClick={() => void fetchAll()} disabled={refreshing} className="min-h-11 rounded-lg border px-4 text-sm disabled:opacity-50">Retry refresh</button>
+        </div>}
         {/* Demo panel */}
         <AnimatePresence>
           {showDemo && (

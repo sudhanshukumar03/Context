@@ -14,3 +14,12 @@
 - Stage update: characterization tests first; then verified fixes. Audit artifacts are expected dirty changes from the prior audit.
 - Completed commits: none for this audit yet.
 - Resume: continue this audit from its recorded baseline/results; do not repeat the completed AI service audit. Preserve AUDIT_PROGRESS.md/AUDIT_REPORT.md/AUDIT_PLAN.md as prior completed work.
+
+## Completed follow-up
+
+The broader step-by-step project request authorized finishing these fixes.
+Characterization tests were preserved and extended; validation, rejection
+containment, classified deadlines/retries, current-org reads, transactional
+duplicate submissions, bounded session-locked workers, restart recovery and
+cleanup are implemented. All current checks pass; see PROJECT_FIX_REPORT.md
+and PROJECT_FIX_PROGRESS.md. No configured database or provider was contacted.

@@ -1,0 +1,96 @@
+# Context readiness fixes — 2026-10-12
+
+Implemented on branch `fix/project-readiness`, in separate verified commits.
+User approved schema/migration files, selected GitHub Actions first, and selected
+Clerk Organizations for team membership. No live migration, deployment, provider
+probe, GitHub installation, invitation or notification was performed.
+
+## Verification
+
+| Metric | Before | After |
+| --- | --- | --- |
+| Unit/mocked HTTP suite | 86 tests / 9 files passing | 156 tests / 20 files passing |
+| Disposable PostgreSQL verification | None | 8 passing tests |
+| Migration checksum portability | None | 2 passing Node tests |
+| Full workspace types | Passing | Passing |
+| API build | Passing | Passing |
+| Dashboard build | Not measured in initial review | Passing |
+| API entry bundle | 3,974,663 bytes in preceding audit | 3,924,263 bytes on final code build |
+| Numeric coverage / lint | Not configured | Not configured |
+| Hosted CI / Docker execution | No workflow/image setup | Files prepared; execution unverified |
+
+Commands: `pnpm test`, `pnpm run typecheck`, API/dashboard `run build`,
+`node --test lib/db/test/checksum.test.mjs`, and
+`powershell -NoProfile -File scripts/test-disposable-db.ps1`.
+Local database tests used PostgreSQL 18.4; CI is configured with PostgreSQL 16.
+Build timings are not comparable performance benchmarks.
+
+## Implemented behavior
+
+| Change | Verification / manual check |
+| --- | --- |
+| Hashed, random, revocable webhook keys | Create in Integrations; secret is shown once. List responses contain only metadata. Old user IDs fail; revocation blocks use. HTTP and real database tests exercise this. |
+| Current team authorization | Verified Clerk org IDs select shared tenants; personal associations remain. Admin-only shared mutations; role lenses grant no access. Tests ignore fabricated client org/role fields. Shared keys recheck current admin membership on every delivery. |
+| Atomic user/team provisioning | Transactions and advisory locks prevent duplicate concurrent provisioning. Real PostgreSQL tests check shared tenant mapping. |
+| Durable background briefs | Validated roles/output; safe error correlation; failure writes and dispatch contained; bounded attempts; duplicate active jobs reused across replicas. Dedicated session locks, claim checks, startup/periodic recovery and cleanup are tested. |
+| Provider/model consistency | Credentials, endpoint and model now select the same provider. Explicit overrides remain. Gemini default updated to a supported model. |
+| Incident AI safeguards | Root cause/chat JSON validated; empty postmortems rejected; timeouts/classified retries enforced; active work bounded. Root-cause cache follows evidence changes and is bounded; missing provider configuration uses heuristics. |
+| Simulation isolation | Actual HTTP tests prove previews do not write services or incident events. Displayed recovery is illustrative; real verification requires telemetry. |
+| Atomic/replay-safe ingestion | Generic and PagerDuty routes validate inputs. Transactions coordinate service/event writes and event IDs; old timestamps cannot overwrite newer health. Database tests prove duplicate suppression and rollback on event failure. |
+| GitHub Actions | Reusable workflow and typed/generated client included. Stable deployment IDs distinguish matrix services and reruns; deployments never assert service health. Fixtures test invalid/auth/replay cases. |
+| Frontend behavior | Explicit development-only auth, key lifecycle, team switching with fresh state, visible refresh retry errors, non-overlapping polling, accurate clipboard feedback, mobile tab scrolling and light/dark integration contrast. |
+| Setup and packaging | Empty-database initializer refuses populated installations. Additive migration runner checks stable platform-independent checksums. CI includes mocked and disposable PostgreSQL tests. Container serves SPA/API with configured Clerk-compatible CSP, non-root runtime and graceful shutdown. |
+
+Google's [model lifecycle documentation](https://ai.google.dev/gemini-api/docs/deprecations/)
+lists `gemini-3.8-flash` for new projects and records retirement of the previous
+`gemini-2.0-flash` default. Live provider compatibility was not probed.
+
+## Browser verification
+
+Used the loopback-only mock API and development dashboard. No real credentials,
+database, Clerk account or provider was used. Key creation failure → retry →
+success, copying, keyboard creation and revocation were observed. After revoking
+the focused key, focus returns to Create key. Light and dark themes were inspected.
+New key feedback is static and contains no motion; reduced-motion emulation was
+not available through the browser surface. Existing dashboard animations were
+not reviewed globally. One Vite reconnect error occurred around preview restart;
+no application exception was observed during the verified interactions.
+
+| Viewport | Document width | Minimum integration target | Targets below 44 px |
+| --- | --- | --- | --- |
+| 320 | 305 | 44 × 44 | 0 |
+| 390 | 375 | 44 × 44 | 0 |
+| 768 | 753 | 44 × 44 | 0 |
+| 1440 | 1425 | 44 × 44 | 0 |
+
+Widths exclude the browser scrollbar; none exceeded the viewport. These target
+measurements cover the changed integration work surface, not every legacy header
+control. Temporary viewport overrides were reset. Screenshot:
+`tmp/verification/webhook-controls.png`.
+
+## Remaining work and operational limits
+
+- Apply reviewed migrations/initialization to the intended database and configure
+  deployment secrets/domain/origins. Prepared instructions are in `DEPLOYMENT.md`.
+- Enable Clerk Organizations and verify invitations, organization switching and
+  sign-in against the real application instance; no live membership was changed.
+- Install the reusable workflow in the deployment repository and configure its
+  Actions secrets; perform a live deployment-delivery check there.
+- Docker image build/run was not tested because the local Docker daemon is not
+  running. Hosted CI has not run from this local branch.
+- Worker session locks require direct/session PostgreSQL connections, not a
+  transaction pooler. Concurrency caps are per process. Recovery scans 64 rows at
+  a time; production throughput/fairness under large backlogs is unmeasured.
+- Shared webhook membership checks add a Clerk API call per delivery. A Clerk
+  outage rejects ingestion; senders should retry failed deliveries.
+- Other five native provider connectors remain planned, as GitHub Actions was
+  selected first. The fake email signup and old release dates were removed.
+- Legacy static onboarding/demo APIs remain fixtures. Financial impact estimates
+  remain heuristic; measured business metrics and incident calibration need data.
+- Configure hosted backups/retention, monitoring and restore drills. Load testing,
+  numeric coverage and automated CI browser tests remain future verification.
+
+Schema rollback: stop webhook traffic/new workers, preserve new records, revert
+consuming code, then review/apply the additive down SQL and remove its ledger
+entry. The initializer never overwrites an existing database. User data was not
+migrated, deleted or moved by this task.

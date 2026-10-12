@@ -1055,19 +1055,19 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
               { label: "PagerDuty V3", url: pagerdutyUrl },
               { label: "GitHub Actions deployments", url: `${window.location.origin}/api/ingest/github-actions` },
             ].map(({ label, url }) => (
-              <div key={label} className="rounded-lg bg-slate-800/50 border border-white/6 px-3 py-2.5">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">{label}</p>
+              <div key={label} className="rounded-lg border px-3 py-2.5" style={{ background: "var(--ctx-surface)", borderColor: "var(--ctx-border)" }}>
+                <p className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: "var(--ctx-text-2)" }}>{label}</p>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-1.5 py-0.5 flex-shrink-0">POST</span>
-                  <code className="text-[10px] text-slate-400 font-mono flex-1 min-w-0 truncate">{url}</code>
+                  <code className="text-xs font-mono flex-1 min-w-0 truncate" style={{ color: "var(--ctx-text-2)" }}>{url}</code>
                   <CopyButton text={url} />
                 </div>
               </div>
             ))}
-            <div className="rounded-lg bg-slate-800/50 border border-white/6 px-3 py-2.5">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">Example payload</p>
+            <div className="rounded-lg border px-3 py-2.5" style={{ background: "var(--ctx-surface)", borderColor: "var(--ctx-border)" }}>
+              <p className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: "var(--ctx-text-2)" }}>Example payload</p>
               <div className="flex items-start gap-1.5">
-                <pre className="text-[10px] text-slate-400 font-mono leading-relaxed flex-1 whitespace-pre-wrap">{payload}</pre>
+                <pre className="text-xs font-mono leading-relaxed flex-1 whitespace-pre-wrap" style={{ color: "var(--ctx-text-2)" }}>{payload}</pre>
                 <CopyButton text={payload} className="mt-0.5" />
               </div>
             </div>

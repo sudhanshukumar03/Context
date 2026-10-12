@@ -10,13 +10,14 @@ import {
   FileText, Download, Webhook, ListChecks,
 } from "lucide-react";
 import {
-  ClerkProvider, SignIn, SignUp, Show, useClerk, useUser, useAuth,
+  ClerkProvider, SignIn, SignUp, Show, useClerk,
 } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { dark } from "@clerk/themes";
 import { Switch, Route, useLocation, Router as WouterRouter } from "wouter";
 import DemoVideoInline from "./components/DemoVideoInline";
 import WebhookKeySettings from "./components/WebhookKeySettings";
+import { ClerkSession, DevSession, isDevAuthBypass, useAuth, useUser } from "./lib/auth-session";
 
 const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL as string | undefined;
@@ -46,7 +47,7 @@ import { GraphView, computeLayout } from "./features/graph/DependencyGraph.js";
 
 // ── Clerk ─────────────────────────────────────────────────────────────────────
 
-if (!clerkPubKey) throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY");
+if (!clerkPubKey && !isDevAuthBypass) throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY");
 
 const clerkAppearance = {
   baseTheme: dark, cssLayerName: "clerk",
@@ -2096,6 +2097,7 @@ function Landing({ onSignIn, onSignUp }: { onSignIn: () => void; onSignUp: () =>
 
 function HomeRedirect() {
   const [, setLocation] = useLocation();
+  if (isDevAuthBypass) return <Dashboard onBack={() => setLocation("/welcome")} />;
   return (
     <>
       <Show when="signed-in"><Dashboard onBack={() => setLocation("/sign-out")} /></Show>
@@ -2113,16 +2115,20 @@ function SignOutPage() {
 
 function ClerkProviderWithRoutes() {
   const [, setLocation] = useLocation();
+  if (isDevAuthBypass) return <DevSession><Switch>
+    <Route path="/welcome"><Landing onSignIn={() => setLocation("/")} onSignUp={() => setLocation("/")} /></Route>
+    <Route><HomeRedirect /></Route>
+  </Switch></DevSession>;
   return (
     <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`}
       routerPush={(to) => setLocation(stripBase(to))} routerReplace={(to) => setLocation(stripBase(to), { replace: true })}>
-      <Switch>
+      <ClerkSession><Switch>
         <Route path="/" component={HomeRedirect} />
         <Route path="/sign-in/*?" component={SignInPage} />
         <Route path="/sign-up/*?" component={SignUpPage} />
         <Route path="/sign-out" component={SignOutPage} />
-      </Switch>
+      </Switch></ClerkSession>
     </ClerkProvider>
   );
 }

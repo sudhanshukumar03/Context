@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "@clerk/react";
+import { useAuth } from "../lib/auth-session";
 
 type Key = { id: number; name: string; prefix: string };
 export default function WebhookKeySettings() {

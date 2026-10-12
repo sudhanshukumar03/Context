@@ -6,7 +6,7 @@ import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
 import { logger } from "../lib/logger.js";
-import crypto from "node:crypto";
+import { getOrCreateBrief } from "../services/brief-submissions.js";
 
 const router = Router();
 
@@ -78,19 +78,13 @@ router.post("/generate-brief", requireAuth, async (req: Request, res: Response) 
   const orgId = req.auth!.organizationId;
   if (!orgId) { fail(res, "Organization required", 403); return; }
   const userId = req.auth!.userId;
-  const jobId = crypto.randomUUID();
 
   try {
-    const [brief] = await db.insert(contextBriefs).values({
-      organizationId: orgId,
-      userId,
-      role,
-      status: "pending",
-      jobId,
-    }).returning();
+    const { brief, created } = await getOrCreateBrief(orgId, userId, role);
+    const jobId = brief.jobId;
 
     // Kick off async processing — non-blocking
-    setImmediate(() => { void generateBriefAsync(brief.id, role, orgId, String(req.id), jobId)
+    if (created) setImmediate(() => { void generateBriefAsync(brief.id, role, orgId, String(req.id), jobId ?? undefined)
       .catch(() => logger.error({ briefId: brief.id, jobId, organizationId: orgId }, "brief dispatch failed")); });
 
     ok(res, { jobId, briefId: brief.id, status: "pending", message: "Brief generation started" }, 202);

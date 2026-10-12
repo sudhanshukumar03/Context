@@ -14,7 +14,8 @@ vi.mock("@workspace/integrations-openai-ai-server", () => ({
 vi.mock("../../lib/logger.js", () => ({ logger: { info: mocks.info, error: mocks.error } }));
 vi.mock("@workspace/db", async () => {
   const schema = await import("@workspace/db/schema");
-  return { ...schema, db: {
+  const database = {
+    execute: vi.fn().mockResolvedValue([]),
     insert: () => ({ values: (values: object) => { mocks.insert(values); return { returning: async () => [{ id: 1, ...values }] }; } }),
     update: () => ({ set: (change: object) => ({ where: async (condition: unknown) => {
       mocks.updates.push(change); mocks.where(condition); return mocks.update(change);
@@ -24,7 +25,8 @@ vi.mock("@workspace/db", async () => {
       const query = { limit: async () => table === schema.documents ? mocks.docs : mocks.rows, orderBy: () => query };
       return query;
     } }) }),
-  } };
+  };
+  return { ...schema, db: { ...database, transaction: async (work: (tx: typeof database) => unknown) => work(database) } };
 });
 vi.mock("../../middleware/auth.js", () => ({ requireAuth: (req: Request, _res: Response, next: NextFunction) => {
   req.auth = { userId: 1, organizationId: 10, clerkUserId: "test", role: "backend" }; next();
@@ -125,5 +127,12 @@ describe("background brief characterization", () => {
       expect(mocks.create.mock.calls[0][1]).toEqual({ timeout: 15000, maxRetries: 0 });
       expect(mocks.updates.some((row) => "status" in row && row.status === "done")).toBe(false);
     } finally { vi.useRealTimers(); }
+  });
+  it("returns an existing pending job without starting duplicate provider work", async () => {
+    mocks.rows = [{ id: 5, jobId: "shared-job", organizationId: 10, userId: 1, role: "backend", status: "pending" }];
+    const result = await post();
+    expect(result.status).toBe(202);
+    expect(result.body).toMatchObject({ data: { briefId: 5, jobId: "shared-job" } });
+    expect(mocks.insert).not.toHaveBeenCalled(); expect(mocks.create).not.toHaveBeenCalled();
   });
 });

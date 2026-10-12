@@ -1,0 +1,39 @@
+# Copy to .github/workflows/context-deployment.yml in the deployment repository.
+# Call it after an actual deployment; no workflow runs just by adding this example.
+name: Report deployment to Context
+on:
+  workflow_call:
+    inputs:
+      service: { required: true, type: string }
+      environment: { required: true, type: string }
+      status: { required: true, type: string }
+    secrets:
+      CONTEXT_INGEST_URL: { required: true }
+      CONTEXT_WEBHOOK_KEY: { required: true }
+permissions: {}
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Send deployment evidence
+        env:
+          INGEST_URL: ${{ secrets.CONTEXT_INGEST_URL }}
+          WEBHOOK_KEY: ${{ secrets.CONTEXT_WEBHOOK_KEY }}
+          SERVICE: ${{ inputs.service }}
+          ENVIRONMENT: ${{ inputs.environment }}
+          STATUS: ${{ inputs.status }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          case "$INGEST_URL" in https://*) ;; *) echo "HTTPS Context URL required"; exit 1 ;; esac
+          jq -n --arg service "$SERVICE" --arg environment "$ENVIRONMENT" --arg status "$STATUS" \
+            --arg repository "$REPOSITORY" --arg sha "$SHA" --arg runId "$RUN_ID" \
+            --argjson runAttempt "$RUN_ATTEMPT" --arg occurredAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{service:$service,environment:$environment,status:$status,repository:$repository,sha:$sha,runId:$runId,runAttempt:$runAttempt,occurredAt:$occurredAt}' > payload.json
+          curl --fail --silent --show-error --connect-timeout 5 --max-time 20 --retry 2 \
+            -H "X-API-Key: $WEBHOOK_KEY" -H 'Content-Type: application/json' \
+            --data-binary @payload.json "$INGEST_URL"

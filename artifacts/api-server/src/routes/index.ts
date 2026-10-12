@@ -14,6 +14,7 @@ import postmortemRouter from "./postmortem.js";
 import webhookRouter from "./webhook.js";
 import notifyRouter from "./notify.js";
 import webhookKeysRouter from "./webhook-keys.js";
+import githubActionsRouter from "./github-actions.js";
 
 const router: IRouter = Router();
 
@@ -31,6 +32,7 @@ router.use(rootCauseRouter);
 router.use(postmortemRouter);
 router.use(webhookRouter);
 router.use(webhookKeysRouter);
+router.use(githubActionsRouter);
 router.use(notifyRouter);
 
 export default router;

@@ -998,23 +998,21 @@ function OverviewTab({ risks, services, rootCause, predictions, loading, role, o
 // ── Integrations Panel ────────────────────────────────────────────────────────
 
 const LIVE_INTEGRATIONS = [
+  { name: "GitHub Actions", desc: "Deployment evidence from workflows", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", icon: Package },
   { name: "Generic Webhook", desc: "Any JSON alerting tool", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", icon: Webhook },
   { name: "PagerDuty V3", desc: "Incident trigger / resolve", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", icon: Siren },
   { name: "Slack Alerts", desc: "Outbound incident notifications", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", icon: MessageSquare },
 ];
 
 const COMING_SOON = [
-  { name: "Datadog", desc: "Ingest metrics & monitor alerts automatically", icon: Activity, eta: "Q3 2025" },
-  { name: "GitHub Actions", desc: "Track every deployment as a potential cause", icon: Package, eta: "Q3 2025" },
-  { name: "Grafana", desc: "Pull dashboards & alert rules into context", icon: BarChart3, eta: "Q3 2025" },
-  { name: "OpsGenie", desc: "Two-way incident sync & escalation", icon: Siren, eta: "Q4 2025" },
-  { name: "AWS CloudWatch", desc: "Native AWS alarm ingestion", icon: Server, eta: "Q4 2025" },
-  { name: "New Relic", desc: "APM traces & error rates", icon: TrendingUp, eta: "Q4 2025" },
+  { name: "Datadog", desc: "Metrics and monitor alerts", icon: Activity },
+  { name: "Grafana", desc: "Dashboard and alert context", icon: BarChart3 },
+  { name: "OpsGenie", desc: "Incident sync and escalation", icon: Siren },
+  { name: "AWS CloudWatch", desc: "Native AWS alarm ingestion", icon: Server },
+  { name: "New Relic", desc: "APM traces and error rates", icon: TrendingUp },
 ];
 
 function IntegrationsPanel({ userId }: { userId?: string }) {
-  const [notifyEmail, setNotifyEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
 
   const genericUrl = `${window.location.origin}/api/ingest/webhook`;
   const pagerdutyUrl = `${window.location.origin}/api/ingest/webhook/pagerduty`;
@@ -1054,6 +1052,7 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
             {[
               { label: "Generic webhook", url: genericUrl },
               { label: "PagerDuty V3", url: pagerdutyUrl },
+              { label: "GitHub Actions deployments", url: `${window.location.origin}/api/ingest/github-actions` },
             ].map(({ label, url }) => (
               <div key={label} className="rounded-lg bg-slate-800/50 border border-white/6 px-3 py-2.5">
                 <p className="text-[9px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">{label}</p>
@@ -1078,7 +1077,7 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2.5">Coming soon</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {COMING_SOON.map(({ name, desc, icon: Icon, eta }) => (
+            {COMING_SOON.map(({ name, desc, icon: Icon }) => (
               <div key={name}
                 className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2.5 flex items-start gap-2.5 relative overflow-hidden group">
                 <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1087,37 +1086,17 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
                   <div className="flex items-center gap-2 mb-0.5">
                     <p className="text-xs font-semibold text-slate-400">{name}</p>
                     <span className="text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-                      Coming soon
+                      Planned
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-600 leading-snug">{desc}</p>
-                  <p className="text-[9px] text-slate-700 mt-0.5">ETA {eta}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Notify me */}
-        <div className="rounded-xl border border-indigo-500/15 bg-indigo-500/[0.04] px-4 py-3">
-          <p className="text-xs font-semibold text-white mb-1">Get notified when new integrations launch</p>
-          <p className="text-[11px] text-slate-500 mb-2.5">We'll email you as soon as Datadog, GitHub Actions, or any other connector goes live.</p>
-          {submitted ? (
-            <p className="text-xs text-emerald-400 font-medium">✓ You're on the list — we'll be in touch!</p>
-          ) : (
-            <form className="flex gap-2" onSubmit={e => { e.preventDefault(); if (notifyEmail) setSubmitted(true); }}>
-              <input
-                type="email" required value={notifyEmail} onChange={e => setNotifyEmail(e.target.value)}
-                placeholder="your@email.com"
-                className="flex-1 rounded-lg bg-slate-800/80 border border-white/10 text-xs text-white placeholder:text-slate-600 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-              />
-              <button type="submit"
-                className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition-all flex-shrink-0">
-                Notify me
-              </button>
-            </form>
-          )}
-        </div>
+        <p className="text-xs text-slate-400">Planned connectors have no scheduled release date. You can send supported alerts through the generic webhook today.</p>
       </div>
     </div>
   );

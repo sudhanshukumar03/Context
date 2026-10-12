@@ -1,7 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { eq, and, desc } from "drizzle-orm";
 import { db, contextBriefs, documents } from "@workspace/db";
-import { openai } from "@workspace/integrations-openai-ai-server";
+import { callAi, logAiError, outputSchemas, safeParseJson, withRetry } from "../services/ai.service.js";
+import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
 import { logger } from "../lib/logger.js";
@@ -30,11 +31,14 @@ OUTPUT FORMAT:
   "sources": ["source1", "source2"]
 }`;
 
-async function generateBriefAsync(briefId: number, role: string, orgId: number) {
+export async function generateBriefAsync(briefId: number, role: string, orgId: number, requestId?: string, jobId?: string) {
+  const startedAt = Date.now();
+  const correlation = { briefId, jobId, organizationId: orgId, requestId };
+  const scopedId = and(eq(contextBriefs.id, briefId), eq(contextBriefs.organizationId, orgId));
   try {
     await db.update(contextBriefs)
       .set({ status: "processing", updatedAt: new Date() })
-      .where(eq(contextBriefs.id, briefId));
+      .where(scopedId);
 
     const orgDocs = await db.select().from(documents)
       .where(eq(documents.organizationId, orgId))
@@ -47,37 +51,32 @@ async function generateBriefAsync(briefId: number, role: string, orgId: number) 
 
     const userMessage = `Generate an onboarding Context Brief for a new ${roleLabel}. Company knowledge:\n\n${docsContext}`;
 
-    const response = await openai.chat.completions.create({
-      model: process.env.GEMINI_MODEL || process.env.OPENAI_MODEL || "gemini-2.0-flash",
-      max_completion_tokens: 2048,
-      messages: [
-        { role: "system", content: BRIEF_SYSTEM_PROMPT },
-        { role: "user", content: userMessage },
-      ],
-    });
-
-    const raw = response.choices[0]?.message?.content ?? "{}";
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error("No JSON object found in OpenAI response");
-    const data = JSON.parse(match[0]);
+    const data = await withRetry("brief", async () =>
+      safeParseJson(await callAi(BRIEF_SYSTEM_PROMPT, userMessage, 2048), outputSchemas.brief));
 
     await db.update(contextBriefs)
       .set({ status: "done", data: JSON.stringify(data), updatedAt: new Date() })
-      .where(eq(contextBriefs.id, briefId));
+      .where(scopedId);
 
-    logger.info({ briefId }, "brief generation complete");
+    logger.info({ ...correlation, elapsedMs: Date.now() - startedAt }, "brief generation complete");
   } catch (err) {
-    logger.error({ err, briefId }, "brief generation failed");
-    await db.update(contextBriefs)
-      .set({ status: "failed", updatedAt: new Date() })
-      .where(eq(contextBriefs.id, briefId));
+    logger.error({ ...correlation, elapsedMs: Date.now() - startedAt }, "brief generation failed");
+    logAiError("background-brief", err);
+    try {
+      await db.update(contextBriefs).set({ status: "failed", updatedAt: new Date() }).where(scopedId);
+    } catch {
+      logger.error(correlation, "brief failure state could not be persisted; recovery required");
+    }
   }
 }
 
 // POST /api/generate-brief — enqueue a brief generation job
 router.post("/generate-brief", requireAuth, async (req: Request, res: Response) => {
-  const role = (req.body.role as string) ?? req.auth!.role ?? "backend";
-  const orgId = req.auth!.organizationId ?? 0;
+  const parsed = z.enum(["backend", "frontend", "pm"]).safeParse(req.body?.role ?? req.auth!.role ?? "backend");
+  if (!parsed.success) { fail(res, "role must be backend, frontend, or pm"); return; }
+  const role = parsed.data;
+  const orgId = req.auth!.organizationId;
+  if (!orgId) { fail(res, "Organization required", 403); return; }
   const userId = req.auth!.userId;
   const jobId = crypto.randomUUID();
 
@@ -91,7 +90,8 @@ router.post("/generate-brief", requireAuth, async (req: Request, res: Response) 
     }).returning();
 
     // Kick off async processing — non-blocking
-    setImmediate(() => { void generateBriefAsync(brief.id, role, orgId); });
+    setImmediate(() => { void generateBriefAsync(brief.id, role, orgId, String(req.id), jobId)
+      .catch(() => logger.error({ briefId: brief.id, jobId, organizationId: orgId }, "brief dispatch failed")); });
 
     ok(res, { jobId, briefId: brief.id, status: "pending", message: "Brief generation started" }, 202);
   } catch (err) {
@@ -132,13 +132,15 @@ router.get("/brief/live", requireAuth, async (req: Request, res: Response) => {
 
 // GET /api/brief/:id — fetch a specific brief by ID
 router.get("/brief/:id", requireAuth, async (req: Request, res: Response) => {
-  const id = parseInt(String(req.params.id), 10);
-  if (isNaN(id)) { fail(res, "Invalid brief id"); return; }
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) { fail(res, "Invalid brief id"); return; }
   const userId = req.auth!.userId;
+  const orgId = req.auth!.organizationId;
+  if (!orgId) { fail(res, "Organization required", 403); return; }
 
   try {
     const [brief] = await db.select().from(contextBriefs)
-      .where(and(eq(contextBriefs.id, id), eq(contextBriefs.userId, userId)))
+      .where(and(eq(contextBriefs.id, id), eq(contextBriefs.userId, userId), eq(contextBriefs.organizationId, orgId)))
       .limit(1);
 
     if (!brief) { fail(res, "Brief not found", 404); return; }

@@ -14,7 +14,7 @@ class InvalidAiResponseError extends Error {
 
 const confidence = z.number().min(0).max(100);
 const strings = z.array(z.string());
-const outputSchemas = {
+export const outputSchemas = {
   brief: z.object({ team: z.string(), goal: z.string(), keyPerson: z.string(), suggestedReading: z.string(),
     nextAction: z.string(), whyThisMatters: z.string(), confidence, explanation: z.string(), sources: strings }).passthrough(),
   ask: z.object({ answer: z.string(), confidence, sources: strings }).passthrough(),
@@ -29,7 +29,7 @@ const outputSchemas = {
   simplify: z.object({ simpleExplanation: z.string(), analogy: z.string(), keyTakeaways: strings }).passthrough(),
 };
 
-function safeParseJson<T>(raw: string, schema: z.ZodType<T>): T {
+export function safeParseJson<T>(raw: string, schema: z.ZodType<T>): T {
   const match = raw.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
   if (!match) {
     throw new InvalidAiResponseError();
@@ -72,14 +72,14 @@ function retryDelay(err: unknown, attempt: number): number {
 
 class AiOperationError extends Error {
   readonly status: number | undefined;
-  constructor(readonly tool: keyof typeof outputSchemas, readonly attempts: number, cause: unknown) {
+  constructor(readonly tool: string, readonly attempts: number, cause: unknown) {
     const detail = cause instanceof InvalidAiResponseError ? cause.message : "provider request failed";
     super(`AI ${tool} failed after ${attempts} attempt(s): ${detail}`, { cause });
     this.status = providerStatus(cause);
   }
 }
 
-async function withRetry<T>(tool: keyof typeof outputSchemas, fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+export async function withRetry<T>(tool: string, fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await fn();
@@ -91,11 +91,11 @@ async function withRetry<T>(tool: keyof typeof outputSchemas, fn: () => Promise<
   throw new Error("AI retry policy requires at least one attempt");
 }
 
-async function callAi(systemPrompt: string, userMessage: string): Promise<string> {
+export async function callAi(systemPrompt: string, userMessage: string, maxTokens = MAX_TOKENS): Promise<string> {
   const response = await openai.chat.completions.create({
     model: MODEL,
     temperature: TEMPERATURE,
-    max_completion_tokens: MAX_TOKENS,
+    max_completion_tokens: maxTokens,
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userMessage },

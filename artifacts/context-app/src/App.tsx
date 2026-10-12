@@ -16,6 +16,7 @@ import { publishableKeyFromHost } from "@clerk/react/internal";
 import { dark } from "@clerk/themes";
 import { Switch, Route, useLocation, Router as WouterRouter } from "wouter";
 import DemoVideoInline from "./components/DemoVideoInline";
+import WebhookKeySettings from "./components/WebhookKeySettings";
 
 const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL as string | undefined;
@@ -1015,8 +1016,8 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
   const [notifyEmail, setNotifyEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
-  const genericUrl = `${window.location.origin}/api/ingest/webhook?apiKey=${userId ?? "<your-user-id>"}`;
-  const pagerdutyUrl = `${window.location.origin}/api/ingest/webhook/pagerduty?apiKey=${userId ?? "<your-user-id>"}`;
+  const genericUrl = `${window.location.origin}/api/ingest/webhook`;
+  const pagerdutyUrl = `${window.location.origin}/api/ingest/webhook/pagerduty`;
   const payload = `{ "service": "payments-api", "title": "p99 > 8s", "severity": "critical", "status": "failing" }`;
 
   return (
@@ -1046,17 +1047,7 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
             ))}
           </div>
 
-          {/* Your API key */}
-          {userId && (
-            <div className="mt-2.5 rounded-lg bg-slate-800/50 border border-white/6 px-3 py-2.5">
-              <p className="text-[9px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">Your API Key</p>
-              <div className="flex items-center gap-1.5">
-                <code className="text-[10px] text-indigo-300 font-mono flex-1 min-w-0 truncate">{userId}</code>
-                <CopyButton text={userId} />
-              </div>
-              <p className="text-[10px] text-slate-600 mt-1">Use this as the <code className="text-slate-400">apiKey</code> query param in all webhook URLs below.</p>
-            </div>
-          )}
+          <WebhookKeySettings />
 
           {/* Webhook endpoints */}
           <div className="mt-2.5 space-y-2">

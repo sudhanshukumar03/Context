@@ -11,6 +11,9 @@ This path does not use the database or account keys in existing environment file
 For real Clerk test-instance sign-in on that isolated database, follow the
 `local:clerk-setup`, `local:clerk-check`, and `local:clerk` instructions in the guide.
 The API's Clerk session origin allowlist uses `ALLOWED_ORIGINS`.
+The isolated copy can enable backend-only Gemini with `local:ai-setup`,
+`local:ai-check`, `local:ai-verify`, and `local:ai-on`; see the guide for provider
+quota and data flow. AI is off by default and independent of Clerk/demo mode.
 
 ## Local setup
 

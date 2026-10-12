@@ -2,15 +2,16 @@
 
 Implemented on branch `fix/project-readiness`, in separate verified commits.
 User approved schema/migration files, selected GitHub Actions first, and selected
-Clerk Organizations for team membership. No production migration/deployment, AI
-provider probe, GitHub installation, invitation or notification was performed.
+Clerk Organizations for team membership. No production migration/deployment,
+GitHub installation, invitation or notification was performed.
 Clerk development-instance configuration was activated in the subsequent sign-in setup below.
+Gemini provider checks were subsequently run with synthetic prompts as documented below.
 
 ## Verification
 
 | Metric | Before | After |
 | --- | --- | --- |
-| Unit/mocked HTTP suite | 86 tests / 9 files passing | 156 tests / 20 files passing |
+| Unit/mocked HTTP suite | 86 tests / 9 files passing | 159 tests / 21 files passing |
 | Disposable PostgreSQL verification | None | 8 passing tests |
 | Migration checksum portability | None | 2 passing Node tests |
 | Full workspace types | Passing | Passing |
@@ -193,3 +194,35 @@ changed surface had no document overflow at the existing desktop viewport. Stati
 HTTP inspection confirmed loading content before JavaScript. A temporary QA HTML
 page was removed. The 159 existing tests, workspace types and dashboard build
 passed. Screenshot: `tmp/verification/clerk-sign-in-fixed.png`.
+
+## Follow-up: local Gemini connection and navigation recovery
+
+Added `/sign` as a redirect to `/sign-in`, matching the shortened link found in a
+local browser tab. Unknown routes now provide an Open Context link rather than
+reloading the same missing page. Browser verification confirmed the redirect.
+An existing non-demo local Clerk user record was confirmed against the configured
+instance through a read-only identity check; this does not establish the user's
+current browser session. The user clarified they had signed into ChatGPT only.
+Context's own sign-in and visual team/admin/member checks remain pending.
+
+The existing Gemini key was accepted by Google's model-list API. The original
+local `gemini-2.0-flash` selection was unavailable; the application's
+`gemini-3.8-flash` default was available. Prepared a separate ignored
+`tmp/local-test/ai.env` without changing original environment files. AI is a saved,
+independent opt-in mode: off by default, Gemini credentials given to the API only,
+and credential/model validation occurs before changing modes or stopping servers.
+The endpoint is fixed to Google's Gemini API. No provider key enters the dashboard
+environment. Filesystem smoke checks now cover the AI credential file as well.
+
+Live synthetic checks used the actual application root-cause, incident-answer,
+postmortem and brief service functions, including their output validation and
+bounded retries. All four operations passed. No application documents or incident
+records were read for these probes. Model access and schema-valid output are
+verified; accuracy/calibration on real incidents is not. Verification commands:
+`local:ai-check` (read-only availability) and `local:ai-verify` (synthetic generation).
+
+The local app was restarted with Clerk authentication and Gemini enabled. Startup
+checks passed for PostgreSQL readiness, dashboard proxy, private-file HTTP 403 and
+signed-out/demo-header HTTP 401. Seven Node configuration tests plus two checksum
+tests pass, as do all 159 unit/HTTP tests, workspace types, API and dashboard builds.
+See `LOCAL_TEST.md` for activation, saved modes, quota/data flow and disabling AI.

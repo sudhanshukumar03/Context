@@ -4,12 +4,21 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { localEnvironment, validateLocalConfig } from "./local-test-config.mjs";
 import { readClerkTestCredentials } from "./local-clerk-credentials.mjs";
+import { readLocalAiCredentials } from "./local-ai-credentials.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const mode = process.argv[2];
-if (!["api", "dashboard", "initialize", "check", "check-auth"].includes(mode)) throw new Error("Invalid local runner command");
+if (!["api", "dashboard", "initialize", "check", "check-auth", "check-ai"].includes(mode)) throw new Error("Invalid local runner command");
 const config = validateLocalConfig(JSON.parse(await readFile(resolve(root, "tmp/local-test/config.json"), "utf8")), root);
 if (mode === "check") process.exit(0);
+if (mode === "check-ai") {
+  const selected = process.argv[3] || config.aiMode || "off";
+  if (!["off", "gemini"].includes(selected)) throw new Error("Invalid AI mode");
+  try { if (selected === "gemini") await readLocalAiCredentials(root); }
+  catch (error) { console.error(error.message); process.exit(1); }
+  console.log(selected === "gemini" ? "Gemini configuration format checks passed." : "Local AI is disabled.");
+  process.exit(0);
+}
 const authMode = mode === "check-auth" ? process.argv[3] || config.authMode || "demo" : config.authMode || "demo";
 if (!["demo", "clerk"].includes(authMode)) throw new Error("Choose demo or clerk authentication.");
 let accounts;
@@ -22,7 +31,8 @@ if (mode === "check-auth") {
 }
 // Avoid inheriting unrelated public variables into Vite's client environment.
 for (const name of Object.keys(process.env)) if (name.startsWith("VITE_")) delete process.env[name];
-Object.assign(process.env, localEnvironment(config, mode, accounts));
+const ai = config.aiMode === "gemini" && mode === "api" ? await readLocalAiCredentials(root) : undefined;
+Object.assign(process.env, localEnvironment(config, mode, accounts, ai));
 
 if (mode === "initialize") {
   await import(pathToFileURL(resolve(root, "lib/db/initialize.mjs")));

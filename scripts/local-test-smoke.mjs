@@ -19,7 +19,7 @@ assert.equal(page.status, 200); assert.match(await page.text(), /id="root"/);
 const proxied = await fetch(`http://127.0.0.1:${config.dashboardPort}/api/healthz`, { signal: AbortSignal.timeout(10000), redirect: "error" });
 assert.equal(proxied.status, 200); assert.equal((await proxied.json()).status, "ok");
 console.log("PASS: Dashboard and its API proxy respond");
-for (const file of ["config.json", "accounts.env"]) {
+for (const file of ["config.json", "accounts.env", "ai.env"]) {
   const target = resolve(root, "tmp/local-test", file).replaceAll("\\", "/");
   const response = await fetch(`http://127.0.0.1:${config.dashboardPort}/@fs/${target}`,
     { signal: AbortSignal.timeout(10000), redirect: "error" });

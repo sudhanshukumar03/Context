@@ -2,7 +2,8 @@ param(
   [ValidateSet('Start', 'Status', 'Smoke', 'Stop')][string]$Action = 'Status',
   [ValidateRange(1024, 65535)][int]$DashboardPort = 31800,
   [ValidateRange(1024, 65535)][int]$ApiPort = 31801,
-  [ValidateSet('', 'demo', 'clerk')][string]$AuthMode = ''
+  [ValidateSet('', 'demo', 'clerk')][string]$AuthMode = '',
+  [ValidateSet('', 'off', 'gemini')][string]$AiMode = ''
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -92,6 +93,8 @@ if ($Action -eq 'Status') {
   Write-Output "Dashboard: http://127.0.0.1:$($config.dashboardPort)"
   $displayMode = if ($config.authMode) { $config.authMode } else { 'demo' }
   Write-Output "Authentication: $displayMode"
+  $displayAi = if ($config.aiMode) { $config.aiMode } else { 'off' }
+  Write-Output "AI: $displayAi"
   return
 }
 
@@ -115,6 +118,9 @@ $config = Read-Config
 $selectedAuth = if ($AuthMode) { $AuthMode } elseif ($config.authMode) { $config.authMode } else { 'demo' }
 & $node $runner check-auth $selectedAuth
 if ($LASTEXITCODE -ne 0) { throw 'Clerk configuration is incomplete. The running demo and saved authentication mode were not changed.' }
+$selectedAi = if ($AiMode) { $AiMode } elseif ($config.aiMode) { $config.aiMode } else { 'off' }
+& $node $runner check-ai $selectedAi
+if ($LASTEXITCODE -ne 0) { throw 'Local AI configuration is incomplete; saved mode and running processes were not changed.' }
 if (Test-Path -LiteralPath $processPath) {
   $records = Get-Content -Raw -LiteralPath $processPath | ConvertFrom-Json
   foreach ($mode in @('api', 'dashboard')) {
@@ -124,6 +130,7 @@ if (Test-Path -LiteralPath $processPath) {
 Check-Port $config.apiPort
 Check-Port $config.dashboardPort
 $config | Add-Member -NotePropertyName authMode -NotePropertyValue $selectedAuth -Force
+$config | Add-Member -NotePropertyName aiMode -NotePropertyValue $selectedAi -Force
 Save-Json $configPath $config
 Push-Location $projectRoot
 try {
@@ -169,7 +176,8 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Local smoke checks failed.' }
   Write-Output "Local test ready: http://127.0.0.1:$($config.dashboardPort)"
   if ($selectedAuth -eq 'clerk') { Write-Output 'Clerk test sign-in is enabled; demo sign-in is disabled. Complete browser sign-in and team checks.' }
-  else { Write-Output 'Demo sign-in is enabled on loopback only. Existing data and account keys are not used.' }
+  else { Write-Output 'Demo sign-in is enabled on loopback only. The existing application database is not used.' }
+  Write-Output "AI mode: $selectedAi"
   Write-Output 'Stop: powershell -NoProfile -File scripts/local-test.ps1 -Action Stop'
 } catch {
   $startupError = $_

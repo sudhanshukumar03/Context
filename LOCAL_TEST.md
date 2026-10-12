@@ -135,12 +135,45 @@ does not send invitations or change live membership automatically. The local
 database uses loopback trust authentication; use synthetic test data, and stop
 the app when finished.
 
-Live AI output and deliveries from an actual GitHub repository remain unverified.
-AI chat and postmortem generation need a provider key; root-cause heuristics can
-work without one. Both local modes clear AI keys, so these tests do not incur
-provider requests.
+### Connect Gemini locally
 
-For AI and hosted testing, use the normal authenticated setup in [DEPLOYMENT.md](DEPLOYMENT.md)
+AI is disabled by default and controlled separately from sign-in. Root-cause
+heuristics can work without a provider. To enable actual chat, analysis,
+postmortems and briefs:
+
+```powershell
+pnpm local:ai-setup
+pnpm local:ai-check
+pnpm local:ai-verify
+pnpm local:stop
+pnpm local:ai-on
+```
+
+Setup prepares the ignored `tmp/local-test/ai.env`, copying an existing Gemini
+key from the root/API environment file when available, and selecting
+`gemini-3.8-flash`. Existing AI files are preserved. The old local
+`gemini-2.0-flash` setting is retired; see
+[Google's model reference](https://ai.google.dev/gemini-api/docs/models).
+Original environment files are not changed.
+
+`local:ai-check` makes a read-only key/model availability request. `local:ai-verify`
+also sends synthetic prompts through the actual root-cause, incident-answer,
+postmortem and brief services. These generation checks consume provider quota;
+they do not read your application documents or incident records. They print
+pass/fail summaries, never keys or raw provider responses. Passing demonstrates
+connectivity and output validation, not prediction accuracy on real incidents.
+
+The API alone receives the Gemini key. The dashboard receives no provider key,
+and the private directory is blocked from HTTP filesystem requests. Enabling AI
+preserves the selected authentication mode and isolated database. Subsequent
+`local:start` commands retain the AI setting. To disable AI, stop the app and run
+`pnpm local:ai-off`. `local:status` reports both selected modes. When AI is on,
+normal authenticated application requests can send their incident/document
+context to the configured Gemini service.
+
+Deliveries from an actual GitHub repository remain unverified.
+
+For hosted testing, use the normal authenticated setup in [DEPLOYMENT.md](DEPLOYMENT.md)
 with a separate test database. An online test deployment needs
 the hosting account and HTTPS domain before the GitHub workflow can deliver to it.
 

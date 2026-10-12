@@ -14,7 +14,7 @@ import {
 } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { dark } from "@clerk/themes";
-import { Switch, Route, useLocation, Router as WouterRouter } from "wouter";
+import { Switch, Route, Redirect, useLocation, Router as WouterRouter } from "wouter";
 import DemoVideoInline from "./components/DemoVideoInline";
 import WebhookKeySettings from "./components/WebhookKeySettings";
 import { ApplicationStatus, AuthenticationLoading } from "./components/ApplicationStartup";
@@ -2153,10 +2153,11 @@ function ClerkProviderWithRoutes() {
       <ClerkFailed><ApplicationStatus failed title="Sign-in could not load" message="Check your connection, then try again. You can also open this page in a regular browser." /></ClerkFailed>
       <ClerkLoaded><ClerkSession><Switch>
         <Route path="/" component={HomeRedirect} />
+        <Route path="/sign"><Redirect to="/sign-in" replace /></Route>
         <Route path="/sign-in/*?" component={SignInPage} />
         <Route path="/sign-up/*?" component={SignUpPage} />
         <Route path="/sign-out" component={SignOutPage} />
-        <Route><ApplicationStatus failed title="Page not found" message="Open Context from the main page, or try the sign-in link again." /></Route>
+        <Route><ApplicationStatus failed title="Page not found" message="Return to Context to open your workspace or sign in." recoveryHref={`${basePath}/`} /></Route>
       </Switch></ClerkSession></ClerkLoaded>
     </ClerkProvider>
   );

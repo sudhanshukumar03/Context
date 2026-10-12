@@ -1,7 +1,7 @@
 import { Component, useEffect, useState, type ReactNode } from "react";
 
-export function ApplicationStatus({ failed = false, title, message, contained = false }: {
-  failed?: boolean; title?: string; message?: string; contained?: boolean;
+export function ApplicationStatus({ failed = false, title, message, contained = false, recoveryHref }: {
+  failed?: boolean; title?: string; message?: string; contained?: boolean; recoveryHref?: string;
 }) {
   return <div className={`${contained ? "w-full max-w-md" : "min-h-[100dvh]"} flex items-center justify-center bg-slate-950 px-6 py-10 text-slate-100`}>
     <section className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-7" role={failed ? "alert" : "status"} aria-live="polite">
@@ -10,7 +10,8 @@ export function ApplicationStatus({ failed = false, title, message, contained = 
       <p className="mt-3 text-sm leading-relaxed text-slate-300">{message ?? (failed
         ? "The page could not finish loading. Check your connection, then try again."
         : "Loading secure sign-in. This may take a moment.")}</p>
-      {failed ? <button type="button" onClick={() => window.location.reload()}
+      {failed && recoveryHref ? <a href={recoveryHref}
+        className="mt-6 inline-flex min-h-11 items-center rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-300">Open Context</a> : failed ? <button type="button" onClick={() => window.location.reload()}
         className="mt-6 min-h-11 rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-300">Try again</button> : null}
       <p className="mt-5 text-xs leading-relaxed text-slate-400">If this page stays here, open it in your regular browser.</p>
     </section>

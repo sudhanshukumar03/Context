@@ -15,7 +15,12 @@
     "local:clerk-check": "node scripts/local-test-server.mjs check-auth clerk",
     "local:clerk-verify": "node scripts/verify-local-clerk.mjs",
     "local:clerk": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start -AuthMode clerk",
-    "local:demo": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start -AuthMode demo"
+    "local:demo": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start -AuthMode demo",
+    "local:ai-setup": "node scripts/prepare-local-ai.mjs",
+    "local:ai-check": "node scripts/verify-local-ai.mjs",
+    "local:ai-verify": "node scripts/verify-local-ai.mjs --generate",
+    "local:ai-on": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start -AiMode gemini",
+    "local:ai-off": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start -AiMode off"
   },
   "private": true,
   "devDependencies": {

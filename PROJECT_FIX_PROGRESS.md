@@ -85,3 +85,11 @@ Completed steps and verification will be appended below.
   Slow sign-in offers retry after 15 seconds. Browser checks verified real Clerk
   form loading, the timeout/retry cycle and render-error recovery. Temporary QA
   page removed. Existing 159 tests, workspace types and dashboard build pass.
+- `/sign` now redirects to canonical sign-in; unknown routes offer Open Context.
+  An existing real Clerk user row was checked read-only, but the current user has
+  signed into ChatGPT only; project sign-in/team UI verification remains pending.
+- Existing Gemini key and default model verified against Google. Separate private
+  AI configuration and saved backend-only Gemini mode added. Actual analysis,
+  incident answer, postmortem and brief services passed live synthetic checks.
+  Local app restarted with Clerk + Gemini; readiness, private-file denies and
+  signed-out protection pass. 159 unit/HTTP + 9 Node checks pass; builds/types pass.

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { resolve } from "node:path";
 import { localEnvironment, validateLocalConfig } from "./local-test-config.mjs";
 import { validateClerkTestCredentials } from "./local-clerk-credentials.mjs";
+import { validateLocalAiCredentials } from "./local-ai-credentials.mjs";
 const root = resolve(".");
 const runId = "a".repeat(32);
 const config = { runId, cluster: resolve(root, "tmp/local-test", `cluster-${runId}`),
@@ -59,4 +60,27 @@ test("local demo binds loopback and clears inherited real credentials", () => {
     assert.equal(env[name], "");
   assert.equal(env.DATABASE_URL, config.databaseUrl);
   assert.equal(localEnvironment(config, "dashboard").PORT, "31800");
+});
+test("optional Gemini stays backend-only and keeps database/auth isolation", () => {
+  const ai = validateLocalAiCredentials({ GEMINI_API_KEY: "synthetic-test-key-1234567890", GEMINI_MODEL: "gemini-3.8-flash" });
+  const aiConfig = { ...config, aiMode: "gemini", authMode: "clerk" };
+  const accounts = validateClerkTestCredentials(testKeys, root);
+  assert.throws(() => localEnvironment(aiConfig, "api", accounts), /Gemini credentials/);
+  const api = localEnvironment(aiConfig, "api", accounts, ai);
+  const dashboard = localEnvironment(aiConfig, "dashboard", accounts);
+  assert.equal(api.GEMINI_API_KEY, ai.apiKey);
+  assert.equal(api.GEMINI_MODEL, ai.model);
+  assert.equal(api.GEMINI_BASE_URL, "https://generativelanguage.googleapis.com/v1beta/openai/");
+  assert.equal(api.DATABASE_URL, config.databaseUrl);
+  assert.equal(api.ALLOW_DEV_AUTH_BYPASS, "false");
+  assert.equal(dashboard.GEMINI_API_KEY, "");
+  assert.ok(!Object.values(dashboard).includes(ai.apiKey));
+  assert.equal(localEnvironment({ ...config, aiMode: "off" }, "api", undefined, ai).GEMINI_API_KEY, "");
+});
+test("local AI configuration rejects missing/public credentials and retired or malformed model IDs", () => {
+  const values = { GEMINI_API_KEY: "synthetic-test-key-1234567890" };
+  for (const changes of [{ GEMINI_API_KEY: "" }, { GEMINI_API_KEY: "your-gemini-api-key" },
+    { GEMINI_MODEL: "gemini-2.0-flash" }, { GEMINI_MODEL: "../other-endpoint" }, { VITE_GEMINI_API_KEY: values.GEMINI_API_KEY }])
+    assert.throws(() => validateLocalAiCredentials({ ...values, ...changes }));
+  assert.throws(() => validateLocalConfig({ ...config, aiMode: "other" }, root));
 });

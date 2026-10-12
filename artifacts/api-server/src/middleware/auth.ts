@@ -6,12 +6,15 @@ import { db, users, organizations } from "@workspace/db";
 import { fail } from "../lib/response.js";
 import { logger } from "../lib/logger.js";
 import { verifyAccessToken } from "../lib/jwt.js";
+import { resolveClerkOrganization } from "../services/organization-session.js";
 
 export interface AuthPayload {
   userId: number;
   clerkUserId: string;
   organizationId: number | null;
   role: string;
+  clerkOrganizationId?: string;
+  organizationRole?: string;
 }
 
 declare global {
@@ -107,10 +110,14 @@ export async function requireAuth(
   }
 
   let clerkUserId: string | null | undefined;
+  let clerkOrganizationId: string | undefined;
+  let organizationRole: string | undefined;
   if (process.env.CLERK_SECRET_KEY) {
     try {
       const auth = getAuth(req);
       clerkUserId = auth.userId;
+      clerkOrganizationId = auth.orgId ?? undefined;
+      organizationRole = auth.orgRole ?? undefined;
     } catch {
       clerkUserId = null;
     }
@@ -135,9 +142,23 @@ export async function requireAuth(
 
   try {
     req.auth = await resolveDbUser(clerkUserId);
+    if (clerkOrganizationId) {
+      req.auth.organizationId = await resolveClerkOrganization(clerkOrganizationId);
+      req.auth.clerkOrganizationId = clerkOrganizationId;
+      req.auth.organizationRole = organizationRole;
+    }
     next();
   } catch (err) {
     logger.error({ err }, "auth resolve error");
     fail(res, "Authentication error", 500);
   }
+}
+
+/** Role lenses in the dashboard never grant permission to change shared data. */
+export function requireOrganizationAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.auth?.organizationId) { fail(res, "Organization required", 403); return; }
+  if (req.auth.clerkOrganizationId && req.auth.organizationRole !== "org:admin") {
+    fail(res, "An organization admin must authorize this change", 403); return;
+  }
+  next();
 }

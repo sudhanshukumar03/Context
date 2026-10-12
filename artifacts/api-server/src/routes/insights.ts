@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { eq, desc, or, inArray, and, gte } from "drizzle-orm";
+import { eq, desc, inArray, and, gte } from "drizzle-orm";
 import { db, services, serviceDependencies, serviceEvents, serviceMessages } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
 import { requireOrganizationAdmin } from "../middleware/organization-permissions.js";
@@ -19,25 +19,14 @@ router.get("/insights/risks", requireAuth, async (req: Request, res: Response) =
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   try {
-    // Find services with recent critical/failure events
-    const failingEvents = await db.select({ serviceId: serviceEvents.serviceId })
-      .from(serviceEvents)
-      .where(and(
-        eq(serviceEvents.organizationId, orgId),
-        or(eq(serviceEvents.type, "failure"), eq(serviceEvents.severity, "critical")),
-        gte(serviceEvents.createdAt, since),
-      ));
-
-    const failingServiceIds = [...new Set(
-      failingEvents.map((e) => e.serviceId).filter(Boolean) as number[]
-    )];
-
     // Get all service statuses
     const allServices = await db.select()
       .from(services)
       .where(eq(services.organizationId, orgId));
 
     const orgServiceIds = allServices.map((s) => s.id);
+    // Current telemetry determines active risk; old alerts remain in the timeline.
+    const failingServiceIds = allServices.filter((s) => s.status === "failing" || s.status === "degraded").map((s) => s.id);
     // Build dependency map: strictly scope dependencies to the organization
     const deps = (orgServiceIds.length && failingServiceIds.length)
       ? await db.select()
@@ -403,11 +392,7 @@ router.get("/insights/summary", requireAuth, async (req: Request, res: Response)
     const svcMap = new Map(allServices.map((s) => [s.id, s]));
 
     // ── Risks ──────────────────────────────────────────────────────────────────
-    const failingSvcIds = [...new Set(
-      allEvents48h
-        .filter((e) => (e.type === "failure" || e.severity === "critical") && new Date(e.createdAt) >= since24h)
-        .map((e) => e.serviceId).filter(Boolean) as number[]
-    )];
+    const failingSvcIds = allServices.filter((s) => s.status === "failing" || s.status === "degraded").map((s) => s.id);
     const atRiskDeps = (orgSvcIds.length && failingSvcIds.length)
       ? await db.select().from(serviceDependencies).where(and(
           inArray(serviceDependencies.serviceId, orgSvcIds),
@@ -471,7 +456,10 @@ router.get("/insights/summary", requireAuth, async (req: Request, res: Response)
     // ── Predictions ────────────────────────────────────────────────────────────
     const eventCountBySvc = new Map<number, number>();
     for (const e of allEvents6h) {
-      if (e.serviceId) eventCountBySvc.set(e.serviceId, (eventCountBySvc.get(e.serviceId) ?? 0) + 1);
+      const service = e.serviceId ? svcMap.get(e.serviceId) : undefined;
+      const alert = e.type === "failure" || e.type === "alert";
+      const sinceRecovery = !service || service.status !== "healthy" || new Date(e.createdAt) >= service.updatedAt;
+      if (e.serviceId && alert && sinceRecovery) eventCountBySvc.set(e.serviceId, (eventCountBySvc.get(e.serviceId) ?? 0) + 1);
     }
     const predictions: Array<{ service: string; serviceId: number; riskLevel: string; timeToFailure: string; reason: string }> = [];
     for (const svc of updatedServices) {

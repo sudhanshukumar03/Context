@@ -13,7 +13,7 @@ $previousTestDatabase = $env:CONTEXT_TEST_DATABASE_URL
 $started = $false
 $pgCtl = (Get-Command pg_ctl).Source
 try {
-  & initdb -D $cluster -U context_test -A trust | Out-Null
+  & initdb -D $cluster -U context_test -A trust --encoding=UTF8 --locale=C | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'Disposable cluster initialization failed' }
   $start = Start-Process -FilePath $pgCtl -ArgumentList @('-D', "`"$cluster`"", '-l', "`"$(Join-Path $testRoot 'postgres.log')`"", '-o', "`"-h 127.0.0.1 -p $testPort -F`"", '-w', 'start') -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $testRoot 'startup.out') -RedirectStandardError (Join-Path $testRoot 'startup.err')
   $null = $start.Handle

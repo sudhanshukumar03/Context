@@ -1,11 +1,12 @@
 import { Component, useEffect, useState, type ReactNode } from "react";
+import ContextLogo from "./ContextLogo";
 
 export function ApplicationStatus({ failed = false, title, message, contained = false, recoveryHref }: {
   failed?: boolean; title?: string; message?: string; contained?: boolean; recoveryHref?: string;
 }) {
   return <div className={`${contained ? "w-full max-w-md" : "min-h-[100dvh]"} flex items-center justify-center bg-slate-950 px-6 py-10 text-slate-100`}>
     <section className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-7" role={failed ? "alert" : "status"} aria-live="polite">
-      <p className="mb-5 text-sm font-semibold tracking-wide text-indigo-300">Context</p>
+      <ContextLogo dark className="mb-3" />
       <h1 className="text-xl font-semibold leading-tight">{title ?? (failed ? "Unable to open Context" : "Opening your workspace")}</h1>
       <p className="mt-3 text-sm leading-relaxed text-slate-300">{message ?? (failed
         ? "The page could not finish loading. Check your connection, then try again."

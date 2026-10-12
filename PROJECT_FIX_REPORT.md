@@ -11,19 +11,20 @@ Gemini provider checks were subsequently run with synthetic prompts as documente
 
 | Metric | Before | After |
 | --- | --- | --- |
-| Unit/mocked HTTP suite | 86 tests / 9 files passing | 159 tests / 21 files passing |
-| Disposable PostgreSQL verification | None | 8 passing tests |
+| Unit/mocked HTTP suite | 86 tests / 9 files passing | 198 tests / 26 files passing |
+| Disposable PostgreSQL verification | None | 10 passing tests |
 | Migration checksum portability | None | 2 passing Node tests |
 | Full workspace types | Passing | Passing |
 | API build | Passing | Passing |
 | Dashboard build | Not measured in initial review | Passing |
-| API entry bundle | 3,974,663 bytes in preceding audit | 3,924,263 bytes on final code build |
+| API entry bundle | 3,974,663 bytes in preceding audit | 3,925,335 bytes on final code build |
 | Numeric coverage / lint | Not configured | Not configured |
-| Hosted CI / Docker execution | No workflow/image setup | Files prepared; execution unverified |
+| Production Docker execution | No image verification | Local build, runtime, guards and shutdown pass |
+| Hosted CI | No workflow setup | Workflow prepared; hosted execution unverified |
 
 Commands: `pnpm test`, `pnpm run typecheck`, API/dashboard `run build`,
 `node --test lib/db/test/checksum.test.mjs`, and
-`powershell -NoProfile -File scripts/test-disposable-db.ps1`.
+`powershell -NoProfile -File scripts/test-disposable-db.ps1`, and `pnpm test:container`.
 Local database tests used PostgreSQL 18.4; CI is configured with PostgreSQL 16.
 Build timings are not comparable performance benchmarks.
 
@@ -74,12 +75,13 @@ control. Temporary viewport overrides were reset. Screenshot:
 
 - Apply reviewed migrations/initialization to the intended database and configure
   deployment secrets/domain/origins. Prepared instructions are in `DEPLOYMENT.md`.
-- Enable Clerk Organizations and verify invitations, organization switching and
-  sign-in against the real application instance; no live membership was changed.
+- Clerk Organizations and personal sign-in are configured and verified. Verify
+  team switching, invitations and member permissions using a test organization
+  and a second account; no live membership was changed.
 - Install the reusable workflow in the deployment repository and configure its
   Actions secrets; perform a live deployment-delivery check there.
-- Docker image build/run was not tested because the local Docker daemon is not
-  running. Hosted CI has not run from this local branch.
+- Production Docker build/run, authentication guards, asset serving, database
+  readiness and shutdown pass locally. Hosted CI has not run from this branch.
 - Worker session locks require direct/session PostgreSQL connections, not a
   transaction pooler. Concurrency caps are per process. Recovery scans 64 rows at
   a time; production throughput/fairness under large backlogs is unmeasured.
@@ -226,3 +228,76 @@ checks passed for PostgreSQL readiness, dashboard proxy, private-file HTTP 403 a
 signed-out/demo-header HTTP 401. Seven Node configuration tests plus two checksum
 tests pass, as do all 159 unit/HTTP tests, workspace types, API and dashboard builds.
 See `LOCAL_TEST.md` for activation, saved modes, quota/data flow and disabling AI.
+
+
+## Follow-up: authenticated workspace and incident checks
+
+The user completed Context sign-in in Brave. The authenticated personal dashboard
+and organization switcher were observed against the actual Clerk test instance
+and isolated PostgreSQL database. No test organization was available at that
+check; creation of Context Test was requested. Live team switching, invitations,
+and a second account's member permissions are still pending. Signed Clerk SDK
+HTTP tests now also exercise admin-only writes and returning to the original
+personal workspace without trusting client role claims.
+
+Fixed the legacy context graph to require authentication and query the verified
+selected workspace, rather than looking up the user's personal organization.
+Both document recommendation routes now return actual uploaded titles or an
+empty list. Their response fields remain name/why. The legacy context brief,
+team recommendation examples, and generic onboarding graph relationships still
+need replacement; the incident dashboard uses its separate live service graph.
+
+Slack destinations are isolated by account and workspace. Old unscoped browser
+values are retained but ignored; browser storage denial does not break startup.
+Shared sends require admin authorization, input validation, a five-second timeout,
+and refusal of redirects. Network errors do not log the secret URL. Stale pending
+notification/key requests are stopped when their workspace has unmounted. No
+external Slack message or invitation was sent during verification.
+
+The live synthetic incident scenario exposed a Windows database encoding failure
+on the final checkmark message. Local initialization now explicitly uses UTF-8.
+The existing generated local database was dumped, restored into a UTF-8 copy,
+and compared across 13 public tables and ID sequences before a transactional
+name swap. The original database and dump are retained privately; no database
+was dropped, and no configured production database was accessed. Startup verifies
+multilingual text and emoji through a temporary table. The repair follows
+[PostgreSQL database creation rules](https://www.postgresql.org/docs/current/sql-createdatabase.html)
+and [database rename rules](https://www.postgresql.org/docs/current/sql-alterdatabase.html).
+
+Demo steps now wait for server persistence, pause on error, and retry the failed
+step. Closing or switching workspaces prevents subsequent steps. Each server
+step is transactional; a disposable PostgreSQL test proves complete rollback
+when a recovery event fails. The changed controls are 44px high, support keyboard
+retry, and use static progress/spinners under reduced motion. A temporary browser
+fixture verified pause/retry/cancellation and was removed. Recovery calculations
+use current service health, preserving old failures in the timeline without
+projecting renewed active risk from those old events.
+Automatic AI insights likewise suppress recovered retry storms, label historical
+deployment correlations informationally, and report unhealthy telemetry even
+when no event pattern matches. The signed-in AI panel verified this behavior.
+
+The actual signed-in dashboard showed five healthy services, no active risk, and
+retained incident history. A live Gemini answer explained the synthetic incident
+and confirmed recovery. Screenshot: tmp/verification/context-authenticated-ai.png.
+The initial full postmortem hit the short per-attempt timeout. Reports now receive
+up to 50 seconds per attempt within one 55-second retry budget and 4096 output
+tokens; truncated output is rejected, and the UI reports failure accurately.
+A subsequent real postmortem request succeeded in about 29 seconds. The browser
+download capture returned no file path and access to Brave's internal downloads
+page was blocked; the user subsequently confirmed the Markdown file was downloaded
+in Brave. The full nine-step incident scenario also completed against the actual
+local database, ending with all five services healthy and incident history retained.
+
+Verification: 198 unit/HTTP tests, 10 disposable PostgreSQL tests, nine Node
+configuration/checksum checks, workspace types, API/dashboard builds and restarted
+Clerk+Gemini smoke checks pass. The smoke script now exits naturally and consumes
+blocked-file response bodies, avoiding forced-exit Windows shutdown errors.
+The approved Context artwork and matching favicon are integrated; AI uses the
+requested robot icon. A production Linux container was built and run with a
+disposable PostgreSQL 16 database and synthetic credentials. Non-root startup,
+loopback binding, database readiness, SPA deep links, branding assets, JSON 404,
+production rejection of demo headers, and clean SIGTERM shutdown passed. Only
+the fixture's labeled containers and networks were removed; the verified image
+was retained locally. The check now runs in the CI workflow, whose hosted run is
+still unverified. No hosted deployment, live GitHub workflow, production migration,
+invitations, or other native connectors were completed.

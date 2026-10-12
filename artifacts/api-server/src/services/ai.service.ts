@@ -80,19 +80,21 @@ class AiOperationError extends Error {
   }
 }
 
-export async function withRetry<T>(tool: string, fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+export async function withRetry<T>(tool: string, fn: () => Promise<T>, maxAttempts = 3, deadline?: number): Promise<T> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await fn();
     } catch (err) {
       if (attempt === maxAttempts - 1 || !isRetryable(err)) throw new AiOperationError(tool, attempt + 1, err);
-      await new Promise((r) => setTimeout(r, retryDelay(err, attempt)));
+      const delay = retryDelay(err, attempt);
+      if (deadline !== undefined && performance.now() + delay >= deadline) throw new AiOperationError(tool, attempt + 1, err);
+      await new Promise((r) => setTimeout(r, delay));
     }
   }
   throw new Error("AI retry policy requires at least one attempt");
 }
 
-export async function callAi(systemPrompt: string, userMessage: string, maxTokens = MAX_TOKENS): Promise<string> {
+export async function callAi(systemPrompt: string, userMessage: string, maxTokens = MAX_TOKENS, timeoutMs = ATTEMPT_TIMEOUT_MS): Promise<string> {
   const response = await openai.chat.completions.create({
     model: MODEL,
     temperature: TEMPERATURE,
@@ -101,9 +103,9 @@ export async function callAi(systemPrompt: string, userMessage: string, maxToken
       { role: "system", content: systemPrompt },
       { role: "user", content: userMessage },
     ],
-  }, { timeout: ATTEMPT_TIMEOUT_MS, maxRetries: 0 });
+  }, { timeout: timeoutMs, maxRetries: 0 });
   const content = response.choices[0]?.message?.content;
-  if (!content?.trim()) throw new InvalidAiResponseError();
+  if (!content?.trim() || response.choices[0]?.finish_reason === "length") throw new InvalidAiResponseError();
   return content;
 }
 

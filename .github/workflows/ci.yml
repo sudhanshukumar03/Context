@@ -30,6 +30,7 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm --filter @workspace/api-server run build
       - run: pnpm --filter @workspace/context-app run build
+      - run: pnpm test:container
       - run: pnpm exec vitest run --config vitest.integration.config.ts
         env:
           CONTEXT_TEST_DATABASE_URL: postgresql://context_test:disposable-test-only@127.0.0.1:5433/context_disposable_00000000000000000000000000000000

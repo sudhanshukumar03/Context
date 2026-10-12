@@ -98,7 +98,7 @@ if ($Action -eq 'Status') {
   return
 }
 
-foreach ($command in @('initdb', 'pg_ctl', 'createdb', 'psql', 'pnpm')) { $null = Get-Command $command }
+foreach ($command in @('initdb', 'pg_ctl', 'createdb', 'psql', 'pg_dump', 'pg_restore', 'pnpm')) { $null = Get-Command $command }
 if ($ApiPort -eq $DashboardPort) { throw 'API and dashboard ports must differ.' }
 New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
 if (!(Test-Path -LiteralPath $configPath)) {
@@ -141,7 +141,7 @@ $processes = @{}
 try {
   $fresh = !(Test-Path -LiteralPath (Join-Path $config.cluster 'PG_VERSION'))
   if ($fresh) {
-    & initdb -D $config.cluster -U context_test -A trust *> (Join-Path $testRoot 'initdb.out')
+    & initdb -D $config.cluster -U context_test -A trust --encoding=UTF8 --locale=C *> (Join-Path $testRoot 'initdb.out')
     if ($LASTEXITCODE -ne 0) { throw 'Isolated database initialization failed; see tmp/local-test/initdb.out.' }
   }
   & pg_ctl -D $config.cluster status *> $null
@@ -156,9 +156,11 @@ try {
   $databaseExists = & psql -h 127.0.0.1 -p $config.databasePort -U context_test -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname = 'context_local_$($config.runId)'"
   if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect isolated database.' }
   if ($databaseExists -ne '1') {
-    & createdb -h 127.0.0.1 -p $config.databasePort -U context_test "context_local_$($config.runId)"
+    & createdb -h 127.0.0.1 -p $config.databasePort -U context_test --template=template0 --encoding=UTF8 --locale=C "context_local_$($config.runId)"
     if ($LASTEXITCODE -ne 0) { throw 'Isolated database creation failed.' }
   }
+  & $node (Join-Path $PSScriptRoot 'local-database-encoding.mjs') --repair
+  if ($LASTEXITCODE -ne 0) { throw 'Local UTF8 validation/repair failed; original data is preserved.' }
   $tableCount = & psql -h 127.0.0.1 -p $config.databasePort -U context_test -d "context_local_$($config.runId)" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'"
   if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect isolated schema.' }
   if ($tableCount -eq '0') {

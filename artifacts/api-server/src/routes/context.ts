@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { eq } from "drizzle-orm";
-import { db, documents, users } from "@workspace/db";
-import { getAuth } from "@clerk/express";
-import { ok } from "../lib/response.js";
+import { db, documents } from "@workspace/db";
+import { requireAuth } from "../middleware/auth.js";
+import { fail, ok } from "../lib/response.js";
 
 type Role = "backend" | "frontend" | "pm";
 const VALID_ROLES: Role[] = ["backend", "frontend", "pm"];
@@ -69,27 +69,6 @@ const TEAM: Record<Role, object[]> = {
   ],
 };
 
-const DOCS: Record<Role, object[]> = {
-  backend: [
-    { name: "Auth v2: System Design", why: "Directly relevant to your first sprint tasks." },
-    { name: "Engineering Handbook", why: "Defines the coding standards you'll be held to." },
-    { name: "Payments API Reference", why: "The primary API surface you'll build against." },
-    { name: "On-Call Runbook", why: "You're on rotation in week 3." },
-  ],
-  frontend: [
-    { name: "Design System Migration Guide", why: "Your first major contribution touches this." },
-    { name: "Component Contribution Docs", why: "Required reading before opening your first PR." },
-    { name: "Figma Handoff Standards", why: "Defines how design specs reach your codebase." },
-    { name: "Accessibility Checklist", why: "All components must pass this before shipping." },
-  ],
-  pm: [
-    { name: "Auth v2: Product Requirements", why: "The project you're expected to own from day one." },
-    { name: "Q2 Roadmap & OKRs", why: "Context for every prioritization decision you'll make." },
-    { name: "Stakeholder Map (Engineering)", why: "Who to loop in for which decisions." },
-    { name: "PM Onboarding Checklist", why: "Your 30/60/90 day plan." },
-  ],
-};
-
 const GRAPH_NODES = [
   { id: "you", label: "You", type: "user", color: "#6366f1" },
   { id: "team", label: "Team", type: "team", color: "#8b5cf6" },
@@ -119,37 +98,22 @@ router.get("/context/team", (req: Request, res: Response) => {
   ok(res, TEAM[role]);
 });
 
-router.get("/context/documents", async (req: Request, res: Response) => {
-  const role = parseRole(req.query.role);
-  ok(res, DOCS[role]);
-});
+async function recommendedDocuments(req: Request, res: Response) {
+  const orgId = req.auth!.organizationId;
+  if (!orgId) { fail(res, "Organization required", 403); return; }
+  const orgDocs = await db.select({ id: documents.id, title: documents.title }).from(documents)
+    .where(eq(documents.organizationId, orgId)).limit(20);
+  ok(res, orgDocs.map((document) => ({ name: document.title, why: "Uploaded to your current workspace." })));
+}
+router.get("/context/documents", requireAuth, recommendedDocuments);
 
-router.get("/context-graph", async (req: Request, res: Response) => {
-  const { userId: clerkUserId } = getAuth(req);
-  let extraNodes: object[] = [];
-  let extraEdges: object[] = [];
-
-  if (clerkUserId) {
-    try {
-      const [dbUser] = await db
-        .select()
-        .from(users)
-        .where(eq(users.clerkUserId, clerkUserId))
-        .limit(1);
-
-      if (dbUser?.organizationId) {
-        const orgDocs = await db
-          .select({ id: documents.id, title: documents.title })
-          .from(documents)
-          .where(eq(documents.organizationId, dbUser.organizationId))
-          .limit(5);
-
-        extraNodes = orgDocs.map((d) => ({ id: `doc-${d.id}`, label: d.title, type: "document", color: "#64748b" }));
-        extraEdges = orgDocs.map((d) => ({ from: "docs", to: `doc-${d.id}`, type: "DOC_TO_FILE", label: "contains" }));
-      }
-    } catch { /* unauthenticated or lookup failed — use static graph */ }
-  }
-
+router.get("/context-graph", requireAuth, async (req: Request, res: Response) => {
+  const orgId = req.auth!.organizationId;
+  if (!orgId) { fail(res, "Organization required", 403); return; }
+  const orgDocs = await db.select({ id: documents.id, title: documents.title }).from(documents)
+    .where(eq(documents.organizationId, orgId)).limit(5);
+  const extraNodes = orgDocs.map((d) => ({ id: `doc-${d.id}`, label: d.title, type: "document", color: "#64748b" }));
+  const extraEdges = orgDocs.map((d) => ({ from: "docs", to: `doc-${d.id}`, type: "DOC_TO_FILE", label: "contains" }));
   ok(res, {
     nodes: [...GRAPH_NODES, ...extraNodes],
     edges: [...GRAPH_EDGES, ...extraEdges],
@@ -161,9 +125,6 @@ router.get("/team", (req: Request, res: Response) => {
   ok(res, TEAM[role]);
 });
 
-router.get("/documents/recommended", (req: Request, res: Response) => {
-  const role = parseRole(req.query.role);
-  ok(res, DOCS[role]);
-});
+router.get("/documents/recommended", requireAuth, recommendedDocuments);
 
 export default router;

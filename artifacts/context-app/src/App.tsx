@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Sparkles, ChevronRight, ArrowRight, CheckCircle2, X, Sun, Moon,
+  Sparkles, Bot, ChevronRight, ArrowRight, CheckCircle2, X, Sun, Moon,
   AlertTriangle, Activity, Network, MessageSquare, Clock, RefreshCw,
   Shield, Terminal, Zap, Send, AlertCircle, TrendingDown, Radio,
   Database, Server, Package, ChevronDown, Play, Info, SkipForward,
@@ -16,9 +16,11 @@ import { publishableKeyFromHost } from "@clerk/react/internal";
 import { dark } from "@clerk/themes";
 import { Switch, Route, Redirect, useLocation, Router as WouterRouter } from "wouter";
 import DemoVideoInline from "./components/DemoVideoInline";
+import ContextLogo, { ContextMark } from "./components/ContextLogo";
 import WebhookKeySettings from "./components/WebhookKeySettings";
 import { ApplicationStatus, AuthenticationLoading } from "./components/ApplicationStartup";
 import { ClerkSession, DevSession, isDevAuthBypass, useAuth, useUser } from "./lib/auth-session";
+import { isSlackWebhookUrl, readSlackWebhook, saveSlackWebhook } from "./lib/workspace-preferences";
 
 const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL as string | undefined;
@@ -175,7 +177,7 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
               <span className="inline-flex items-center rounded-md border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-600 dark:text-red-300">{confidence}% confidence</span>
               {rootCause.llmEnriched && (
                 <span className="inline-flex items-center gap-1 rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold text-indigo-300">
-                  <Sparkles size={9} />AI‑reasoned
+                  <Bot size={9} aria-hidden="true" />AI‑reasoned
                 </span>
               )}
               {rootCause.incidentMinutes > 0 && (
@@ -603,6 +605,8 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
   const [insightsLoading, setInsightsLoading] = useState(true);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   const copyMessage = useCallback((text: string, idx: number) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -615,6 +619,7 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
     (async () => {
       try {
         const token = await getToken();
+        if (!mounted.current) return;
         const data = await apiFetch("/ai/auto-insights", token) as AutoInsight[];
         setInsights(data);
       } catch { /* ignore */ }
@@ -637,6 +642,7 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
     setLoading(true);
     try {
       const token = await getToken();
+      if (!mounted.current) return;
       const data = await apiFetch("/ai/incident-ask", token, { method: "POST", body: JSON.stringify({ question, role }) }) as { answer: string; confidence: number; sources: string[]; reasoning: string[]; impact: string[]; actions: string[] };
       setMessages(m => [...m, { role: "ai", text: data.answer, answer: data }]);
     } catch (err) {
@@ -691,7 +697,7 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
           <div className="py-4">
             <div className="flex flex-col items-center text-center mb-6">
               <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center mb-3">
-                <Sparkles size={18} className="text-indigo-400" />
+                <Bot size={18} className="text-indigo-400" aria-hidden="true" />
               </div>
               <h3 className="text-sm font-semibold text-white mb-1">AI Incident Commander</h3>
               <p className="text-xs text-slate-500 max-w-xs">Ask anything. Powered by your live service graph and event data.</p>
@@ -711,7 +717,7 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
           <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
             {msg.role === "ai" && (
               <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Sparkles size={12} className="text-white" />
+                <Bot size={12} className="text-white" aria-hidden="true" />
               </div>
             )}
             <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${msg.role === "user" ? "bg-indigo-600 text-white text-sm" : "bg-slate-800/80 border border-white/8"}`}>
@@ -797,7 +803,7 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
 
         {loading && (
           <div className="flex gap-3">
-            <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0"><Sparkles size={12} className="text-white" /></div>
+            <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0"><Bot size={12} className="text-white" aria-hidden="true" /></div>
             <div className="rounded-2xl px-4 py-3 bg-slate-800/80 border border-white/8">
               <div className="flex gap-1">{[0,1,2].map(i => <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-indigo-400" animate={{ opacity: [0.3,1,0.3] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }} />)}</div>
             </div>
@@ -1270,7 +1276,7 @@ function SlackSettingsModal({ onClose, onSave, current }: { onClose: () => void;
   const { getToken } = useAuth();
 
   const testWebhook = async () => {
-    if (!url.startsWith("https://hooks.slack.com/")) { setTestResult("err"); return; }
+    if (!isSlackWebhookUrl(url)) { setTestResult("err"); return; }
     setTesting(true); setTestResult(null);
     try {
       const token = await getToken();
@@ -1293,13 +1299,15 @@ function SlackSettingsModal({ onClose, onSave, current }: { onClose: () => void;
             </div>
             <h2 className="text-sm font-semibold text-white">Slack Notifications</h2>
           </div>
-          <button onClick={onClose} className="text-slate-600 hover:text-white"><X size={16} /></button>
+          <button onClick={onClose} aria-label="Close Slack settings" className="min-h-11 min-w-11 flex items-center justify-center text-slate-600 hover:text-white"><X size={16} /></button>
         </div>
         <p className="text-xs text-slate-500 mb-4 leading-relaxed">
           Paste your Slack Incoming Webhook URL. Context will send a message whenever a new incident is detected.
         </p>
         <div className="space-y-3">
+          <label htmlFor="slack-webhook-url" className="block text-xs text-slate-300">Webhook URL</label>
           <input
+            id="slack-webhook-url"
             value={url} onChange={e => { setUrl(e.target.value); setTestResult(null); }}
             placeholder="https://hooks.slack.com/services/..."
             className="w-full rounded-xl bg-slate-800/80 border border-white/10 text-xs text-white placeholder:text-slate-600 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 font-mono"
@@ -1307,12 +1315,12 @@ function SlackSettingsModal({ onClose, onSave, current }: { onClose: () => void;
           {testResult === "ok" && <p className="text-xs text-emerald-400">✓ Test message sent — check your Slack channel</p>}
           {testResult === "err" && <p className="text-xs text-red-400">✗ Could not reach Slack — check the URL</p>}
           <div className="flex gap-2 pt-1">
-            <button onClick={testWebhook} disabled={testing || !url}
-              className="flex-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-300 py-2.5 transition-all disabled:opacity-40">
+            <button onClick={testWebhook} disabled={testing || !isSlackWebhookUrl(url)}
+              className="min-h-11 flex-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-300 py-2.5 transition-all disabled:opacity-40">
               {testing ? "Testing…" : "Send test message"}
             </button>
-            <button onClick={() => { onSave(url); onClose(); }}
-              className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white py-2.5 transition-all">
+            <button onClick={() => { if (isSlackWebhookUrl(url)) { onSave(url); onClose(); } }} disabled={testing || !isSlackWebhookUrl(url)}
+              className="min-h-11 flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white py-2.5 transition-all disabled:opacity-40">
               Save
             </button>
           </div>
@@ -1328,7 +1336,8 @@ type Tab = "overview" | "graph" | "timeline" | "ai" | "history";
 
 function Dashboard({ onBack }: { onBack: () => void }) {
   const { user } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, orgId, orgRole } = useAuth();
+  const canManageWorkspace = !orgId || orgRole === "org:admin";
   const [isDark, toggleDark] = useDarkMode();
   const [tab, setTab] = useState<Tab>("overview");
   const [role, setRole] = useState<Role>("sre");
@@ -1340,7 +1349,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
   const [showNotifs, setShowNotifs] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
   const [showSlackSettings, setShowSlackSettings] = useState(false);
-  const [slackWebhookUrl, setSlackWebhookUrl] = useState(() => localStorage.getItem("ctx-slack-webhook") ?? "");
+  const [slackWebhookUrl, setSlackWebhookUrl] = useState(() => user
+    ? readSlackWebhook(() => window.localStorage, user.id, orgId) : "");
 
   const [risks, setRisks] = useState<RiskEntry[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -1355,6 +1365,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
   const fetching = useRef(false);
   const [incidentElapsed, setIncidentElapsed] = useState(0);
   const [postmortemLoading, setPostmortemLoading] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   // ── Greeting toast on mount ────────────────────────────────────────────────
   useEffect(() => {
@@ -1376,17 +1388,18 @@ function Dashboard({ onBack }: { onBack: () => void }) {
       // bump unread badge
       setNotifCount(c => c + 1);
       // fire Slack if configured
-      if (slackWebhookUrl) {
+      if (slackWebhookUrl && canManageWorkspace) {
         const affected = services.filter(s => s.status !== "healthy").map(s => s.name).join(", ");
         getToken().then(token => {
-          apiFetch("/notify/slack", token, {
+          if (!mounted.current) return;
+          return apiFetch("/notify/slack", token, {
             method: "POST",
             body: JSON.stringify({
               webhookUrl: slackWebhookUrl,
               text: `🚨 *Context — New Incident Detected*\n${affected} are failing or degraded. Open the dashboard to investigate.`,
             }),
-          }).catch(() => {});
-        });
+          });
+        }).catch(() => {});
       }
     }
     hasIncidentRef.current = nowHas;
@@ -1449,13 +1462,17 @@ function Dashboard({ onBack }: { onBack: () => void }) {
   const handleScenarioStep = useCallback(async (step: number) => {
     try {
       const token = await getToken();
+      if (!mounted.current) throw new Error("Workspace changed. Start the scenario in the current workspace.");
       if (step === 0) {
         await apiFetch("/demo/reset", token, { method: "POST" });
         setTab("overview");
       }
       await apiFetch("/demo/advance", token, { method: "POST", body: JSON.stringify({ step }) });
       setLastRefresh(n => n + 1);
-    } catch (error) { setActionFeedback(error instanceof Error ? error.message : "The demo step failed. Please retry."); }
+    } catch (error) {
+      if (mounted.current) setActionFeedback(error instanceof Error ? error.message : "The demo step failed. Please retry.");
+      throw error;
+    }
   }, [getToken]);
 
   const handleAction = useCallback(async (action: string, svcName: string) => {
@@ -1475,6 +1492,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
     try {
       const token = await getToken();
       const data = await apiFetch("/insights/postmortem", token, { method: "POST" }) as { markdown: string };
+      if (!mounted.current) return;
       const blob = new Blob([data.markdown], { type: "text/markdown" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1486,8 +1504,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
       URL.revokeObjectURL(url);
       setActionFeedback("✓ Post-mortem downloaded");
       setTimeout(() => setActionFeedback(null), 3000);
-    } catch {
-      setActionFeedback("⚠ Could not generate post-mortem — run the demo first");
+    } catch (error) {
+      setActionFeedback(error instanceof Error ? `${error.message}. Please retry.` : "Could not generate the post-mortem. Please retry.");
       setTimeout(() => setActionFeedback(null), 3000);
     }
     setPostmortemLoading(false);
@@ -1499,7 +1517,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
     { id: "overview", label: "Overview", icon: Activity, count: risks.length || undefined },
     { id: "graph", label: "Graph", icon: Network },
     { id: "timeline", label: "Timeline", icon: Clock, count: timeline.length || undefined },
-    { id: "ai", label: "AI", icon: Sparkles },
+    { id: "ai", label: "AI", icon: Bot },
     { id: "history", label: "History", icon: ListChecks },
   ];
 
@@ -1518,11 +1536,11 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                        px-5 py-3 shadow-[0_8px_32px_rgba(99,102,241,0.18)]"
           >
             <motion.div
-              className="w-7 h-7 rounded-xl bg-indigo-600 flex items-center justify-center flex-shrink-0"
+              className="w-7 h-7 flex items-center justify-center flex-shrink-0"
               animate={{ scale: [1, 1.12, 1] }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
-              <Sparkles size={13} className="text-white" />
+              <ContextMark decorative className="w-7 h-7" />
             </motion.div>
             <span className="text-sm font-semibold text-white">{greetingMsg}</span>
           </motion.div>
@@ -1542,10 +1560,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
       <header className="sticky top-0 z-30 backdrop-blur-sm" style={{ borderBottom: "1px solid var(--ctx-border)", background: "var(--ctx-bg-alpha)" }}>
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center flex-shrink-0">
-              <Sparkles size={13} className="text-white" />
-            </div>
-            <span className="text-sm font-semibold text-white hidden sm:block">Context</span>
+            <ContextLogo compact />
             {isLive && (
               <span className="flex items-center gap-1.5 rounded-full bg-red-500/10 border border-red-500/20 px-2.5 py-1 text-[10px] font-bold text-red-400">
                 <motion.span className="w-1.5 h-1.5 rounded-full bg-red-500" animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1, repeat: Infinity }} />
@@ -1631,7 +1646,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
               </AnimatePresence>
             </div>
             {/* Slack settings */}
-            <button onClick={() => setShowSlackSettings(true)} title="Slack notifications"
+            <button onClick={() => setShowSlackSettings(true)} disabled={!canManageWorkspace}
+              title={canManageWorkspace ? "Slack notifications" : "An organization admin manages Slack notifications"}
               className={`p-1.5 rounded-lg transition-colors hidden sm:block ${slackWebhookUrl ? "text-[#4A154B] bg-purple-500/10 hover:bg-purple-500/20" : "text-slate-500 hover:text-white hover:bg-white/5"}`}>
               <MessageSquare size={13} />
             </button>
@@ -1640,7 +1656,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
               {postmortemLoading ? <RefreshCw size={11} className="animate-spin" /> : <FileText size={11} />}
               <span>Post-mortem</span>
             </button>
-            <button onClick={() => { setShowDemo(d => !d); setIsLive(true); }}
+            <button onClick={() => { setShowDemo(d => !d); setIsLive(true); }} disabled={!canManageWorkspace}
+              title={canManageWorkspace ? "Run the demo scenario" : "An organization admin can run a shared demo"}
               className="flex items-center gap-1.5 text-[11px] font-semibold rounded-lg border border-indigo-500/25 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 px-3 py-1.5 transition-all">
               <Play size={11} />
               <span className="hidden sm:inline">Run Demo</span>
@@ -1807,9 +1824,10 @@ function Dashboard({ onBack }: { onBack: () => void }) {
             current={slackWebhookUrl}
             onClose={() => setShowSlackSettings(false)}
             onSave={url => {
+              if (!user || !canManageWorkspace) return;
+              const saved = saveSlackWebhook(() => window.localStorage, user.id, orgId, url);
               setSlackWebhookUrl(url);
-              localStorage.setItem("ctx-slack-webhook", url);
-              setActionFeedback("✓ Slack webhook saved");
+              setActionFeedback(saved ? "✓ Slack webhook saved for this workspace" : "Slack webhook enabled for this session; browser storage is unavailable.");
               setTimeout(() => setActionFeedback(null), 3000);
             }}
           />
@@ -1985,10 +2003,7 @@ function DemoIntro({ onSkip }: { onSkip: () => void }) {
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 flex-shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center">
-            <Sparkles size={12} className="text-white" />
-          </div>
-          <span className="text-sm font-semibold text-white">Context</span>
+          <ContextLogo dark />
         </div>
         <AnimatePresence>
           {showSkip && (
@@ -2028,8 +2043,7 @@ function Landing({ onSignIn, onSignUp }: { onSignIn: () => void; onSignUp: () =>
       <header className="fixed top-0 left-0 right-0 z-30 backdrop-blur-sm" style={{ borderBottom: "1px solid var(--ctx-border)", background: "var(--ctx-bg-alpha)" }}>
         <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-indigo-600 flex items-center justify-center"><Sparkles size={12} className="text-white" /></div>
-            <span className="text-sm font-semibold text-white">Context</span>
+            <ContextLogo compact />
           </div>
           <div className="flex items-center gap-3">
             <button onClick={toggleDark} aria-label={d ? "Switch to light mode" : "Switch to dark mode"} className="p-2 rounded-lg hover:bg-white/5 transition-colors">
@@ -2105,9 +2119,8 @@ function Landing({ onSignIn, onSignUp }: { onSignIn: () => void; onSignUp: () =>
 
       <footer className="px-6 py-10" style={{ borderTop: "1px solid var(--ctx-border)" }}>
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-md bg-indigo-600 flex items-center justify-center"><Sparkles size={10} className="text-white" /></div>
-            <span className="text-xs font-semibold text-white">Context</span>
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+            <ContextLogo />
             <span className="text-xs text-slate-700 ml-1">— Your AI incident commander.</span>
           </div>
           <p className="text-xs text-slate-700">MIT License · 2025 · Built for engineers</p>
@@ -2122,11 +2135,11 @@ function Landing({ onSignIn, onSignUp }: { onSignIn: () => void; onSignUp: () =>
 
 function HomeRedirect() {
   const [, setLocation] = useLocation();
-  const { orgId } = useAuth();
+  const { orgId, user } = useAuth();
   if (isDevAuthBypass) return <Dashboard onBack={() => setLocation("/welcome")} />;
   return (
     <>
-      <Show when="signed-in"><Dashboard key={orgId ?? "personal"} onBack={() => setLocation("/sign-out")} /></Show>
+      <Show when="signed-in"><Dashboard key={JSON.stringify([user?.id, orgId])} onBack={() => setLocation("/sign-out")} /></Show>
       <Show when="signed-out"><Landing onSignIn={() => setLocation("/sign-in")} onSignUp={() => setLocation("/sign-up")} /></Show>
     </>
   );

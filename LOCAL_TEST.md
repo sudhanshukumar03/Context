@@ -6,12 +6,14 @@ From a PowerShell terminal in the project folder:
 pnpm local:start
 ```
 
-Open **http://127.0.0.1:31800**. The dashboard signs in as Local Developer.
-No Clerk account is needed for this demo. PostgreSQL runs separately on a
-generated port; the API runs at http://127.0.0.1:31801.
+Open **http://127.0.0.1:31800**. A first start uses the Local Developer demo;
+later starts retain your selected mode. In Clerk mode, sign in to Context itself
+at `/sign-in`; your ChatGPT login does not sign you into Context. PostgreSQL runs
+separately on a generated port; the API runs at http://127.0.0.1:31801.
 
 Requirements: installed project dependencies, Node 24+, pnpm, and PostgreSQL's
-`initdb`, `pg_ctl`, `psql`, and `createdb` commands on PATH. Docker is not needed.
+`initdb`, `pg_ctl`, `psql`, `createdb`, `pg_dump`, and `pg_restore` commands on PATH.
+Docker is not needed.
 
 ## Useful commands
 
@@ -42,6 +44,24 @@ Later starts retain the saved ports. Generated configuration, cluster, process
 identities and logs stay in the ignored `tmp/local-test/` directory. Logs are
 `api.out`, `api.err`, `dashboard.out`, `dashboard.err`, and `postgres.log`.
 The stop command verifies process identity before stopping a saved process.
+
+The generated database uses UTF-8 so incident messages, emoji and multilingual
+text can be saved. On start, an older Windows-encoded local database is backed up
+and restored into a UTF-8 copy while app processes are stopped. All public table
+data and ID sequences must match before an atomic name swap. The original
+database is retained as an archive; the dump and recovery metadata remain in
+`tmp/local-test/encoding-backup-*.dump` and `encoding-repair-*.json`. The repair
+validates both the generated database target and the server's cluster directory;
+it cannot operate on your configured production database. No database is dropped.
+Startup also verifies Unicode storage with a temporary table.
+
+Slack notification URLs are saved separately for each signed-in account and
+workspace. Existing unscoped browser values are preserved but never reused
+automatically; enter the destination again in the intended workspace. Shared
+notifications and demo mutations require an organization admin. Demo progress
+advances only after a step saves successfully; a failure pauses the scenario and
+offers retry. Current service health controls active risk, while old failure and
+recovery events remain visible in Timeline and History.
 
 ## What this verifies
 

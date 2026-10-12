@@ -93,3 +93,27 @@ Completed steps and verification will be appended below.
   incident answer, postmortem and brief services passed live synthetic checks.
   Local app restarted with Clerk + Gemini; readiness, private-file denies and
   signed-out protection pass. 159 unit/HTTP + 9 Node checks pass; builds/types pass.
+
+- Context sign-in verified in Brave; the personal dashboard and organization
+  switcher load. Real test organization/member checks still await user setup.
+- Workspace graph/documents and Slack settings now use selected-workspace scope;
+  signed admin/personal-session and notification validation regressions added.
+- Live scenario uncovered Windows encoding and false-completion problems. Existing
+  local data was preserved and verified during UTF-8 conversion; demo steps now
+  wait/pause/retry, roll back on failure, and honor reduced motion. Recovery risk
+  follows current telemetry. Unicode and rollback checks pass on disposable PG.
+- Authenticated Gemini question passed on persisted synthetic incident data.
+  Full postmortem deadline/truncation safeguards fixed; real generation succeeded,
+  and the user confirmed the Markdown report was downloaded in Brave.
+  The complete nine-step scenario persisted successfully and ended with all five
+  services healthy, retaining the incident timeline.
+- Automatic AI insights distinguish recovered historical correlations from active
+  retry storms; unhealthy telemetry no longer receives an all-normal message.
+  Live signed-in recovery cards verified. Screenshot: tmp/verification/context-recovered-insights.png.
+- 198 unit/HTTP tests, 10 database tests, nine Node checks, workspace types and
+  API/dashboard builds pass. Local Clerk+Gemini app remains running. Context logo
+  and robot AI icons are integrated. Production Docker build/runtime, database
+  readiness, assets, authentication guards and clean shutdown pass locally;
+  pnpm test:container is included in CI. The disposable database stays on an
+  internal network; only the app exposes a loopback port. Hosted deployment/CI,
+  shared-team browser checks and five native connectors remain unfinished.

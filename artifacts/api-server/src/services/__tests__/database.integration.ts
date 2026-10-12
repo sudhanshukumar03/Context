@@ -10,6 +10,12 @@ import { ingestServiceEvent } from "../event-ingestion.js";
 import { getOrCreateBrief } from "../brief-submissions.js";
 import { runBriefJob } from "../brief-worker.js";
 import { resolveClerkOrganization } from "../organization-session.js";
+import express from "express";
+import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
+vi.mock("../../middleware/auth.js", () => ({ requireAuth: (req: import("express").Request, _res: import("express").Response, next: import("express").NextFunction) => {
+  req.auth = { userId: 1, organizationId: 1, clerkUserId: "test", role: "backend" }; next();
+} }));
 vi.mock("../../lib/logger.js", () => ({ logger: { error: vi.fn() } }));
 let orgId: number; let userId: number;
 beforeAll(async () => {
@@ -21,6 +27,12 @@ beforeAll(async () => {
 });
 afterAll(() => pool.end());
 describe("disposable PostgreSQL verification", () => {
+  it("stores multilingual incident text and emoji without an encoding failure", async () => {
+    expect((await pool.query("SHOW server_encoding")).rows[0].server_encoding).toBe("UTF8");
+    const message = "✅ Context — 日本語 हिन्दी";
+    const saved = await pool.query("INSERT INTO service_events (organization_id, title) VALUES ($1,$2) RETURNING title", [orgId, message]);
+    expect(saved.rows[0].title).toBe(message);
+  });
   it("applies versioned migration exactly once", async () => {
     expect((await pool.query("SELECT count(*)::int AS count FROM context_migrations")).rows[0].count).toBe(1);
   });
@@ -77,5 +89,23 @@ describe("disposable PostgreSQL verification", () => {
     await expect(promisify(execFile)(process.execPath, ["lib/db/initialize.mjs"])).rejects.toThrow("empty database");
     expect((await pool.query("SELECT to_regclass('documents') AS name")).rows[0].name).toBe("documents");
     expect((await pool.query("SELECT to_regclass('webhook_keys') AS name")).rows[0].name).toBe("webhook_keys");
+  });
+  it("rolls back an entire demo step if a recovery event fails to persist", async () => {
+    await pool.query("INSERT INTO organizations (name, slug) VALUES ('Scenario', 'scenario')");
+    await pool.query("INSERT INTO services (organization_id, name, status) VALUES (1,'Payments API','failing'), (1,'Database','failing')");
+    await pool.query("CREATE FUNCTION reject_recovery() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.title = 'Database: fully recovered' THEN RAISE EXCEPTION 'synthetic failure'; END IF; RETURN NEW; END $$; CREATE TRIGGER reject_recovery BEFORE INSERT ON service_events FOR EACH ROW EXECUTE FUNCTION reject_recovery()");
+    const { default: router } = await import("../../routes/root-cause.js");
+    const app = express(); app.use(express.json());
+    app.use((req, _res, next) => { req.log = { error: vi.fn() } as unknown as typeof req.log; next(); });
+    app.use(router);
+    const server = await new Promise<Server>((resolve) => { const listener = app.listen(0, "127.0.0.1", () => resolve(listener)); });
+    try {
+      const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/demo/advance`;
+      const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: '{"step":8}' });
+      expect(response.status).toBe(500); await response.json();
+      expect((await pool.query("SELECT status FROM services ORDER BY id")).rows.map(row => row.status)).toEqual(["failing", "failing"]);
+      expect((await pool.query("SELECT count(*)::int AS count FROM service_events")).rows[0].count).toBe(0);
+      expect((await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: '{"step":9}' })).status).toBe(400);
+    } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
   });
 });

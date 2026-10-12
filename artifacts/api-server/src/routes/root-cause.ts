@@ -371,7 +371,7 @@ router.get("/ai/auto-insights", requireAuth, async (req: Request, res: Response)
       byService.get(e.serviceId)!.push(e);
     }
     for (const [svcId, evts] of byService) {
-      if (evts.length >= 2) {
+      if (evts.length >= 2 && svcMap.get(svcId)?.status !== "healthy" && svcMap.has(svcId)) {
         insights.push({ type: "retry_storm", title: "Retry storm detected", description: `${svcMap.get(svcId)?.name ?? "Unknown"} has ${evts.length} failure events in the last 20 minutes — likely a retry loop amplifying the incident.`, severity: "critical", affectedServices: [svcMap.get(svcId)?.name ?? "Unknown"] });
       }
     }
@@ -397,12 +397,17 @@ router.get("/ai/auto-insights", requireAuth, async (req: Request, res: Response)
         new Date(e.createdAt).getTime() - new Date(deploy.createdAt).getTime() < 30 * 60 * 1000
       );
       if (failureAfter.length) {
-        const svcName = svcMap.get(deploy.serviceId ?? -1)?.name ?? "Unknown service";
-        insights.push({ type: "deployment_correlation", title: "Failure correlated with recent deployment", description: `${svcName} had a deployment followed by ${failureAfter.length} failure event(s) within 30 minutes.`, severity: "critical", affectedServices: [svcName] });
+        const service = svcMap.get(deploy.serviceId ?? -1);
+        const svcName = service?.name ?? "Unknown service";
+        const recovered = service?.status === "healthy";
+        insights.push({ type: "deployment_correlation", title: recovered ? "Earlier deployment correlated with failure" : "Failure correlated with recent deployment", description: `${svcName} had a deployment followed by ${failureAfter.length} failure event(s) within 30 minutes.${recovered ? " The service is currently healthy." : ""}`, severity: recovered ? "info" : "critical", affectedServices: [svcName] });
         break;
       }
     }
 
+    if (!insights.length && unhealthy.length) {
+      insights.push({ type: "service_health", title: "Services need attention", description: `${unhealthy.length} service(s) are currently degraded or failing.`, severity: unhealthy.some((s) => s.status === "failing") ? "critical" : "warning", affectedServices: unhealthy.map((s) => s.name) });
+    }
     if (!insights.length) {
       insights.push({ type: "healthy", title: "No anomalies detected", description: "All services are operating within normal parameters.", severity: "info", affectedServices: [] });
     }
@@ -470,104 +475,108 @@ router.post("/demo/reset", requireAuth, requireOrganizationAdmin, async (req: Re
 // ── POST /demo/advance ────────────────────────────────────────────────────────
 
 router.post("/demo/advance", requireAuth, requireOrganizationAdmin, async (req: Request, res: Response) => {
-  const { step } = req.body as { step: number };
+  const input = z.object({ step: z.number().int().min(0).max(8) }).safeParse(req.body);
+  if (!input.success) { fail(res, "step must be an integer between 0 and 8"); return; }
+  const { step } = input.data;
   const orgId = req.auth!.organizationId ?? 0;
 
   try {
-    const allSvcs = await db.select().from(services).where(eq(services.organizationId, orgId));
-    const byName = new Map(allSvcs.map((s) => [s.name, s.id]));
-    const now = new Date();
+    await db.transaction(async (tx) => {
+      const allSvcs = await tx.select().from(services).where(eq(services.organizationId, orgId));
+      const byName = new Map(allSvcs.map((s) => [s.name, s.id]));
+      const now = new Date();
 
-    const getOrCreate = async (name: string) => {
-      const id = byName.get(name);
-      if (id) return id;
-      const [row] = await db.insert(services).values({ organizationId: orgId, name, status: "healthy" }).returning();
-      byName.set(name, row.id);
-      return row.id;
-    };
-
-    if (step === 0) {
-      const svcDefs = [
-        { name: "Checkout", description: "Customer checkout and cart service", ownerTeam: "frontend", criticality: "high" },
-        { name: "Payments API", description: "Payment processing service", ownerTeam: "payments-team", criticality: "high" },
-        { name: "User Auth", description: "Authentication and session management", ownerTeam: "platform", criticality: "high" },
-        { name: "Database", description: "Primary PostgreSQL database cluster", ownerTeam: "infra", criticality: "high" },
-        { name: "Notification Service", description: "Email and push notification delivery", ownerTeam: "platform", criticality: "medium" },
-      ];
-      for (const s of svcDefs) await getOrCreate(s.name);
-      const checkId = byName.get("Checkout")!; const payId = byName.get("Payments API")!;
-      const authId = byName.get("User Auth")!; const dbId = byName.get("Database")!;
-      const notifId = byName.get("Notification Service")!;
-      await db.insert(serviceDependencies).values([
-        { serviceId: checkId, dependsOnId: payId }, { serviceId: checkId, dependsOnId: authId },
-        { serviceId: payId, dependsOnId: dbId }, { serviceId: notifId, dependsOnId: dbId },
-      ]).onConflictDoNothing();
-      await db.insert(serviceEvents).values({ organizationId: orgId, serviceId: byName.get("Payments API"), type: "deployment", title: "Payments API v2.4.1 deployed", description: "New Stripe webhook integration deployed.", severity: "info", createdAt: new Date(now.getTime() - 8 * 60000) });
-    } else if (step === 1) {
-      const payId = byName.get("Payments API");
-      if (payId) {
-        await db.update(services).set({ status: "degraded", updatedAt: now }).where(eq(services.id, payId));
-        await db.insert(serviceEvents).values({ organizationId: orgId, serviceId: payId, type: "alert", title: "Payments API: webhook URL misconfigured", description: "STRIPE_WEBHOOK_URL env var points to staging endpoint in production.", severity: "warning", createdAt: new Date(now.getTime() - 5 * 60000) });
-        await db.insert(serviceMessages).values({ organizationId: orgId, serviceId: payId, content: "Heads up — something weird with Payments webhook. Seeing 400s on Stripe callbacks.", author: "sarah.chen", channel: "payments-eng", createdAt: new Date(now.getTime() - 4 * 60000) });
-      }
-    } else if (step === 2) {
-      const payId = byName.get("Payments API");
-      if (payId) {
-        await db.update(services).set({ status: "failing", updatedAt: now }).where(eq(services.id, payId));
-        await db.insert(serviceEvents).values({ organizationId: orgId, serviceId: payId, type: "failure", title: "Payments API: 503 error rate at 34%", description: "Payment transactions failing. p99 latency > 8s. Root cause: invalid webhook config.", severity: "critical" });
-        await db.insert(serviceMessages).values({ organizationId: orgId, serviceId: payId, content: "@oncall Payments API is down! 503 errors spiking. Customers can't complete purchases.", author: "ravi.patel", channel: "incidents", createdAt: now });
-        llmCache.delete(orgId);
-      }
-    } else if (step === 3) {
-      const payId = byName.get("Payments API");
-      if (payId) {
-        await db.insert(serviceEvents).values([
-          { organizationId: orgId, serviceId: payId, type: "failure", title: "Payments API: retry storm amplifying", description: "Client retries causing 10× traffic load. Circuit breaker not engaged.", severity: "critical" },
-          { organizationId: orgId, serviceId: payId, type: "failure", title: "Payments API: 500 errors — all endpoints", description: "Service fully saturated by retries.", severity: "critical" },
-        ]);
-        await db.insert(serviceMessages).values({ organizationId: orgId, serviceId: payId, content: "Retry storm detected! Clients are hammering Payments API. We need to throttle immediately.", author: "james.kirk", channel: "incidents", createdAt: now });
-        llmCache.delete(orgId);
-      }
-    } else if (step === 4) {
-      const dbId = byName.get("Database");
-      if (dbId) {
-        await db.update(services).set({ status: "degraded", updatedAt: now }).where(eq(services.id, dbId));
-        await db.insert(serviceEvents).values({ organizationId: orgId, serviceId: dbId, type: "alert", title: "Database: connection pool at 94%", description: "Retry storm from Payments API holding connections open. Queries queuing.", severity: "critical" });
-        llmCache.delete(orgId);
-      }
-    } else if (step === 5) {
-      const checkId = byName.get("Checkout");
-      if (checkId) {
-        await db.update(services).set({ status: "at_risk", updatedAt: now }).where(eq(services.id, checkId));
-        await db.insert(serviceEvents).values({ organizationId: orgId, serviceId: checkId, type: "alert", title: "Checkout: 15% order failure rate", description: "Downstream Payments API failures causing checkout to fail. Revenue impact: ~$12k/hr.", severity: "critical" });
-        await db.insert(serviceMessages).values({ organizationId: orgId, content: "P0 INCIDENT DECLARED. Checkout down 15%. Revenue impact $12k/hr. All hands.", author: "ops-bot", channel: "incidents", createdAt: now });
-      }
-    } else if (step === 6) {
-      const payId = byName.get("Payments API");
-      if (payId) {
-        await db.insert(serviceEvents).values({ organizationId: orgId, serviceId: payId, type: "alert", title: "AI: Root cause identified — v2.4.1 deployment", description: "Confidence 94%. STRIPE_WEBHOOK_URL misconfigured in v2.4.1 deploy. Rollback recommended.", severity: "info" });
-      }
-    } else if (step === 7) {
-      const payId = byName.get("Payments API");
-      if (payId) {
-        await db.update(services).set({ status: "degraded", updatedAt: now }).where(eq(services.id, payId));
-        await db.insert(serviceEvents).values({ organizationId: orgId, serviceId: payId, type: "recovery", title: "Payments API: rollback to v2.4.0 initiated", description: "Reverting webhook config. Service temporarily degraded during rollback.", severity: "warning" });
-        await db.insert(serviceMessages).values({ organizationId: orgId, serviceId: payId, content: "Rollback triggered on Payments API. Should be back in ~90s.", author: "james.kirk", channel: "incidents", createdAt: now });
-        llmCache.delete(orgId);
-      }
-    } else if (step === 8) {
-      const names = ["Payments API", "Database", "Checkout", "Notification Service", "User Auth"];
-      for (const name of names) {
+      const getOrCreate = async (name: string) => {
         const id = byName.get(name);
-        if (id) {
-          await db.update(services).set({ status: "healthy", updatedAt: now }).where(eq(services.id, id));
-          await db.insert(serviceEvents).values({ organizationId: orgId, serviceId: id, type: "recovery", title: `${name}: fully recovered`, description: "All systems nominal. Incident resolved.", severity: "info" });
-        }
-      }
-      await db.insert(serviceMessages).values({ organizationId: orgId, content: "✅ Incident resolved. All services healthy. Post-mortem to follow.", author: "ops-bot", channel: "incidents", createdAt: now });
-      llmCache.delete(orgId);
-    }
+        if (id) return id;
+        const [row] = await tx.insert(services).values({ organizationId: orgId, name, status: "healthy" }).returning();
+        byName.set(name, row.id);
+        return row.id;
+      };
 
+      if (step === 0) {
+        const svcDefs = [
+          { name: "Checkout", description: "Customer checkout and cart service", ownerTeam: "frontend", criticality: "high" },
+          { name: "Payments API", description: "Payment processing service", ownerTeam: "payments-team", criticality: "high" },
+          { name: "User Auth", description: "Authentication and session management", ownerTeam: "platform", criticality: "high" },
+          { name: "Database", description: "Primary PostgreSQL database cluster", ownerTeam: "infra", criticality: "high" },
+          { name: "Notification Service", description: "Email and push notification delivery", ownerTeam: "platform", criticality: "medium" },
+        ];
+        for (const s of svcDefs) await getOrCreate(s.name);
+        const checkId = byName.get("Checkout")!; const payId = byName.get("Payments API")!;
+        const authId = byName.get("User Auth")!; const dbId = byName.get("Database")!;
+        const notifId = byName.get("Notification Service")!;
+        await tx.insert(serviceDependencies).values([
+          { serviceId: checkId, dependsOnId: payId }, { serviceId: checkId, dependsOnId: authId },
+          { serviceId: payId, dependsOnId: dbId }, { serviceId: notifId, dependsOnId: dbId },
+        ]).onConflictDoNothing();
+        await tx.insert(serviceEvents).values({ organizationId: orgId, serviceId: byName.get("Payments API"), type: "deployment", title: "Payments API v2.4.1 deployed", description: "New Stripe webhook integration deployed.", severity: "info", createdAt: new Date(now.getTime() - 8 * 60000) });
+      } else if (step === 1) {
+        const payId = byName.get("Payments API");
+        if (payId) {
+          await tx.update(services).set({ status: "degraded", updatedAt: now }).where(eq(services.id, payId));
+          await tx.insert(serviceEvents).values({ organizationId: orgId, serviceId: payId, type: "alert", title: "Payments API: webhook URL misconfigured", description: "STRIPE_WEBHOOK_URL env var points to staging endpoint in production.", severity: "warning", createdAt: new Date(now.getTime() - 5 * 60000) });
+          await tx.insert(serviceMessages).values({ organizationId: orgId, serviceId: payId, content: "Heads up — something weird with Payments webhook. Seeing 400s on Stripe callbacks.", author: "sarah.chen", channel: "payments-eng", createdAt: new Date(now.getTime() - 4 * 60000) });
+        }
+      } else if (step === 2) {
+        const payId = byName.get("Payments API");
+        if (payId) {
+          await tx.update(services).set({ status: "failing", updatedAt: now }).where(eq(services.id, payId));
+          await tx.insert(serviceEvents).values({ organizationId: orgId, serviceId: payId, type: "failure", title: "Payments API: 503 error rate at 34%", description: "Payment transactions failing. p99 latency > 8s. Root cause: invalid webhook config.", severity: "critical" });
+          await tx.insert(serviceMessages).values({ organizationId: orgId, serviceId: payId, content: "@oncall Payments API is down! 503 errors spiking. Customers can't complete purchases.", author: "ravi.patel", channel: "incidents", createdAt: now });
+          llmCache.delete(orgId);
+        }
+      } else if (step === 3) {
+        const payId = byName.get("Payments API");
+        if (payId) {
+          await tx.insert(serviceEvents).values([
+            { organizationId: orgId, serviceId: payId, type: "failure", title: "Payments API: retry storm amplifying", description: "Client retries causing 10× traffic load. Circuit breaker not engaged.", severity: "critical" },
+            { organizationId: orgId, serviceId: payId, type: "failure", title: "Payments API: 500 errors — all endpoints", description: "Service fully saturated by retries.", severity: "critical" },
+          ]);
+          await tx.insert(serviceMessages).values({ organizationId: orgId, serviceId: payId, content: "Retry storm detected! Clients are hammering Payments API. We need to throttle immediately.", author: "james.kirk", channel: "incidents", createdAt: now });
+          llmCache.delete(orgId);
+        }
+      } else if (step === 4) {
+        const dbId = byName.get("Database");
+        if (dbId) {
+          await tx.update(services).set({ status: "degraded", updatedAt: now }).where(eq(services.id, dbId));
+          await tx.insert(serviceEvents).values({ organizationId: orgId, serviceId: dbId, type: "alert", title: "Database: connection pool at 94%", description: "Retry storm from Payments API holding connections open. Queries queuing.", severity: "critical" });
+          llmCache.delete(orgId);
+        }
+      } else if (step === 5) {
+        const checkId = byName.get("Checkout");
+        if (checkId) {
+          await tx.update(services).set({ status: "at_risk", updatedAt: now }).where(eq(services.id, checkId));
+          await tx.insert(serviceEvents).values({ organizationId: orgId, serviceId: checkId, type: "alert", title: "Checkout: 15% order failure rate", description: "Downstream Payments API failures causing checkout to fail. Revenue impact: ~$12k/hr.", severity: "critical" });
+          await tx.insert(serviceMessages).values({ organizationId: orgId, content: "P0 INCIDENT DECLARED. Checkout down 15%. Revenue impact $12k/hr. All hands.", author: "ops-bot", channel: "incidents", createdAt: now });
+        }
+      } else if (step === 6) {
+        const payId = byName.get("Payments API");
+        if (payId) {
+          await tx.insert(serviceEvents).values({ organizationId: orgId, serviceId: payId, type: "alert", title: "AI: Root cause identified — v2.4.1 deployment", description: "Confidence 94%. STRIPE_WEBHOOK_URL misconfigured in v2.4.1 deploy. Rollback recommended.", severity: "info" });
+        }
+      } else if (step === 7) {
+        const payId = byName.get("Payments API");
+        if (payId) {
+          await tx.update(services).set({ status: "degraded", updatedAt: now }).where(eq(services.id, payId));
+          await tx.insert(serviceEvents).values({ organizationId: orgId, serviceId: payId, type: "recovery", title: "Payments API: rollback to v2.4.0 initiated", description: "Reverting webhook config. Service temporarily degraded during rollback.", severity: "warning" });
+          await tx.insert(serviceMessages).values({ organizationId: orgId, serviceId: payId, content: "Rollback triggered on Payments API. Should be back in ~90s.", author: "james.kirk", channel: "incidents", createdAt: now });
+          llmCache.delete(orgId);
+        }
+      } else if (step === 8) {
+        const names = ["Payments API", "Database", "Checkout", "Notification Service", "User Auth"];
+        for (const name of names) {
+          const id = byName.get(name);
+          if (id) {
+            await tx.update(services).set({ status: "healthy", updatedAt: now }).where(eq(services.id, id));
+            await tx.insert(serviceEvents).values({ organizationId: orgId, serviceId: id, type: "recovery", title: `${name}: fully recovered`, description: "All systems nominal. Incident resolved.", severity: "info" });
+          }
+        }
+        await tx.insert(serviceMessages).values({ organizationId: orgId, content: "✅ Incident resolved. All services healthy. Post-mortem to follow.", author: "ops-bot", channel: "incidents", createdAt: now });
+        llmCache.delete(orgId);
+      }
+
+    });
     ok(res, { step, advanced: true });
   } catch (err) {
     req.log.error({ err }, "advance error");

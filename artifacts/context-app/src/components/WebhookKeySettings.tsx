@@ -14,6 +14,7 @@ export default function WebhookKeySettings() {
   const createButton = useRef<HTMLButtonElement>(null);
   async function request(path: string, method = "GET", body?: object, signal?: AbortSignal) {
     const token = await getToken();
+    if (!mounted.current) throw new Error("Workspace changed. Open webhook settings in the current workspace.");
     const response = await fetch(`/api/webhook-keys${path}`, { method, signal,
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: body ? JSON.stringify(body) : undefined });

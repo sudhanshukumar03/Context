@@ -3,6 +3,19 @@
 
 @custom-variant dark (&:is(.dark *));
 
+.context-logo { position: relative; display: inline-block; width: 156px; height: 52px; flex-shrink: 0; vertical-align: middle; }
+.context-logo > img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.context-logo > .context-logo-light-wordmark { position: absolute; inset: 0; display: none; filter: brightness(0) invert(1); clip-path: inset(0 0 0 27%); }
+.dark .context-logo > .context-logo-light-wordmark,
+.context-logo-dark > .context-logo-light-wordmark { display: block; }
+.context-logo > .context-logo-mobile-mark { display: none; }
+@media (max-width: 639px) {
+  .context-logo-compact { width: 32px; height: 32px; }
+  .context-logo-compact > img { display: none; }
+  .context-logo.context-logo-compact > .context-logo-light-wordmark { display: none; }
+  .context-logo-compact > .context-logo-mobile-mark { display: block; }
+}
+
 @layer base {
   *, *::before, *::after {
     box-sizing: border-box;

@@ -7,6 +7,7 @@
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "test": "vitest run",
+    "test:container": "node scripts/test-container.mjs",
     "local:start": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start",
     "local:status": "powershell -NoProfile -File scripts/local-test.ps1 -Action Status",
     "local:smoke": "powershell -NoProfile -File scripts/local-test.ps1 -Action Smoke",

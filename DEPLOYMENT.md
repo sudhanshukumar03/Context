@@ -173,6 +173,16 @@ keys, transactions, concurrent jobs/team mapping and initialization, then stops
 that cluster. No configured database is used. Generated clusters/logs stay under
 ignored `tmp/` for diagnostics.
 
-Docker image execution, hosted CI, real Clerk invitations and provider/GitHub
-connections still require the deployment environment. This task prepared files
-and used mocked HTTP plus disposable local PostgreSQL verification.
+`pnpm test:container` builds and runs the production image using synthetic Clerk
+keys and a disposable PostgreSQL 16 database. It checks non-root startup, database
+readiness, dashboard deep links and assets, authentication guards, JSON 404 and
+SIGTERM shutdown. The database has no host port and stays on an internal network;
+only the app joins an ingress network and publishes a random loopback port.
+Cleanup checks ownership labels before removing the fixture's containers and
+networks. The built image is retained locally; generated environment files stay
+under ignored `tmp/`. This command passed locally and is included in CI.
+
+Hosted CI, real Clerk invitations, live GitHub delivery and online deployment
+remain unverified. Personal Clerk sign-in and Gemini incident answers/postmortem
+export were verified against the separate local test app; no production database
+was accessed or migrated.

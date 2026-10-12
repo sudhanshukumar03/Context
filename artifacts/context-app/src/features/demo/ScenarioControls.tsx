@@ -1,6 +1,7 @@
-import React, { useState, useRef, useCallback, useEffect } from "react";
-import { motion } from "framer-motion";
+import React, { useState, useRef, useEffect } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { Play, X, CheckCircle2, RefreshCw } from "lucide-react";
+import { createScenarioRunner, idleScenario } from "./scenario-runner";
 
 export const SCENARIO_STEPS = [
   { label: "System healthy", detail: "All 5 services nominal. Baseline established." },
@@ -19,46 +20,28 @@ export function DemoScenarioPanel({
   onStepComplete,
 }: {
   onClose: () => void;
-  onStepComplete: (step: number) => void;
+  onStepComplete: (step: number) => Promise<void>;
 }) {
-  const [currentStep, setCurrentStep] = useState(-1);
-  const [running, setRunning] = useState(false);
-  const [done, setDone] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const advanceStep = useCallback(
-    (step: number) => {
-      setCurrentStep(step);
-      onStepComplete(step);
-      if (step < SCENARIO_STEPS.length - 1) {
-        timerRef.current = setTimeout(() => advanceStep(step + 1), 4500);
-      } else {
-        setRunning(false);
-        setDone(true);
-      }
-    },
-    [onStepComplete]
-  );
-
-  const start = useCallback(() => {
-    setRunning(true);
-    setDone(false);
-    setCurrentStep(0);
-    onStepComplete(0);
-    timerRef.current = setTimeout(() => advanceStep(1), 4500);
-  }, [advanceStep, onStepComplete]);
-
-  useEffect(() => () => {
-    if (timerRef.current) clearTimeout(timerRef.current);
+  const [state, setState] = useState(idleScenario);
+  const handler = useRef(onStepComplete);
+  handler.current = onStepComplete;
+  const runner = useRef<ReturnType<typeof createScenarioRunner> | null>(null);
+  const reducedMotion = useReducedMotion();
+  useEffect(() => {
+    const instance = createScenarioRunner(SCENARIO_STEPS.length, (step) => handler.current(step), setState);
+    runner.current = instance;
+    return () => instance.stop();
   }, []);
-
-  const progress = currentStep >= 0 ? ((currentStep + 1) / SCENARIO_STEPS.length) * 100 : 0;
+  const currentStep = state.step;
+  const running = state.phase === "running";
+  const done = state.phase === "done";
+  const progress = (state.completed / SCENARIO_STEPS.length) * 100;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: -12 }}
+      initial={reducedMotion ? false : { opacity: 0, y: -12 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
+      exit={{ opacity: 0, y: reducedMotion ? 0 : -8 }}
       className="rounded-2xl border border-indigo-500/20 bg-slate-900/95 backdrop-blur-sm p-5 shadow-2xl"
     >
       <div className="flex items-start justify-between mb-4">
@@ -74,7 +57,7 @@ export function DemoScenarioPanel({
         <button
           onClick={onClose}
           aria-label="Close demo scenario"
-          className="text-slate-400 hover:text-slate-200 p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center rounded-lg hover:bg-white/5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+          className="text-slate-400 hover:text-slate-200 p-1.5 min-w-11 min-h-11 flex items-center justify-center rounded-lg hover:bg-white/5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
         >
           <X size={14} />
         </button>
@@ -84,7 +67,7 @@ export function DemoScenarioPanel({
       <div className="mb-4">
         <div className="flex justify-between text-[10px] text-slate-500 mb-1.5">
           <span>Progress</span>
-          <span>{currentStep >= 0 ? currentStep + 1 : 0}/{SCENARIO_STEPS.length} steps</span>
+          <span>{state.completed}/{SCENARIO_STEPS.length} steps</span>
         </div>
         <div
           className="h-1.5 rounded-full bg-white/8 overflow-hidden"
@@ -97,7 +80,7 @@ export function DemoScenarioPanel({
           <motion.div
             className="h-full rounded-full bg-indigo-500"
             animate={{ width: `${progress}%` }}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: reducedMotion ? 0 : 0.5 }}
           />
         </div>
       </div>
@@ -105,7 +88,7 @@ export function DemoScenarioPanel({
       {/* Steps */}
       <div className="space-y-1.5 max-h-56 overflow-y-auto mb-4">
         {SCENARIO_STEPS.map((step, i) => {
-          const complete = i < currentStep;
+          const complete = i < state.completed;
           const active = i === currentStep;
           return (
             <div
@@ -137,7 +120,7 @@ export function DemoScenarioPanel({
               </div>
               {active && running && (
                 <motion.div
-                  animate={{ rotate: 360 }}
+                  animate={reducedMotion ? undefined : { rotate: 360 }}
                   transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                   className="flex-shrink-0"
                 >
@@ -149,24 +132,26 @@ export function DemoScenarioPanel({
         })}
       </div>
 
+      {state.error && <p role="alert" className="mb-3 min-h-6 text-xs text-red-300">{state.error} The scenario paused. Retry this step to continue.</p>}
+
       {done ? (
         <div className="rounded-xl bg-emerald-500/8 border border-emerald-500/15 px-4 py-3 text-center">
           <CheckCircle2 size={16} className="text-emerald-400 mx-auto mb-1" />
-          <p className="text-xs font-semibold text-emerald-400">Demo complete! Explore all 4 tabs to see the full picture.</p>
+          <p className="text-xs font-semibold text-emerald-400">Demo complete! Explore all 5 tabs to see the full picture.</p>
         </div>
       ) : (
         <button
-          onClick={start}
+          onClick={() => runner.current?.start()}
           disabled={running}
-          className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 transition-all"
+          className="min-h-11 w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-300"
         >
           {running ? (
             <>
-              <RefreshCw size={13} className="animate-spin" />Running scenario…
+              <RefreshCw size={13} className={reducedMotion ? "" : "animate-spin"} />Running scenario…
             </>
           ) : (
             <>
-              <Play size={13} />Start demo scenario
+              <Play size={13} />{state.error ? "Retry failed step" : "Start demo scenario"}
             </>
           )}
         </button>

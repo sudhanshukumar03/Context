@@ -19,9 +19,10 @@ vi.mock("@clerk/express", async (importOriginal) => {
 });
 vi.mock("../../routes/index.js", async () => {
   const { Router } = await import("express");
-  const { requireAuth } = await import("../auth.js");
+  const { requireAuth, requireOrganizationAdmin } = await import("../auth.js");
   const router = Router();
   router.get("/protected", requireAuth, (req, res) => res.json(req.auth));
+  router.post("/protected", requireAuth, requireOrganizationAdmin, (req, res) => res.json(req.auth));
   return { default: router };
 });
 
@@ -69,6 +70,18 @@ describe("real Clerk SDK verification through the application HTTP stack", () =>
   });
   it("rejects a signed session issued for another frontend origin", async () => {
     expect((await request(token({ azp: "https://other.example.com" }))).status).toBe(401);
+  });
+  it("permits shared writes only for a signed admin, ignoring client role claims", async () => {
+    const headers = { "content-type": "application/json", Authorization: `Bearer ${token()}` };
+    expect((await fetch(url, { method: "POST", headers, body: '{"orgRole":"org:admin"}' })).status).toBe(403);
+    headers.Authorization = `Bearer ${token({ org_role: "org:admin" })}`;
+    expect((await fetch(url, { method: "POST", headers, body: '{}' })).status).toBe(200);
+  });
+  it("returns to the original personal workspace when the signed session has no active team", async () => {
+    const response = await request(token({ org_id: undefined, org_role: undefined }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ organizationId: 10 });
+    expect(mocks.user.organizationId).toBe(10);
   });
   it("rejects missing, expired and forged sessions even with demo headers enabled", async () => {
     expect((await request()).status).toBe(401);

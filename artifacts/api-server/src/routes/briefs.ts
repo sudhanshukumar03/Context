@@ -7,6 +7,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
 import { logger } from "../lib/logger.js";
 import { getOrCreateBrief } from "../services/brief-submissions.js";
+import { scheduleBrief } from "../services/brief-worker.js";
 
 const router = Router();
 
@@ -84,8 +85,7 @@ router.post("/generate-brief", requireAuth, async (req: Request, res: Response) 
     const jobId = brief.jobId;
 
     // Kick off async processing — non-blocking
-    if (created) setImmediate(() => { void generateBriefAsync(brief.id, role, orgId, String(req.id), jobId ?? undefined)
-      .catch(() => logger.error({ briefId: brief.id, jobId, organizationId: orgId }, "brief dispatch failed")); });
+    if (created) scheduleBrief(brief, (job) => generateBriefAsync(job.id, job.role, job.organizationId, String(req.id), job.jobId ?? undefined));
 
     ok(res, { jobId, briefId: brief.id, status: "pending", message: "Brief generation started" }, 202);
   } catch (err) {

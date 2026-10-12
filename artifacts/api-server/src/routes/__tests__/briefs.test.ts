@@ -12,6 +12,7 @@ vi.mock("@workspace/integrations-openai-ai-server", () => ({
   openai: { chat: { completions: { create: mocks.create } } },
 }));
 vi.mock("../../lib/logger.js", () => ({ logger: { info: mocks.info, error: mocks.error } }));
+vi.mock("../../services/brief-worker.js", () => ({ scheduleBrief: (job: object, generate: (job: object) => Promise<void>) => { void generate(job); } }));
 vi.mock("@workspace/db", async () => {
   const schema = await import("@workspace/db/schema");
   const database = {

@@ -12,12 +12,15 @@ import {
   getClerkProxyHost,
 } from "./middleware/clerkProxyMiddleware.js";
 import router from "./routes/index.js";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { securityPolicy } from "./middleware/security-policy.js";
 
 const app: Express = express();
 
 app.set("trust proxy", 1);
 
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: { directives: securityPolicy(process.env.CLERK_PUBLISHABLE_KEY) } }));
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map((s) => s.trim())
@@ -91,6 +94,12 @@ app.use("/api", (_req: Request, res: Response) => {
 });
 
 // Global JSON error handler — catches unhandled async throws from route handlers
+const staticDirectory = fileURLToPath(new URL("../../context-app/dist/public/", import.meta.url));
+if (existsSync(staticDirectory)) {
+  app.use(express.static(staticDirectory, { index: false }));
+  app.get(/^\/(?!api(?:\/|$)).*/, (_req, res) => res.sendFile("index.html", { root: staticDirectory }));
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   logger.error({ errorType: err instanceof Error ? err.name : "UnknownError", requestId: req.id,

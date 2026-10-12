@@ -1,0 +1,33 @@
+name: Verify Context
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: context_test
+          POSTGRES_PASSWORD: disposable-test-only
+          POSTGRES_DB: context_disposable_00000000000000000000000000000000
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U context_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+      - run: pnpm run typecheck
+      - run: pnpm --filter @workspace/api-server run build
+      - run: pnpm --filter @workspace/context-app run build
+      - run: pnpm exec vitest run --config vitest.integration.config.ts
+        env:
+          CONTEXT_TEST_DATABASE_URL: postgresql://context_test:disposable-test-only@127.0.0.1:5433/context_disposable_00000000000000000000000000000000

@@ -28,8 +28,7 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) process.on(signal, () => {
   shuttingDown = true;
   const timeout = setTimeout(() => process.exit(1), 60_000); timeout.unref();
   void (async () => {
-    server.close();
-    await stopBriefWorker();
+    await Promise.all([new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())), stopBriefWorker()]);
     await pool.end();
     clearTimeout(timeout);
   })().catch(() => { logger.error({}, "graceful shutdown failed"); process.exitCode = 1; });

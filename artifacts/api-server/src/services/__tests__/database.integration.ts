@@ -9,6 +9,7 @@ import { createWebhookKey, resolveWebhookOrganization } from "../webhook-credent
 import { ingestServiceEvent } from "../event-ingestion.js";
 import { getOrCreateBrief } from "../brief-submissions.js";
 import { runBriefJob } from "../brief-worker.js";
+import { resolveClerkOrganization } from "../organization-session.js";
 vi.mock("../../lib/logger.js", () => ({ logger: { error: vi.fn() } }));
 let orgId: number; let userId: number;
 beforeAll(async () => {
@@ -58,6 +59,11 @@ describe("disposable PostgreSQL verification", () => {
     const recover = vi.fn(async () => { await db.update(contextBriefs).set({ status: "done" }).where(eq(contextBriefs.id, brief.id)); });
     await runBriefJob(brief, recover); await runBriefJob(brief, recover);
     expect(recover).toHaveBeenCalledOnce();
+  });
+  it("maps concurrent verified team sessions to one shared tenant without moving personal data", async () => {
+    const ids = await Promise.all([resolveClerkOrganization("org_test"), resolveClerkOrganization("org_test")]);
+    expect(ids[0]).toBe(ids[1]); expect(ids[0]).not.toBe(orgId);
+    expect((await pool.query("SELECT organization_id FROM users WHERE id = $1", [userId])).rows[0].organization_id).toBe(orgId);
   });
   it("reverses the additive migration on this disposable database", async () => {
     await pool.query(await readFile("lib/db/migrations/001_webhook_credentials.down.sql", "utf8"));

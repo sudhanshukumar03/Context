@@ -55,7 +55,7 @@ if (!clerkPubKey && !isDevAuthBypass) throw new Error("Missing VITE_CLERK_PUBLIS
 const clerkAppearance = {
   baseTheme: dark, cssLayerName: "clerk",
   options: { logoPlacement: "inside" as const, logoLinkUrl: basePath || "/", logoImageUrl: `${window.location.origin}${basePath}/logo.svg`, socialButtonsPlacement: "top" as const, socialButtonsVariant: "blockButton" as const },
-  variables: { colorPrimary: "#6366f1", colorForeground: "#f8fafc", colorMutedForeground: "#94a3b8", colorDanger: "#f87171", colorBackground: "#0f172a", colorInput: "#1e293b", colorInputForeground: "#f8fafc", colorNeutral: "#334155", fontFamily: "'Inter', system-ui, sans-serif", borderRadius: "0.75rem" },
+  variables: { colorPrimary: "#6366f1", colorForeground: "#f8fafc", colorMutedForeground: "#94a3b8", colorDanger: "#f87171", colorBackground: "#0f172a", colorInput: "#1e293b", colorInputForeground: "#f8fafc", colorNeutral: "#e2e8f0", fontFamily: "'Inter', system-ui, sans-serif", borderRadius: "0.75rem" },
   elements: {
     rootBox: "w-full flex justify-center",
     cardBox: "!bg-slate-900 rounded-2xl w-[420px] max-w-full overflow-hidden border border-white/10 shadow-2xl",

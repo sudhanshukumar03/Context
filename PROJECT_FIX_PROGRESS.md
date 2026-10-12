@@ -129,3 +129,7 @@ Completed steps and verification will be appended below.
   setup still awaits Context Test; other external deployment/integration work remains.
   Production container rerun passes, including every protected onboarding route;
   log: tmp/verification/onboarding-container.log. Fixture containers/networks removed.
+- Fixed the dim Clerk organization action by correcting the neutral theme color.
+  Live browser checks confirm the enabled Create organization button is readable
+  after reload, about 6.2:1 text contrast and 69px high. Dashboard types/build pass.
+  The organization menu still contains only the personal account and Create organization.

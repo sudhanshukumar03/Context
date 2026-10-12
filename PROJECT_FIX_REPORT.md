@@ -342,3 +342,10 @@ The database test includes two workspaces, two users, two roles, actual document
 reads and directory upload/readback; forged query/body IDs cannot cross tenants.
 Live shared-team checks still await creation of the test organization and a
 second test account. No invitations, live migrations or deployment were performed.
+
+The Clerk menu's enabled Create organization action was almost invisible because
+the neutral theme color was a dark border shade. Corrected that color for the
+dark Clerk surface; browser computed styles confirm roughly 6.2:1 text contrast
+and a 69px action height. Dashboard types/build pass. The switcher still showed
+only the personal account and Create organization, so live team verification is
+not complete. Screenshot: tmp/verification/context-team-setup-needed.png.

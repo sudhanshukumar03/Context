@@ -3,7 +3,10 @@ import { eq, desc, or, inArray, and, gte } from "drizzle-orm";
 import { db, services, serviceDependencies, serviceEvents, serviceMessages } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
-import { resolveAiConfiguration } from "@workspace/integrations-openai-ai-server/config";
+import { requestIncidentAnswer } from "../services/incident-ai.js";
+import { logAiError } from "../services/ai.service.js";
+import { runAiTool } from "./ai-tools-execution.js";
+import { z } from "zod";
 
 const router = Router();
 
@@ -281,8 +284,9 @@ router.post("/ai/incident-ask", requireAuth, async (req: Request, res: Response)
   const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
   try {
-    const { question } = (req.body ?? {}) as { question?: string };
-    if (!question?.trim()) { fail(res, "question is required"); return; }
+    const input = z.object({ question: z.string().trim().min(1).max(4000) }).safeParse(req.body);
+    if (!input.success) { fail(res, "question must contain 1–4000 characters"); return; }
+    const { question } = input.data;
     const [allServices, recentEvents, recentMessages] = await Promise.all([
       db.select().from(services).where(eq(services.organizationId, orgId)),
       db.select().from(serviceEvents).where(and(eq(serviceEvents.organizationId, orgId), gte(serviceEvents.createdAt, since))).orderBy(desc(serviceEvents.createdAt)).limit(30),
@@ -356,43 +360,11 @@ Rules:
 - No hallucination — every claim must map to the provided context
 - confidence must be 0.0-1.0 based on evidence density`;
 
-    const { openai } = await import("@workspace/integrations-openai-ai-server");
-
-    const response = await openai.chat.completions.create({
-      model: resolveAiConfiguration().model,
-      temperature: 0.2,
-      max_tokens: 2048,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: question },
-      ],
-    });
-
-    const raw = (response.choices[0]?.message?.content ?? "").trim();
-    let parsed: { answer: string; confidence: number; sources: string[]; reasoning: string[]; impact: string[]; actions: string[] };
-
-    if (!raw) {
-      parsed = { answer: "No response from AI. Please try again.", confidence: 0, sources: [], reasoning: [], impact: [], actions: [] };
-    } else {
-      try {
-        const cleaned = raw.replace(/^```(?:json)?\n?/m, "").replace(/\n?```$/m, "").trim();
-        const p = JSON.parse(cleaned);
-        parsed = {
-          answer: typeof p.answer === "string" && p.answer ? p.answer : raw,
-          confidence: typeof p.confidence === "number" ? p.confidence : 0.5,
-          sources: Array.isArray(p.sources) ? p.sources : [],
-          reasoning: Array.isArray(p.reasoning) ? p.reasoning : (typeof p.reasoning === "string" ? [p.reasoning] : []),
-          impact: Array.isArray(p.impact) ? p.impact : [],
-          actions: Array.isArray(p.actions) ? p.actions : [],
-        };
-      } catch {
-        parsed = { answer: raw, confidence: 0.5, sources: [], reasoning: [], impact: [], actions: [] };
-      }
-    }
+    const parsed = await runAiTool(req, () => requestIncidentAnswer(systemPrompt, question));
 
     ok(res, parsed);
   } catch (err) {
-    req.log.error({ err }, "incident-ask error");
+    logAiError("incident-ask", err, req);
     fail(res, "AI request failed", 500);
   }
 });

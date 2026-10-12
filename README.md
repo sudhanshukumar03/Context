@@ -136,7 +136,7 @@ Four invariants govern the entire architecture, and the order matters:
 | **Dependency Graph Engine** | Directional topology mapping, force layout, upstream & downstream blast radius | No | In-memory DAG + `service_dependencies` |
 | **Risk & Cascade Evaluator** | Calculate healthy-service failure probability, detect queue & pool exhaustion | No | Real-time graph computation |
 | **AI Incident Commander** | Multi-hop causal reasoning, log-event correlation, role-based playbook synthesis | **Never** (Read-only) | Ephemeral inference + audit log |
-| **Remediation Sandbox** | Dry-run rollback, throttling, and container restarts in isolated simulation | In simulation only | In-memory simulation state |
+| **Remediation Sandbox** | Illustrative rollback, throttling, and restart previews | No | Ephemeral response |
 | **Incident Operator (Human)** | Review reasoning, evaluate financial risk, authorize and execute remediation | **Authorizes** | Production cluster |
 
 That table reflects the physical code structure, not an aspiration. There is no code path connecting the AI module to automated production write mutations. The AI investigates, cites evidence, and proposes; the human engineer commands.
@@ -161,14 +161,14 @@ flowchart TB
         AUDIO_UI["AudioWorklet Player<br/>low-latency PCM16 • SequenceBuffer recovery"]
     end
 
-    subgraph api["Context API Server (artifacts/api-server — :3000)"]
+    subgraph api["Context API Server (artifacts/api-server — :8080)"]
         direction TB
         AUTH["Clerk Auth & Multi-Tenant Boundary<br/>JWT verification • orgId scoping • rate limiting"]
-        INGEST["Telemetry Ingestion Pipeline<br/>/api/upload/* • /api/webhook dual-auth"]
+        INGEST["Telemetry Ingestion Pipeline<br/>/api/upload/* • /api/ingest/webhook dual-auth"]
         GRAPH_ENG["Topology & Causal Graph Engine<br/>DAG traversal • cycle detection • blast radius"]
         AI_SVC["AI Incident Commander Engine<br/>prompt versioning • JSON extraction • confidence scoring"]
         SIM_ENG["Simulation & Action Engine<br/>isolated state transitions • 8s recovery lifecycle"]
-        HEALTH["Database Health Monitor<br/>SELECT 1 pool verification (/healthz)"]
+        HEALTH["Database Health Monitor<br/>SELECT 1 pool verification (/api/healthz)"]
     end
 
     subgraph data["Persistence Layer (PostgreSQL 16 via Drizzle ORM)"]
@@ -200,7 +200,7 @@ flowchart TB
     GRAPH_ENG --> T_SVC
     AI_SVC <-->|"prompt + topology context"| LLM
     AI_SVC --> T_EVT
-    SIM_ENG --> T_SVC
+    SIM_ENG -->|"read-only lookup"| T_SVC
     HEALTH --> PG
 
     T_ORGS --- PG
@@ -258,9 +258,9 @@ flowchart TD
 ### Subsystem architecture deep dives
 
 #### 1. Ingestion & normalization layer
-- **Dual authentication**: Ingestion endpoints (`/api/upload/*`, `/api/webhook`) support Clerk session tokens, `x-api-key` headers, and `?apiKey=` query parameters for monitoring tools like PagerDuty.
+- **Authentication**: Upload endpoints require verified sessions; external webhooks require generated secret keys. Shared mutation endpoints require a verified organization admin.
 - **Organization resolution**: Automatically maps external API keys to internal multi-tenant tenant IDs (`users.organizationId`).
-- **Idempotent event processing**: Duplicate webhook submissions are discarded at the database layer using conflict targets.
+- **Idempotent event processing**: Stable external event IDs are checked within a transaction and constrained per organization. Payloads without an event ID cannot distinguish repeated delivery from a new observation.
 
 #### 2. Dependency graph & causal topological engine
 - **Directed Acyclic Graph (DAG)**: Models services as vertices and dependencies as directed edges (`depends_on_id` $\rightarrow$ `service_id`).
@@ -277,9 +277,9 @@ flowchart TD
   - **Manager lens**: Financial revenue loss at risk, plain-English incident summaries, and customer impact statements.
 
 #### 4. Remediation sandbox & simulation engine
-- **Dry-run isolation**: Allows operators to test rollbacks, container restarts, or traffic throttling in a sandbox before executing changes in production clusters.
-- **8-second recovery lifecycle**: Simulates realistic distributed system recovery delays to confirm dependent service health stabilization.
-- **Multi-tenant scoping**: Enforces `and(eq(services.id, serviceId), eq(services.organizationId, orgId))` on all simulation updates to eliminate cross-tenant IDOR vulnerabilities.
+- **Read-only previews**: Illustrate rollback, restart, and throttle phases before an engineer evaluates and executes an appropriate production command.
+- **Illustrative recovery phases**: An eight-second scenario is a display assumption; it neither predicts nor verifies actual distributed-system recovery.
+- **Multi-tenant scoping**: Looks up the selected service using both service ID and authenticated organization ID; simulation performs no database mutations.
 
 #### 5. Real-time audio streaming pipeline
 - **Low-latency PCM16 decoding**: Streams synthesized voice briefings from the AI Incident Commander using Server-Sent Events (SSE).
@@ -341,7 +341,7 @@ flowchart LR
   - **Engineer view**: Technical logs, deployment diffs, and instant-copy `kubectl` remediation commands.
   - **SRE view**: Cascade path breakdown, MTTR metrics, blast radius, and simulation actions.
   - **Manager view**: Plain-English executive summaries and business impact figures with zero unnecessary technical noise.
-- **Simulated remediation sandbox**: Safely triggers dry-run rollbacks, rate throttling, and container restarts to observe recovery behavior.
+- **Simulated remediation sandbox**: Returns illustrative rollback, throttle, and restart previews without changing service health or incident events.
 - **Interactive 9-step scenario demo**: Complete end-to-end incident playback running automatically without requiring third-party monitoring setups.
 - **Multi-tenant isolation by design**: Strict tenant scoping across all services, events, and dependency queries to ensure cross-tenant data safety.
 - **AudioWorklet voice streaming**: Real-time PCM16 audio streaming with `SequenceBuffer` gap recovery to prevent lockups on dropped SSE packets.
@@ -356,13 +356,16 @@ flowchart LR
 | **Backend** | Express 5, TypeScript 5.9, Helmet, CORS | Secure, rate-limited REST API server |
 | **Database** | PostgreSQL 16 + Drizzle ORM | Relational schema with cascade constraints and composite indexes |
 | **Authentication** | Clerk (`@clerk/express`, `@clerk/react`) | Multi-tenant authentication, session management, and RBAC |
-| **AI Engine** | OpenAI GPT-4o-mini via official SDK | Structured JSON schema analysis, root cause extraction, and Q&A |
+| **AI Engine** | Gemini/OpenAI through the OpenAI-compatible SDK | Structured JSON schema analysis, root cause extraction, and Q&A |
 | **Audio streaming** | AudioWorklet + PCM16 decode pipeline | Low-latency voice playback for Incident Commander sessions |
 | **Testing** | Vitest 5 | Unit, security boundary, and integration testing |
 
 ---
 
 ## Quick start
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for tested database initialization/migrations,
+Clerk Organizations, secure webhook keys, GitHub Actions, and container setup.
 
 ### Prerequisites
 
@@ -391,10 +394,13 @@ Create `.env` in `artifacts/api-server/.env` and `artifacts/context-app/.env`:
 | `VITE_CLERK_PUBLISHABLE_KEY` | Optional in dev | Clerk key passed into the Vite dashboard |
 | `OPENAI_API_KEY` | Optional in dev | OpenAI API key for AI Commander reasoning |
 | `OPENAI_MODEL` | No | Defaults to `gpt-4o-mini` |
+| `GEMINI_API_KEY` | Optional | Selects the Gemini provider when present |
+| `GEMINI_MODEL` | No | Defaults to `gemini-3.8-flash` for Gemini |
 | `ALLOW_DEV_AUTH_BYPASS` | No | Set `true` to run offline without Clerk accounts |
+| `VITE_ALLOW_DEV_AUTH_BYPASS` | No | Enable the frontend demo session in Vite development only |
 
 > [!NOTE]
-> Setting `ALLOW_DEV_AUTH_BYPASS=true` enables local development without internet access or third-party authentication credentials.
+> To use local demo authentication, omit the API's `CLERK_SECRET_KEY` and set both bypass flags to `true`. PostgreSQL is still required; AI features require a provider key. Production bypass is disabled. Initialize a new empty database or migrate an existing installation using [DEPLOYMENT.md](DEPLOYMENT.md) before launching.
 
 ### Launching the platform
 
@@ -415,13 +421,13 @@ Create `.env` in `artifacts/api-server/.env` and `artifacts/context-app/.env`:
 
 | Service | URL | Default Port |
 |---|---|:---:|
-| **Web Dashboard** | `http://localhost:5173` | `5173` |
-| **API Server** | `http://localhost:3000/api` | `3000` |
-| **Health Check** | `http://localhost:3000/healthz` | `3000` |
+| **Web Dashboard** | `http://localhost:3000` | `3000` |
+| **API Server** | `http://localhost:8080/api` | `8080` |
+| **Health Check** | `http://localhost:8080/api/healthz` | `8080` |
 
 ### Running the live demo
 
-1. Open `http://localhost:5173`.
+1. Open `http://localhost:3000`.
 2. Click **▶ Run Demo** on the top navigation bar.
 3. Watch the 9-step incident scenario unfold:
    - Baseline healthy state
@@ -437,21 +443,26 @@ Create `.env` in `artifacts/api-server/.env` and `artifacts/context-app/.env`:
 
 ## API reference
 
-Base path: `/api`. All endpoints except `/api/auth/*` and `/healthz` require Bearer authentication or an API key.
+Base path: `/api`. Protected dashboard endpoints use verified sessions. External ingestion endpoints use generated secret webhook keys. Shared data mutations require a Clerk organization admin; dashboard role lenses do not grant permission. Health/auth and legacy static demo routes have their own access rules.
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/healthz` | Database connectivity health check (returns 200 or 503) |
+| `GET` | `/api/healthz` | Database connectivity health check (returns 200 or 503) |
 | `POST` | `/api/upload/services` | Ingest microservices and directional dependency edges |
 | `POST` | `/api/upload/events` | Ingest deployment, failure, and recovery events |
 | `POST` | `/api/upload/messages` | Ingest operational messages and chat context |
-| `POST` | `/api/webhook` | External webhook ingestion supporting `?apiKey=` query params |
+| `POST` | `/api/ingest/webhook` | Secret-key ingestion; optional stable event IDs prevent replay |
+| `POST` | `/api/ingest/webhook/pagerduty` | PagerDuty V3 and legacy incident envelopes |
+| `POST` | `/api/ingest/github-actions` | Replay-safe deployment evidence from GitHub Actions |
+| `GET/POST/DELETE` | `/api/ingest/webhook-keys`, `/api/ingest/webhook-keys/:id` | List/create/revoke hashed webhook credentials |
+| `POST` | `/api/generate-brief` | Enqueue or reuse an active onboarding brief job |
+| `GET` | `/api/brief/live`, `/api/brief/:id` | Poll an owned brief in the current organization |
 | `GET` | `/api/insights/risks` | Retrieve at-risk services, risk scores, and recent events |
 | `GET` | `/api/insights/root-cause` | Get root cause diagnosis, cascade path, and revenue loss |
 | `GET` | `/api/insights/predictions` | Calculate failure probabilities for currently healthy services |
 | `GET` | `/api/insights/graph` | Fetch dependency nodes and edges for visualization |
 | `GET` | `/api/insights/timeline` | Retrieve chronological feed grouped by incident phases |
-| `POST` | `/api/insights/simulate-action` | Dry-run `rollback`, `throttle`, or `restart` actions |
+| `POST` | `/api/insights/simulate-action` | Illustrative preview; no service/event writes or verified recovery |
 | `POST` | `/api/ai/incident-ask` | Query AI Incident Commander for root cause Q&A and playbooks |
 | `POST` | `/api/demo/reset` | Clear services and events for the current organization |
 | `POST` | `/api/demo/advance` | Step through the 9-stage incident simulation scenario |
@@ -470,7 +481,7 @@ Identical in-flight requests share work only for the same organization, user, en
 
 1. **Multi-tenant scoping is mandatory**: `service_dependencies` has no separate `organizationId` column. All dependency queries must be filtered with `inArray(serviceDependencies.serviceId, orgServiceIds)` to prevent cross-tenant edge leakage.
 2. **Atomic token rotation**: Refresh tokens rotate atomically using conditional updates to prevent concurrent reuse.
-3. **AI output validation**: JSON extraction tolerates conversational preambles. The onboarding AI tools also validate extracted output with Zod before returning success; invalid output follows the bounded retry policy and existing error envelope. Incident-analysis routes use their separate parsers.
+3. **AI output validation**: JSON extraction tolerates conversational preambles. Onboarding tools, background briefs, incident chat and root-cause enrichment validate structured output before success. Provider attempts are bounded. Empty postmortems are rejected. See [DEPLOYMENT.md](DEPLOYMENT.md) for worker limits and recovery.
 
 ---
 
@@ -538,7 +549,7 @@ Distributed systems generate exponentially more noise than humans can process un
 
 The goal of Context is not to replace the engineer on call. It is to eliminate the forty minutes of panicked log-diving, Slack firefighting, and metric correlation—giving responders the causality, context, and confidence they need to fix the system in seconds.
 
-**Graphs map causality. AI correlates evidence. Simulators verify fixes. Engineers command.**
+**Graphs map dependencies. AI correlates evidence. Simulators illustrate outcomes. Engineers command.**
 
 ---
 

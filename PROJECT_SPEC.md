@@ -31,7 +31,7 @@ Context is an incident intelligence platform for engineering and site reliabilit
 | Frontend | React 19 + Vite 7 | Client SPA with Tailwind CSS and Framer Motion |
 | Database | PostgreSQL + Drizzle ORM | Relational persistence with cascade constraints |
 | Authentication | Clerk | `@clerk/express` and `@clerk/react` integration |
-| AI reasoning | OpenAI GPT-4o-mini | Structured JSON analysis and natural language chat |
+| AI reasoning | Gemini/OpenAI | Validated structured output with bounded provider attempts |
 | Testing | Vitest 5 | Unit and integration testing |
 
 ## Monorepo layout
@@ -39,8 +39,8 @@ Context is an incident intelligence platform for engineering and site reliabilit
 ```text
 .
 ├── artifacts/
-│   ├── api-server/         # Express API running on port 3000
-│   ├── context-app/        # React client running on port 5173
+│   ├── api-server/         # Express API running on port 8080
+│   ├── context-app/        # React client running on port 3000
 │   ├── context-demo-video/ # Automated demonstration video renderer
 │   └── mockup-sandbox/     # Component design testing sandbox
 ├── lib/
@@ -58,8 +58,8 @@ Context is an incident intelligence platform for engineering and site reliabilit
 Context supports Clerk JWT authentication with dual fallback options for automated webhooks and local development.
 
 - **Clerk user resolution**: Validates Bearer tokens via `getAuth(req)` and auto-provisions user records and default organizations on first request.
-- **Context shape**: Attaches `req.auth` with `{ userId: number, clerkUserId: string, organizationId: number, role: string }`.
-- **API key authentication**: Allows ingestion endpoints to authenticate using `x-api-key` headers or `?apiKey=` query parameters.
+- **Context shape**: Attaches verified user/organization context. Shared sessions also carry `clerkOrganizationId` and `organizationRole`; shared mutations require `org:admin`. Dashboard role lenses grant no permissions.
+- **Webhook key authentication**: Uses generated, hashed, revocable secrets via `x-api-key`, Bearer header, or query parameters. User IDs are rejected. Upload routes use session authentication.
 - **Local development bypass**: Bypasses auth checks only when `ALLOW_DEV_AUTH_BYPASS=true` is set and external keys are unavailable.
 
 > [!WARNING]
@@ -74,7 +74,7 @@ Context supports Clerk JWT authentication with dual fallback options for automat
 | `POST` | `/api/upload/services` | Ingest microservice definitions and upstream dependencies |
 | `POST` | `/api/upload/events` | Ingest deployment, failure, and recovery events |
 | `POST` | `/api/upload/messages` | Ingest operational messages and chat context |
-| `POST` | `/api/webhook` | Ingest external monitoring webhooks from PagerDuty or custom alerts |
+| `POST` | `/api/ingest/webhook` | Ingest external monitoring webhooks from PagerDuty or custom alerts |
 
 ### Incident insights
 
@@ -85,14 +85,14 @@ Context supports Clerk JWT authentication with dual fallback options for automat
 | `GET` | `/api/insights/predictions` | Calculate failure probabilities for currently healthy services |
 | `GET` | `/api/insights/graph` | Retrieve dependency nodes and directional edges for visualization |
 | `GET` | `/api/insights/timeline` | Fetch chronological event feed grouped by incident phase |
-| `POST` | `/api/insights/simulate-action` | Simulate rollback, restart, or throttling actions on a service |
+| `POST` | `/api/insights/simulate-action` | Return a read-only illustrative remediation preview |
 | `POST` | `/api/ai/incident-ask` | Query AI Incident Commander for root cause Q&A and playbooks |
 
 ### Health and demo
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/healthz` | Database connectivity health check returning 200 or 503 |
+| `GET` | `/api/healthz` | Database connectivity health check returning 200 or 503 |
 | `POST` | `/api/demo/reset` | Clear services and events for the current organization |
 | `POST` | `/api/demo/advance` | Advance the live 9-step incident simulation scenario |
 
@@ -124,3 +124,11 @@ The platform includes a 9-step live simulation demonstrating failure cascade and
 5. **Detection**: Root cause analysis flags the initial database deployment with 94% confidence.
 6. **Mitigation**: Operator triggers simulated rollback on the offending service.
 7. **Recovery**: Dependent services reconnect and return to healthy status.
+
+## Updated setup and contracts
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for empty-database initialization, additive
+migrations and rollback, Clerk Organizations, secret webhook key lifecycle,
+GitHub Actions deployment ingestion, durable background brief jobs, and tests.
+The displayed financial estimates and simulation timelines remain illustrative.
+

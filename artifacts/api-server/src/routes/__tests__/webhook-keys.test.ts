@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -28,13 +28,14 @@ beforeAll(async () => {
 });
 afterAll(() => new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
 beforeEach(() => { vi.clearAllMocks(); mocks.rows = []; });
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const request = (token: unknown) => ({ headers: { "x-api-key": token }, query: {} }) as unknown as express.Request;
 describe("webhook credentials", () => {
   it.each(["1", "user_1", "user_clerk", "", ["ctx_wh_"], "ctx_wh_bad"])("rejects identifiers and malformed keys: %s", async (token) => {
     expect(await resolveWebhookOrganization(request(token))).toBeNull(); expect(mocks.select).not.toHaveBeenCalled();
   });
   it("uses only a digest and requires non-revoked keys", async () => {
-    const { token } = createWebhookKey(); mocks.rows = [{ organizationId: 10 }];
+    const { token } = createWebhookKey(); mocks.rows = [{ organizationId: 10, personalOrganizationId: 10, organizationSlug: "personal" }];
     expect(await resolveWebhookOrganization(request(token))).toBe(10);
     const query = new PgDialect().sqlToQuery(mocks.where.mock.calls[0][0]);
     expect(query.params).toEqual([hashWebhookKey(token)]);
@@ -65,5 +66,23 @@ describe("webhook credentials", () => {
   });
   it("does not disclose another user's key", async () => {
     expect((await fetch(`${base}/webhook-keys/2`, { method: "DELETE" })).status).toBe(404);
+  });
+  it("keeps shared keys scoped to current admin membership after switching personal workspaces", async () => {
+    vi.stubEnv("CLERK_SECRET_KEY", "test-only");
+    mocks.rows = [{ organizationId: 20, personalOrganizationId: 10, organizationSlug: "clerk-org-org_team", clerkUserId: "user_admin" }];
+    const provider = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ role: "org:admin", public_user_data: { user_id: "user_admin" } }] })));
+    vi.stubGlobal("fetch", provider);
+    expect(await resolveWebhookOrganization(request(createWebhookKey().token))).toBe(20);
+    expect(String(provider.mock.calls[0][0])).toContain("/organizations/org_team/memberships");
+    provider.mockResolvedValue(new Response(JSON.stringify({ data: [] })));
+    expect(await resolveWebhookOrganization(request(createWebhookKey().token))).toBeNull();
+    provider.mockResolvedValue(new Response(JSON.stringify({ data: [{ role: "org:member", public_user_data: { user_id: "user_admin" } }] })));
+    expect(await resolveWebhookOrganization(request(createWebhookKey().token))).toBeNull();
+  });
+  it("fails closed when membership verification is unavailable", async () => {
+    vi.stubEnv("CLERK_SECRET_KEY", "test-only");
+    mocks.rows = [{ organizationId: 20, organizationSlug: "clerk-org-org_team", clerkUserId: "user_admin" }];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 503 })));
+    await expect(resolveWebhookOrganization(request(createWebhookKey().token))).rejects.toThrow("verification unavailable");
   });
 });

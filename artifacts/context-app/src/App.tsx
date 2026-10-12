@@ -1464,7 +1464,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
       const svc = services.find(s => s.name === svcName);
       if (!svc) return;
       await apiFetch("/insights/simulate-action", token, { method: "POST", body: JSON.stringify({ action, serviceId: svc.id }) });
-      setActionFeedback(`✓ ${action} applied to ${svcName} — recovery in ~8s`);
+      setActionFeedback(`${action} preview: ${svcName} could recover. Live telemetry is unchanged; verify recovery after executing the command.`);
       setTimeout(() => { setActionFeedback(null); setLastRefresh(n => n + 1); }, 8000);
     } catch { /* ignore */ }
   }, [getToken, services]);

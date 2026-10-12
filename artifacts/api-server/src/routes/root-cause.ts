@@ -426,32 +426,11 @@ router.post("/insights/simulate-action", requireAuth, async (req: Request, res: 
       .limit(1);
     if (!svc) { fail(res, "Service not found", 404); return; }
 
-    const actionMap = {
-      rollback: { status: "degraded" as const, title: `${svc.name}: rollback initiated`, desc: "Rolling back to previous version. Service temporarily degraded during rollback.", type: "recovery" as const, severity: "warning" as const },
-      throttle: { status: "degraded" as const, title: `${svc.name}: retry throttling applied`, desc: "Retry rate limited to 10 req/s. Pressure on downstream services reducing.", type: "recovery" as const, severity: "info" as const },
-      restart: { status: "degraded" as const, title: `${svc.name}: restart initiated`, desc: "Service restart in progress. Connections draining. ETA: 90 seconds.", type: "recovery" as const, severity: "warning" as const },
-    };
-
-    const a = actionMap[action];
-    await db.update(services)
-      .set({ status: a.status, updatedAt: new Date() })
-      .where(and(eq(services.id, serviceId), eq(services.organizationId, orgId)));
-    await db.insert(serviceEvents).values({ organizationId: orgId, serviceId, type: a.type, title: a.title, description: a.desc, severity: a.severity });
-
-    // Invalidate LLM cache so next poll gets fresh analysis
-    llmCache.delete(orgId);
-
-    setTimeout(async () => {
-      try {
-        await db.update(services)
-          .set({ status: "healthy", updatedAt: new Date() })
-          .where(and(eq(services.id, serviceId), eq(services.organizationId, orgId)));
-        await db.insert(serviceEvents).values({ organizationId: orgId, serviceId, type: "recovery", title: `${svc.name}: service recovered`, description: `${action === "rollback" ? "Rollback" : action === "throttle" ? "Throttling" : "Restart"} completed successfully. Service is healthy.`, severity: "info" });
-        llmCache.delete(orgId);
-      } catch { /* ignore */ }
-    }, 8000);
-
-    ok(res, { message: `${action} applied to ${svc.name}. Recovery expected in ~8s.`, service: svc.name });
+    // A hypothetical preview must never masquerade as production recovery.
+    ok(res, { message: `${action} preview for ${svc.name}. Actual recovery requires fresh telemetry.`, service: svc.name,
+      simulation: { action, serviceId, originalStatus: svc.status, projectedStatus: "healthy", durationMs: 8000,
+        phases: ["Action starts", "Connections stabilize", "Hypothetical recovery"],
+        disclaimer: "Illustrative scenario; this preview does not predict or verify production recovery." } });
   } catch (err) {
     req.log.error({ err }, "simulate-action error");
     fail(res, "Internal server error", 500);

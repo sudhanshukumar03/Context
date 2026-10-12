@@ -6,7 +6,11 @@
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "test": "vitest run"
+    "test": "vitest run",
+    "local:start": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start",
+    "local:status": "powershell -NoProfile -File scripts/local-test.ps1 -Action Status",
+    "local:smoke": "powershell -NoProfile -File scripts/local-test.ps1 -Action Smoke",
+    "local:stop": "powershell -NoProfile -File scripts/local-test.ps1 -Action Stop"
   },
   "private": true,
   "devDependencies": {

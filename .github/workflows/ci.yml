@@ -26,6 +26,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
       - run: node --test lib/db/test/checksum.test.mjs
+      - run: node --test scripts/local-test-config.test.mjs
       - run: pnpm run typecheck
       - run: pnpm --filter @workspace/api-server run build
       - run: pnpm --filter @workspace/context-app run build

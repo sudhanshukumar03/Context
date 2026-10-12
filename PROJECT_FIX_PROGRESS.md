@@ -62,3 +62,8 @@ Completed steps and verification will be appended below.
   key feedback has no animation. Screenshot saved under tmp/verification/.
 - Final setup documented in DEPLOYMENT.md; outcome and remaining work in
   PROJECT_FIX_REPORT.md. Live account setup/migration/deployment remains external.
+- User selected a test copy on this computer first. Added a native Windows
+  start/status/smoke/stop runner with a separate generated PostgreSQL database,
+  loopback-only API/dashboard and explicit development demo sign-in. Existing
+  environment files and account credentials are not used. HTTP smoke checks
+  and browser Timeline inspection passed; instructions are in LOCAL_TEST.md.

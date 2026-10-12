@@ -94,3 +94,26 @@ Schema rollback: stop webhook traffic/new workers, preserve new records, revert
 consuming code, then review/apply the additive down SQL and remove its ledger
 entry. The initializer never overwrites an existing database. User data was not
 migrated, deleted or moved by this task.
+
+## Follow-up: isolated local test copy
+
+User selected testing on this computer first. Added `pnpm local:start`,
+`local:status`, `local:smoke`, and `local:stop`, with instructions in `LOCAL_TEST.md`.
+The native Windows runner builds the actual API, starts a separate generated
+PostgreSQL cluster/database, and starts the development dashboard with explicit
+demo authentication. Account credentials are cleared and existing environment
+files are untouched. API, dashboard and database listen only on loopback.
+
+HTTP smoke checks passed against that database: readiness, dashboard/API proxy,
+webhook key creation/listing, GitHub-format ingestion/replay, key revocation and
+rejection of a revoked key. Browser inspection confirmed the persisted deployment
+in Timeline. Two additional Node tests cover target isolation and credential
+clearing; CI runs them. Real Clerk, provider, GitHub and Docker verification remains
+pending. The local demo is not an authenticated production deployment.
+
+Follow-up validation: all 156 existing tests, four Node isolation/checksum tests,
+workspace types, API build and local HTTP smoke checks passed. Stop/restart was
+verified with the same saved deployment, and a second start was rejected without
+changing the running preview. Windows listener inspection confirmed loopback
+binding. The preview was left running at http://127.0.0.1:31800 for the user;
+stop it with `pnpm local:stop`. Screenshot: `tmp/verification/local-test-timeline.png`.

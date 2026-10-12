@@ -117,3 +117,15 @@ Completed steps and verification will be appended below.
   pnpm test:container is included in CI. The disposable database stays on an
   internal network; only the app exposes a loopback port. Hosted deployment/CI,
   shared-team browser checks and five native connectors remain unfinished.
+
+- 2026-10-13: Removed legacy onboarding brief/team/graph fixtures. Authenticated
+  reads return saved role/user/workspace briefs, uploaded contacts and actual
+  document relationships; empty/error/job states do not manufacture data.
+  Directory uploads validate 1–100 names/roles and require shared admin permission.
+  Briefs require uploaded knowledge and reject citations to absent documents.
+  OpenAPI/client/validation contracts regenerated and checked against responses.
+  232 regression tests and 11 disposable PostgreSQL tests pass; workspace types,
+  API/dashboard builds and restarted Clerk+Gemini smoke checks pass. Shared-team
+  setup still awaits Context Test; other external deployment/integration work remains.
+  Production container rerun passes, including every protected onboarding route;
+  log: tmp/verification/onboarding-container.log. Fixture containers/networks removed.

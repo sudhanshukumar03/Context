@@ -11,3 +11,7 @@ CREATE TABLE service_events (id serial PRIMARY KEY, organization_id integer REFE
 CREATE TABLE context_briefs (id serial PRIMARY KEY, organization_id integer NOT NULL REFERENCES organizations(id),
   user_id integer NOT NULL REFERENCES users(id), role text NOT NULL DEFAULT 'backend', status text NOT NULL DEFAULT 'pending', data text, job_id text,
   created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE documents (id serial PRIMARY KEY, organization_id integer NOT NULL REFERENCES organizations(id),
+  user_id integer NOT NULL REFERENCES users(id), title text NOT NULL, content text NOT NULL,
+  file_type text NOT NULL DEFAULT 'text', file_size integer NOT NULL DEFAULT 0, relevance_score text,
+  created_at timestamptz NOT NULL DEFAULT now());

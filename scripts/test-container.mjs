@@ -84,7 +84,7 @@ try {
   for (const path of ["/favicon.svg", "/branding/context-logo-v1.png"]) {
     const response = await fetch(origin + path); assert.equal(response.status, 200); await response.arrayBuffer();
   }
-  for (const path of ["/api/insights/summary", "/api/webhook-keys", "/api/context-graph"]) {
+  for (const path of ["/api/insights/summary", "/api/webhook-keys", "/api/context-graph", "/api/context/brief", "/api/context/team", "/api/team", "/api/context/documents", "/api/documents/recommended"]) {
     const response = await fetch(origin + path, { headers: { "x-demo-user": "user_forged" }, redirect: "manual" });
     assert.equal(response.status, 401, `Production must reject demo headers at ${path}`); await response.text();
   }

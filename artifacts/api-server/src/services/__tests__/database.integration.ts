@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { Request } from "express";
-import { db, pool, contextBriefs, organizations, users, webhookKeys } from "@workspace/db";
+import { db, pool, contextBriefs, documents, organizations, users, webhookKeys } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { createWebhookKey, resolveWebhookOrganization } from "../webhook-credentials.js";
 import { ingestServiceEvent } from "../event-ingestion.js";
@@ -76,6 +76,40 @@ describe("disposable PostgreSQL verification", () => {
     const ids = await Promise.all([resolveClerkOrganization("org_test"), resolveClerkOrganization("org_test")]);
     expect(ids[0]).toBe(ids[1]); expect(ids[0]).not.toBe(orgId);
     expect((await pool.query("SELECT organization_id FROM users WHERE id = $1", [userId])).rows[0].organization_id).toBe(orgId);
+  });
+  it("reads onboarding knowledge from the selected workspace and current user's role-specific brief", async () => {
+    const [otherOrg] = await db.insert(organizations).values({ name: "Other workspace", slug: "onboarding-other" }).returning();
+    const [otherUser] = await db.insert(users).values({ organizationId: orgId, name: "Other user", email: "other-onboarding@example.test" }).returning();
+    const ownData = { team: "Actual team", goal: "Own workspace goal", keyPerson: "", suggestedReading: "Actual runbook", nextAction: "Read actual runbook", whyThisMatters: "Service operation", confidence: 80, explanation: "Uploaded knowledge", sources: ["Actual runbook"] };
+    await db.insert(contextBriefs).values([
+      { organizationId: orgId, userId, role: "backend", status: "done", data: JSON.stringify(ownData) },
+      { organizationId: otherOrg.id, userId, role: "backend", status: "done", data: JSON.stringify({ ...ownData, goal: "Foreign workspace goal" }) },
+      { organizationId: orgId, userId: otherUser.id, role: "backend", status: "done", data: JSON.stringify({ ...ownData, goal: "Other user's goal" }) },
+      { organizationId: orgId, userId, role: "frontend", status: "done", data: JSON.stringify({ ...ownData, goal: "Frontend goal" }) },
+    ]);
+    const [ownDoc, foreignDoc] = await db.insert(documents).values([
+      { organizationId: orgId, userId, title: "Actual runbook", content: "Actual knowledge" },
+      { organizationId: otherOrg.id, userId, title: "Foreign runbook", content: "Foreign knowledge" },
+    ]).returning();
+    const { default: contextRouter } = await import("../../routes/context.js");
+    const { default: uploadRouter } = await import("../../routes/upload.js");
+    const app = express(); app.use(express.json()); app.use(contextRouter); app.use(uploadRouter);
+    const server = await new Promise<Server>((resolve) => { const listener = app.listen(0, "127.0.0.1", () => resolve(listener)); });
+    try {
+      const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+      const response = await fetch(`${base}/context/brief?organizationId=${otherOrg.id}&userId=${otherUser.id}`);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ data: { keyInsight: "Own workspace goal", suggestedPerson: null, status: "done" } });
+      expect(await (await fetch(base + "/context/brief?role=frontend")).json()).toMatchObject({ data: { keyInsight: "Frontend goal" } });
+      const graph = await (await fetch(base + "/context-graph")).json() as { data: { nodes: { id: string }[] } };
+      expect(graph.data.nodes.map((node) => node.id)).toContain(`doc-${ownDoc.id}`);
+      expect(graph.data.nodes.map((node) => node.id)).not.toContain(`doc-${foreignDoc.id}`);
+      expect(await (await fetch(base + "/team")).json()).toMatchObject({ data: [] });
+      const uploaded = await fetch(base + "/upload/team", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ organizationId: otherOrg.id, members: [{ name: "Actual Contact", role: "Maintainer" }] }) });
+      expect(uploaded.status).toBe(201); await uploaded.json();
+      expect(await (await fetch(base + "/context/team")).json()).toMatchObject({ data: [{ name: "Actual Contact", role: "Maintainer" }] });
+      expect((await pool.query("SELECT count(*)::int AS count FROM documents WHERE organization_id=$1 AND title='Team Structure'", [otherOrg.id])).rows[0].count).toBe(0);
+    } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
   });
   it("reverses the additive migration on this disposable database", async () => {
     await pool.query(await readFile("lib/db/migrations/001_webhook_credentials.down.sql", "utf8"));

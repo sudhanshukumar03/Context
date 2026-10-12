@@ -29,7 +29,7 @@ async function runSmoke() {
   }
   console.log("PASS: Credential and database configuration files are blocked by the development server");
   if (config.authMode === "clerk") {
-    for (const path of ["/webhook-keys", "/insights/summary"]) {
+    for (const path of ["/webhook-keys", "/insights/summary", "/context/brief", "/context/team", "/team", "/context-graph", "/context/documents", "/documents/recommended"]) {
       const rejected = await request(path, { headers: { "x-demo-user": "user_local_dev" } });
       assert.equal(rejected.status, 401);
     }

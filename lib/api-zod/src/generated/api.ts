@@ -62,26 +62,34 @@ export const GetMeResponse = zod.object({
 });
 
 /**
- * @summary Get personalized context brief
+ * Returns the current user's latest brief for the selected workspace and role, or an explicit empty/job state. Does not generate a brief.
+ * @summary Get saved workspace onboarding brief
  */
 export const GetContextBriefQueryParams = zod.object({
   role: zod.enum(["backend", "frontend", "pm"]).optional(),
 });
 
 export const GetContextBriefResponse = zod.object({
+  status: zod.enum(["none", "pending", "processing", "done", "failed"]),
+  briefId: zod.number().optional(),
+  role: zod.enum(["backend", "frontend", "pm"]),
   keyInsight: zod.string(),
   nextAction: zod.string(),
   whyMatters: zod.string(),
   confidence: zod.number(),
-  suggestedPerson: zod.object({
-    name: zod.string(),
-    role: zod.string(),
-  }),
+  suggestedPerson: zod
+    .object({
+      name: zod.string(),
+      role: zod.string(),
+    })
+    .nullable(),
   reasoning: zod.array(zod.string()),
+  sources: zod.array(zod.string()),
 });
 
 /**
- * @summary Get recommended team members
+ * Returns validated contacts from the latest Team Structure upload. Contacts do not grant Clerk membership or permissions. No upload returns an empty array; an invalid upload returns 422.
+ * @summary Get uploaded workspace team directory
  */
 export const GetContextTeamQueryParams = zod.object({
   role: zod.enum(["backend", "frontend", "pm"]).optional(),
@@ -98,7 +106,7 @@ export const GetContextTeamResponseItem = zod.object({
 export const GetContextTeamResponse = zod.array(GetContextTeamResponseItem);
 
 /**
- * @summary Get AI-recommended documents
+ * @summary Get recent workspace documents
  */
 export const GetContextDocumentsQueryParams = zod.object({
   role: zod.enum(["backend", "frontend", "pm"]).optional(),

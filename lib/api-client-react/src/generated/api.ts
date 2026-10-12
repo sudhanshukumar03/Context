@@ -443,7 +443,8 @@ export function useGetMe<
 }
 
 /**
- * @summary Get personalized context brief
+ * Returns the current user's latest brief for the selected workspace and role, or an explicit empty/job state. Does not generate a brief.
+ * @summary Get saved workspace onboarding brief
  */
 export const getGetContextBriefUrl = (params?: GetContextBriefParams) => {
   const normalizedParams = new URLSearchParams();
@@ -510,7 +511,7 @@ export type GetContextBriefQueryResult = NonNullable<
 export type GetContextBriefQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get personalized context brief
+ * @summary Get saved workspace onboarding brief
  */
 
 export function useGetContextBrief<
@@ -537,7 +538,8 @@ export function useGetContextBrief<
 }
 
 /**
- * @summary Get recommended team members
+ * Returns validated contacts from the latest Team Structure upload. Contacts do not grant Clerk membership or permissions. No upload returns an empty array; an invalid upload returns 422.
+ * @summary Get uploaded workspace team directory
  */
 export const getGetContextTeamUrl = (params?: GetContextTeamParams) => {
   const normalizedParams = new URLSearchParams();
@@ -604,7 +606,7 @@ export type GetContextTeamQueryResult = NonNullable<
 export type GetContextTeamQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get recommended team members
+ * @summary Get uploaded workspace team directory
  */
 
 export function useGetContextTeam<
@@ -631,7 +633,7 @@ export function useGetContextTeam<
 }
 
 /**
- * @summary Get AI-recommended documents
+ * @summary Get recent workspace documents
  */
 export const getGetContextDocumentsUrl = (
   params?: GetContextDocumentsParams,
@@ -704,7 +706,7 @@ export type GetContextDocumentsQueryResult = NonNullable<
 export type GetContextDocumentsQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get AI-recommended documents
+ * @summary Get recent workspace documents
  */
 
 export function useGetContextDocuments<

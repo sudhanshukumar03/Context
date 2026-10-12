@@ -50,7 +50,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await new Promise<void>((resolve, reject) => server.close((err) => err ? reject(err) : resolve())); });
 beforeEach(() => {
-  vi.resetAllMocks(); mocks.docs = []; mocks.rows = []; mocks.updates = [];
+  vi.resetAllMocks(); mocks.docs = [{ title: "Runbook", content: "Workspace knowledge" }]; mocks.rows = []; mocks.updates = [];
   mocks.create.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(output) } }] });
 });
 async function post(body: object = {}) {
@@ -66,6 +66,21 @@ async function get(path: string) {
 }
 
 describe("background brief characterization", () => {
+  it("requires workspace knowledge before enqueueing a brief", async () => {
+    mocks.docs = [];
+    expect((await post()).status).toBe(400); expect(mocks.insert).not.toHaveBeenCalled(); expect(mocks.create).not.toHaveBeenCalled();
+  });
+  it("fails a recovered job without provider work if its knowledge was removed", async () => {
+    mocks.docs = [];
+    await generateBriefAsync(1, "backend", 10);
+    expect(mocks.create).not.toHaveBeenCalled(); expect(mocks.updates.at(-1)).toMatchObject({ status: "failed" });
+  });
+  it("never saves a brief citing documents outside the supplied workspace knowledge", async () => {
+    mocks.create.mockResolvedValue({ choices: [{ message: { content: JSON.stringify({ ...output, sources: ["Invented document"] }) } }] });
+    await generateBriefAsync(1, "backend", 10);
+    expect(mocks.updates.at(-1)).toMatchObject({ status: "failed" });
+    expect(mocks.updates.some((row) => "status" in row && row.status === "done")).toBe(false);
+  });
   it("acknowledges the existing job response and persists a valid brief", async () => {
     const result = await post();
     expect(result).toEqual({ status: 202, body: { success: true, error: null, data: {

@@ -121,7 +121,8 @@ paths:
     get:
       operationId: getContextBrief
       tags: [context]
-      summary: Get personalized context brief
+      summary: Get saved workspace onboarding brief
+      description: Returns the current user's latest brief for the selected workspace and role, or an explicit empty/job state. Does not generate a brief.
       parameters:
         - in: query
           name: role
@@ -131,7 +132,7 @@ paths:
           required: false
       responses:
         "200":
-          description: Context brief for the given role
+          description: Saved brief or empty/job state for the selected role
           content:
             application/json:
               schema:
@@ -141,7 +142,8 @@ paths:
     get:
       operationId: getContextTeam
       tags: [context]
-      summary: Get recommended team members
+      summary: Get uploaded workspace team directory
+      description: Returns validated contacts from the latest Team Structure upload. Contacts do not grant Clerk membership or permissions. No upload returns an empty array; an invalid upload returns 422.
       parameters:
         - in: query
           name: role
@@ -151,7 +153,7 @@ paths:
           required: false
       responses:
         "200":
-          description: List of relevant team members
+          description: Contacts from the selected workspace's uploaded directory
           content:
             application/json:
               schema:
@@ -163,7 +165,7 @@ paths:
     get:
       operationId: getContextDocuments
       tags: [context]
-      summary: Get AI-recommended documents
+      summary: Get recent workspace documents
       parameters:
         - in: query
           name: role
@@ -465,6 +467,14 @@ components:
     ContextBrief:
       type: object
       properties:
+        status:
+          type: string
+          enum: [none, pending, processing, done, failed]
+        briefId:
+          type: integer
+        role:
+          type: string
+          enum: [backend, frontend, pm]
         keyInsight:
           type: string
         nextAction:
@@ -474,7 +484,7 @@ components:
         confidence:
           type: integer
         suggestedPerson:
-          type: object
+          type: [object, "null"]
           properties:
             name:
               type: string
@@ -487,13 +497,20 @@ components:
           type: array
           items:
             type: string
+        sources:
+          type: array
+          items:
+            type: string
       required:
+        - status
+        - role
         - keyInsight
         - nextAction
         - whyMatters
         - confidence
         - suggestedPerson
         - reasoning
+        - sources
 
     TeamMember:
       type: object

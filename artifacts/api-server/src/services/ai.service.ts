@@ -3,6 +3,7 @@ import { logger } from "../lib/logger.js";
 import { z } from "zod";
 import type { Request } from "express";
 import { resolveAiConfiguration } from "@workspace/integrations-openai-ai-server/config";
+import { briefOutputSchema } from "./onboarding-data.js";
 
 const MODEL = resolveAiConfiguration().model;
 const TEMPERATURE = 0.3;
@@ -16,8 +17,7 @@ class InvalidAiResponseError extends Error {
 const confidence = z.number().min(0).max(100);
 const strings = z.array(z.string());
 export const outputSchemas = {
-  brief: z.object({ team: z.string(), goal: z.string(), keyPerson: z.string(), suggestedReading: z.string(),
-    nextAction: z.string(), whyThisMatters: z.string(), confidence, explanation: z.string(), sources: strings }).passthrough(),
+  brief: briefOutputSchema,
   ask: z.object({ answer: z.string(), confidence, sources: strings }).passthrough(),
   document: z.object({ summary: z.string(), keyPoints: strings, simplifiedExplanation: z.string(), relevanceForRole: z.string() }).passthrough(),
   task: z.object({ steps: strings, dependencies: strings, estimatedEffort: z.string(), requiredKnowledge: strings }).passthrough(),

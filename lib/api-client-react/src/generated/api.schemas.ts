@@ -47,18 +47,46 @@ export interface UserProfile {
   createdAt: string;
 }
 
+export type ContextBriefStatus =
+  (typeof ContextBriefStatus)[keyof typeof ContextBriefStatus];
+
+export const ContextBriefStatus = {
+  none: "none",
+  pending: "pending",
+  processing: "processing",
+  done: "done",
+  failed: "failed",
+} as const;
+
+export type ContextBriefRole =
+  (typeof ContextBriefRole)[keyof typeof ContextBriefRole];
+
+export const ContextBriefRole = {
+  backend: "backend",
+  frontend: "frontend",
+  pm: "pm",
+} as const;
+
+/**
+ * @nullable
+ */
 export type ContextBriefSuggestedPerson = {
   name: string;
   role: string;
-};
+} | null;
 
 export interface ContextBrief {
+  status: ContextBriefStatus;
+  briefId?: number;
+  role: ContextBriefRole;
   keyInsight: string;
   nextAction: string;
   whyMatters: string;
   confidence: number;
+  /** @nullable */
   suggestedPerson: ContextBriefSuggestedPerson;
   reasoning: string[];
+  sources: string[];
 }
 
 export interface TeamMember {

@@ -11,13 +11,13 @@ Gemini provider checks were subsequently run with synthetic prompts as documente
 
 | Metric | Before | After |
 | --- | --- | --- |
-| Unit/mocked HTTP suite | 86 tests / 9 files passing | 198 tests / 26 files passing |
-| Disposable PostgreSQL verification | None | 10 passing tests |
+| Unit/mocked HTTP suite | 86 tests / 9 files passing | 232 tests / 26 files passing |
+| Disposable PostgreSQL verification | None | 11 passing tests |
 | Migration checksum portability | None | 2 passing Node tests |
 | Full workspace types | Passing | Passing |
 | API build | Passing | Passing |
 | Dashboard build | Not measured in initial review | Passing |
-| API entry bundle | 3,974,663 bytes in preceding audit | 3,925,335 bytes on final code build |
+| API entry bundle | 3,974,663 bytes in preceding audit | 3,926,040 bytes on final code build |
 | Numeric coverage / lint | Not configured | Not configured |
 | Production Docker execution | No image verification | Local build, runtime, guards and shutdown pass |
 | Hosted CI | No workflow setup | Workflow prepared; hosted execution unverified |
@@ -89,8 +89,9 @@ control. Temporary viewport overrides were reset. Screenshot:
   outage rejects ingestion; senders should retry failed deliveries.
 - Other five native provider connectors remain planned, as GitHub Actions was
   selected first. The fake email signup and old release dates were removed.
-- Legacy static onboarding/demo APIs remain fixtures. Financial impact estimates
-  remain heuristic; measured business metrics and incident calibration need data.
+- Onboarding brief, directory, documents and graph now use saved workspace data.
+  Explicit `/demo/*` examples remain separate. Financial impact estimates remain
+  heuristic; measured business metrics and incident calibration need data.
 - Configure hosted backups/retention, monitoring and restore drills. Load testing,
   numeric coverage and automated CI browser tests remain future verification.
 
@@ -301,3 +302,43 @@ the fixture's labeled containers and networks were removed; the verified image
 was retained locally. The check now runs in the CI workflow, whose hosted run is
 still unverified. No hosted deployment, live GitHub workflow, production migration,
 invitations, or other native connectors were completed.
+
+## Follow-up: saved onboarding knowledge — 2026-10-13
+
+Removed invented people/projects from `/context/brief`, `/context/team`, `/team`
+and the onboarding graph. All reads require authentication and use the verified
+selected workspace. Brief reads also filter the current user and requested role,
+then select the latest saved job deterministically. Empty/pending/processing/failed
+jobs show their actual status with zero confidence and no suggested contact.
+Completed briefs are validated before mapping to the legacy response fields;
+corrupt persisted output returns a safe error. The OpenAPI contract and generated
+React client/Zod schemas include these states and nullable contacts.
+
+Directory reads use the latest uploaded `Team Structure` JSON document, returning
+only validated names, roles and tags. No directory returns an empty array; an
+invalid existing upload returns 422 and asks for a corrected upload. New uploads
+require 1–100 contacts and trim/limit fields. Authenticated shared members cannot
+replace a directory, and fabricated request org/user/admin fields are ignored.
+These contacts never create Clerk memberships or grant access.
+
+The graph contains the authenticated user, selected workspace, actual recent
+documents and evidenced upload ownership. Fake task assignments, tool access,
+team ownership and recommended-reading relationships were removed. Document reads
+are deterministic and bounded to 20 recent uploads.
+
+Brief submission now requires workspace knowledge; a recovered job whose
+documents are gone fails without contacting AI. Generation instructions prohibit
+invented contacts/projects and require exact uploaded-document titles in sources.
+Output citing an absent title is rejected before persistence. This validates
+references, not the accuracy of every generated statement; real incident and
+onboarding calibration remains future work.
+
+Verification: 232 unit/HTTP tests, 11 disposable PostgreSQL integration tests,
+workspace types, API/dashboard builds and restarted local smoke checks pass.
+The production container also passes startup, readiness, assets, clean shutdown,
+and rejection of anonymous/demo-header access on every onboarding read endpoint.
+Its check log is retained under ignored `tmp/verification/onboarding-container.log`.
+The database test includes two workspaces, two users, two roles, actual document
+reads and directory upload/readback; forged query/body IDs cannot cross tenants.
+Live shared-team checks still await creation of the test organization and a
+second test account. No invitations, live migrations or deployment were performed.

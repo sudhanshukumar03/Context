@@ -197,4 +197,26 @@ For hosted testing, use the normal authenticated setup in [DEPLOYMENT.md](DEPLOY
 with a separate test database. An online test deployment needs
 the hosting account and HTTPS domain before the GitHub workflow can deliver to it.
 
-The Docker image and hosted CI still need execution in their respective environments.
+The production Docker image was verified locally with `pnpm test:container`;
+hosted CI execution remains unverified.
+
+### Saved onboarding data
+
+The onboarding API requires Context authentication. `GET /api/context/brief`
+reads your latest saved brief in the selected workspace and role, reporting
+`none`, `pending`, `processing`, `done` or `failed`. An empty job has zero
+confidence and no suggested person. Upload workspace knowledge through
+`POST /api/upload/docs` before submitting `POST /api/generate-brief`. Generated
+briefs must cite exact titles of documents supplied to the model.
+
+`GET /api/context/team` and `/api/team` read the latest uploaded team directory,
+not example people. Shared admins may upload it using `POST /api/upload/team`
+with a JSON `members` array. Each contact needs `name` and `role`; `tags` is
+optional. The limit is 100 contacts. Missing data returns an empty list, while a
+malformed saved directory returns 422 and requires a corrected upload. Directory
+contacts are onboarding information; Clerk controls actual membership and access.
+
+`GET /api/context-graph` shows the active workspace and up to 20 recent uploaded
+documents. Upload-owner links appear only for documents you actually uploaded.
+`GET /api/context/documents` and `/api/documents/recommended` return recent upload
+titles. These routes do not invent assignments, people, tasks or tool access.

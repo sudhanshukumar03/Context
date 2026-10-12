@@ -4,6 +4,7 @@ import { db, documents } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
 import { requireOrganizationAdmin } from "../middleware/organization-permissions.js";
 import { ok, fail } from "../lib/response.js";
+import { teamDirectorySchema } from "../services/onboarding-data.js";
 
 const router = Router();
 
@@ -72,10 +73,11 @@ router.post("/upload/docs", requireAuth, requireOrganizationAdmin, upload.array(
 
 router.post("/upload/team", requireAuth, requireOrganizationAdmin, async (req: Request, res: Response) => {
   // Accept JSON payload describing team members and store as a document
-  const { members } = req.body as { members?: unknown[] };
-  if (!Array.isArray(members) || members.length === 0) {
-    fail(res, "members array required"); return;
+  const parsed = teamDirectorySchema.safeParse(req.body?.members);
+  if (!parsed.success) {
+    fail(res, "Provide 1–100 members with a name, role, and optional tags."); return;
   }
+  const members = parsed.data;
   const orgId = req.auth!.organizationId ?? 0;
   const userId = req.auth!.userId;
 

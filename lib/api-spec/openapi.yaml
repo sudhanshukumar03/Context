@@ -339,6 +339,7 @@ paths:
       operationId: ingestWebhook
       tags: [ingest]
       summary: Ingest webhook alert
+      description: Requires a generated secret webhook key; user IDs are rejected. Send X-API-Key (preferred), a Bearer header, or apiKey query parameter. Stable eventId values deduplicate redelivery.
       requestBody:
         required: true
         content:
@@ -358,6 +359,30 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /ingest/github-actions:
+    post:
+      operationId: ingestGithubActions
+      tags: [ingest]
+      summary: Record GitHub Actions deployment evidence
+      description: Requires a generated webhook key. Does not assert service recovery; repeated run/attempt/service/environment/status events are deduplicated.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GithubActionsPayload"
+      responses:
+        "200":
+          description: Deployment evidence ingested or duplicate acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Invalid deployment payload
+        "401":
+          description: Invalid or revoked webhook key
 
 components:
   schemas:
@@ -612,12 +637,43 @@ components:
       properties:
         service:
           type: string
-        event:
+          minLength: 1
+          maxLength: 300
+        title:
           type: string
+          minLength: 1
+          maxLength: 300
+        type:
+          type: string
+          enum: [alert, failure, deployment, recovery, info]
         severity:
           type: string
-        message:
+          enum: [info, warning, critical]
+        description:
           type: string
+          maxLength: 16000
+        status:
+          type: string
+          enum: [healthy, at_risk, degraded, failing]
+        eventId:
+          type: string
+          minLength: 1
+          maxLength: 300
+        occurredAt:
+          type: string
+          format: date-time
       required:
         - service
-        - event
+        - title
+    GithubActionsPayload:
+      type: object
+      required: [repository, service, environment, sha, runId, status]
+      properties:
+        repository: { type: string, pattern: '^[\w.-]+\/[\w.-]+$' }
+        service: { type: string, minLength: 1, maxLength: 200 }
+        environment: { type: string, minLength: 1, maxLength: 200 }
+        sha: { type: string, pattern: '^[a-f0-9]{40,64}$' }
+        runId: { type: string, pattern: '^\d+$', maxLength: 30 }
+        runAttempt: { type: integer, minimum: 1, default: 1 }
+        status: { type: string, enum: [started, success, failure] }
+        occurredAt: { type: string, format: date-time }

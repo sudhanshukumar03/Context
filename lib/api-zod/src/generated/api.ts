@@ -182,15 +182,68 @@ export const GetInsightsRootCauseResponse = zod.object({
 });
 
 /**
+ * Requires a generated secret webhook key; user IDs are rejected. Send X-API-Key (preferred), a Bearer header, or apiKey query parameter. Stable eventId values deduplicate redelivery.
  * @summary Ingest webhook alert
  */
+export const ingestWebhookBodyServiceMax = 300;
+
+export const ingestWebhookBodyTitleMax = 300;
+
+export const ingestWebhookBodyDescriptionMax = 16000;
+
+export const ingestWebhookBodyEventIdMax = 300;
+
 export const IngestWebhookBody = zod.object({
-  service: zod.string(),
-  event: zod.string(),
-  severity: zod.string().optional(),
-  message: zod.string().optional(),
+  service: zod.string().min(1).max(ingestWebhookBodyServiceMax),
+  title: zod.string().min(1).max(ingestWebhookBodyTitleMax),
+  type: zod
+    .enum(["alert", "failure", "deployment", "recovery", "info"])
+    .optional(),
+  severity: zod.enum(["info", "warning", "critical"]).optional(),
+  description: zod.string().max(ingestWebhookBodyDescriptionMax).optional(),
+  status: zod.enum(["healthy", "at_risk", "degraded", "failing"]).optional(),
+  eventId: zod.string().min(1).max(ingestWebhookBodyEventIdMax).optional(),
+  occurredAt: zod.coerce.date().optional(),
 });
 
 export const IngestWebhookResponse = zod.object({
+  ok: zod.boolean(),
+});
+
+/**
+ * Requires a generated webhook key. Does not assert service recovery; repeated run/attempt/service/environment/status events are deduplicated.
+ * @summary Record GitHub Actions deployment evidence
+ */
+export const ingestGithubActionsBodyRepositoryRegExp = new RegExp(
+  "^[\\w.-]+\\\/[\\w.-]+$",
+);
+export const ingestGithubActionsBodyServiceMax = 200;
+
+export const ingestGithubActionsBodyEnvironmentMax = 200;
+
+export const ingestGithubActionsBodyShaRegExp = new RegExp("^[a-f0-9]{40,64}$");
+export const ingestGithubActionsBodyRunIdMax = 30;
+
+export const ingestGithubActionsBodyRunIdRegExp = new RegExp("^\\d+$");
+export const ingestGithubActionsBodyRunAttemptDefault = 1;
+
+export const IngestGithubActionsBody = zod.object({
+  repository: zod.string().regex(ingestGithubActionsBodyRepositoryRegExp),
+  service: zod.string().min(1).max(ingestGithubActionsBodyServiceMax),
+  environment: zod.string().min(1).max(ingestGithubActionsBodyEnvironmentMax),
+  sha: zod.string().regex(ingestGithubActionsBodyShaRegExp),
+  runId: zod
+    .string()
+    .max(ingestGithubActionsBodyRunIdMax)
+    .regex(ingestGithubActionsBodyRunIdRegExp),
+  runAttempt: zod
+    .number()
+    .min(1)
+    .default(ingestGithubActionsBodyRunAttemptDefault),
+  status: zod.enum(["started", "success", "failure"]),
+  occurredAt: zod.coerce.date().optional(),
+});
+
+export const IngestGithubActionsResponse = zod.object({
   ok: zod.boolean(),
 });

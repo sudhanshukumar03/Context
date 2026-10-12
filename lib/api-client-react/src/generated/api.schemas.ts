@@ -136,11 +136,93 @@ export interface InsightsRootCauseResponse {
   data?: InsightsRootCauseResponseData;
 }
 
+export type WebhookPayloadType =
+  (typeof WebhookPayloadType)[keyof typeof WebhookPayloadType];
+
+export const WebhookPayloadType = {
+  alert: "alert",
+  failure: "failure",
+  deployment: "deployment",
+  recovery: "recovery",
+  info: "info",
+} as const;
+
+export type WebhookPayloadSeverity =
+  (typeof WebhookPayloadSeverity)[keyof typeof WebhookPayloadSeverity];
+
+export const WebhookPayloadSeverity = {
+  info: "info",
+  warning: "warning",
+  critical: "critical",
+} as const;
+
+export type WebhookPayloadStatus =
+  (typeof WebhookPayloadStatus)[keyof typeof WebhookPayloadStatus];
+
+export const WebhookPayloadStatus = {
+  healthy: "healthy",
+  at_risk: "at_risk",
+  degraded: "degraded",
+  failing: "failing",
+} as const;
+
 export interface WebhookPayload {
+  /**
+   * @minLength 1
+   * @maxLength 300
+   */
   service: string;
-  event: string;
-  severity?: string;
-  message?: string;
+  /**
+   * @minLength 1
+   * @maxLength 300
+   */
+  title: string;
+  type?: WebhookPayloadType;
+  severity?: WebhookPayloadSeverity;
+  /** @maxLength 16000 */
+  description?: string;
+  status?: WebhookPayloadStatus;
+  /**
+   * @minLength 1
+   * @maxLength 300
+   */
+  eventId?: string;
+  occurredAt?: string;
+}
+
+export type GithubActionsPayloadStatus =
+  (typeof GithubActionsPayloadStatus)[keyof typeof GithubActionsPayloadStatus];
+
+export const GithubActionsPayloadStatus = {
+  started: "started",
+  success: "success",
+  failure: "failure",
+} as const;
+
+export interface GithubActionsPayload {
+  /** @pattern ^[\w.-]+\/[\w.-]+$ */
+  repository: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  service: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  environment: string;
+  /** @pattern ^[a-f0-9]{40,64}$ */
+  sha: string;
+  /**
+   * @maxLength 30
+   * @pattern ^\d+$
+   */
+  runId: string;
+  /** @minimum 1 */
+  runAttempt?: number;
+  status: GithubActionsPayloadStatus;
+  occurredAt?: string;
 }
 
 export type GetContextBriefParams = {

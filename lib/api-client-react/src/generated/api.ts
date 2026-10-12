@@ -25,6 +25,7 @@ import type {
   GetContextBriefParams,
   GetContextDocumentsParams,
   GetContextTeamParams,
+  GithubActionsPayload,
   HealthStatus,
   InsightsGraphResponse,
   InsightsRisksResponse,
@@ -1292,6 +1293,7 @@ export function useGetInsightsRootCause<
 }
 
 /**
+ * Requires a generated secret webhook key; user IDs are rejected. Send X-API-Key (preferred), a Bearer header, or apiKey query parameter. Stable eventId values deduplicate redelivery.
  * @summary Ingest webhook alert
  */
 export const getIngestWebhookUrl = () => {
@@ -1375,4 +1377,91 @@ export const useIngestWebhook = <
   TContext
 > => {
   return useMutation(getIngestWebhookMutationOptions(options));
+};
+
+/**
+ * Requires a generated webhook key. Does not assert service recovery; repeated run/attempt/service/environment/status events are deduplicated.
+ * @summary Record GitHub Actions deployment evidence
+ */
+export const getIngestGithubActionsUrl = () => {
+  return `/api/ingest/github-actions`;
+};
+
+export const ingestGithubActions = async (
+  githubActionsPayload: GithubActionsPayload,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getIngestGithubActionsUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(githubActionsPayload),
+  });
+};
+
+export const getIngestGithubActionsMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof ingestGithubActions>>,
+    TError,
+    { data: BodyType<GithubActionsPayload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof ingestGithubActions>>,
+  TError,
+  { data: BodyType<GithubActionsPayload> },
+  TContext
+> => {
+  const mutationKey = ["ingestGithubActions"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof ingestGithubActions>>,
+    { data: BodyType<GithubActionsPayload> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return ingestGithubActions(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type IngestGithubActionsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof ingestGithubActions>>
+>;
+export type IngestGithubActionsMutationBody = BodyType<GithubActionsPayload>;
+export type IngestGithubActionsMutationError = ErrorType<void>;
+
+/**
+ * @summary Record GitHub Actions deployment evidence
+ */
+export const useIngestGithubActions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof ingestGithubActions>>,
+    TError,
+    { data: BodyType<GithubActionsPayload> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof ingestGithubActions>>,
+  TError,
+  { data: BodyType<GithubActionsPayload> },
+  TContext
+> => {
+  return useMutation(getIngestGithubActionsMutationOptions(options));
 };

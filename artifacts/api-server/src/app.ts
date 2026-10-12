@@ -67,6 +67,7 @@ if (process.env.CLERK_SECRET_KEY) {
         process.env.CLERK_PUBLISHABLE_KEY,
       ),
       secretKey: process.env.CLERK_SECRET_KEY,
+      authorizedParties: allowedOrigins,
     })),
   );
 } else {

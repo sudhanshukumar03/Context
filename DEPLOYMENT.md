@@ -8,6 +8,9 @@ For the isolated Windows demo with its own local database, run `pnpm local:start
 and open http://127.0.0.1:31800. See [LOCAL_TEST.md](LOCAL_TEST.md) for start/stop
 commands, verified behavior, and the difference between demo and real-account testing.
 This path does not use the database or account keys in existing environment files.
+For real Clerk test-instance sign-in on that isolated database, follow the
+`local:clerk-setup`, `local:clerk-check`, and `local:clerk` instructions in the guide.
+The API's Clerk session origin allowlist uses `ALLOWED_ORIGINS`.
 
 ## Local setup
 

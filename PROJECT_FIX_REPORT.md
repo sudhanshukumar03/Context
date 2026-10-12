@@ -117,3 +117,28 @@ verified with the same saved deployment, and a second start was rejected without
 changing the running preview. Windows listener inspection confirmed loopback
 binding. The preview was left running at http://127.0.0.1:31800 for the user;
 stop it with `pnpm local:stop`. Screenshot: `tmp/verification/local-test-timeline.png`.
+
+## Follow-up: Clerk test-account mode
+
+Prepared an ignored `tmp/local-test/accounts.env` with the existing test Publishable
+Key and a blank Secret Key. `local:clerk-setup` preserves existing account files;
+`local:clerk-check` checks test-key formats and frontend/API Publishable Key agreement.
+Clerk mode disables both demo bypass flags, gives the Secret Key only to the API,
+preserves its generated database target and rejects incomplete configuration.
+The authentication mode persists across restart; `local:demo` explicitly selects demo.
+
+The API now passes `ALLOWED_ORIGINS` as Clerk's `authorizedParties`, enforcing signed
+session origin claims. Three new HTTP tests use the real Clerk SDK and generated
+RSA signatures against a mock database, with external fetches blocked. They cover
+valid team sessions, wrong origins, missing identity, expiration and forgery.
+Two more Node tests cover Clerk configuration and frontend secret isolation.
+Live key validity/pairing, sign-in, invitations, switching and membership checks
+remain pending until the user supplies the test Secret Key locally. Detailed
+manual checks are in `LOCAL_TEST.md`; no invitations or memberships were changed.
+
+Follow-up checks passed: 159 unit/HTTP tests across 21 files, six Node configuration/
+checksum tests, workspace type checks and API build. The updated demo restarted
+and passed its real-PostgreSQL HTTP smoke checks. Startup with the missing Clerk
+Secret Key failed before changing the saved demo mode or stopping the running app.
+The user's subsequent "ready" reply was checked, but the saved Secret Key field
+was still empty; live Clerk activation remains pending that local configuration.

@@ -10,7 +10,11 @@
     "local:start": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start",
     "local:status": "powershell -NoProfile -File scripts/local-test.ps1 -Action Status",
     "local:smoke": "powershell -NoProfile -File scripts/local-test.ps1 -Action Smoke",
-    "local:stop": "powershell -NoProfile -File scripts/local-test.ps1 -Action Stop"
+    "local:stop": "powershell -NoProfile -File scripts/local-test.ps1 -Action Stop",
+    "local:clerk-setup": "node scripts/prepare-local-clerk.mjs",
+    "local:clerk-check": "node scripts/local-test-server.mjs check-auth clerk",
+    "local:clerk": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start -AuthMode clerk",
+    "local:demo": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start -AuthMode demo"
   },
   "private": true,
   "devDependencies": {

@@ -19,6 +19,15 @@ assert.equal(page.status, 200); assert.match(await page.text(), /id="root"/);
 const proxied = await fetch(`http://127.0.0.1:${config.dashboardPort}/api/healthz`, { signal: AbortSignal.timeout(10000), redirect: "error" });
 assert.equal(proxied.status, 200); assert.equal((await proxied.json()).status, "ok");
 console.log("PASS: Dashboard and its API proxy respond");
+if (config.authMode === "clerk") {
+  for (const path of ["/webhook-keys", "/insights/summary"]) {
+    const rejected = await request(path, { headers: { "x-demo-user": "user_local_dev" } });
+    assert.equal(rejected.status, 401);
+  }
+  console.log("PASS: Signed-out requests and demo headers cannot access protected data");
+  console.log("Startup checks passed. Complete real sign-in, organizations and permissions checks in the browser.");
+  process.exit(0);
+}
 const created = await request("/webhook-keys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Local smoke check" }) });
 assert.equal(created.status, 201);
 const { id, token } = created.body.data;

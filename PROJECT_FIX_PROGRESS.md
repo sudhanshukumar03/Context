@@ -67,3 +67,8 @@ Completed steps and verification will be appended below.
   loopback-only API/dashboard and explicit development demo sign-in. Existing
   environment files and account credentials are not used. HTTP smoke checks
   and browser Timeline inspection passed; instructions are in LOCAL_TEST.md.
+- Clerk test-account mode prepared with key preflight, no demo fallback,
+  backend-only Secret Key and saved authentication mode. Missing-key startup
+  preserves the running demo. Real SDK HTTP tests use generated RSA signatures
+  and block external fetches; wrong-origin, expired and forged sessions are rejected.
+  Actual Clerk login/team testing awaits the user's local test Secret Key.

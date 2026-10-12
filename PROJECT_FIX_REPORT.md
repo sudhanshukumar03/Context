@@ -171,3 +171,25 @@ session, organization switching and actual
 admin/member behavior still require the requested browser login. Configuration
 activation alone does not complete those live checks. The local app remains at
 http://127.0.0.1:31800; sign in at `/sign-in`.
+
+## Follow-up: blank authentication startup
+
+The user reported a black screen opening the local links in a normal browser.
+Server and readiness responses were healthy. The app previously had an empty
+HTML root and no visible Clerk startup fallback; authentication initialization
+was observed returning an empty page until the hosted form finished loading.
+
+Initial HTML now includes a loading card before JavaScript executes. React mounts
+visible startup content before dynamically importing the application and handles
+failed imports and render errors with retry UI. Clerk initialization and hosted
+form mounting have loading/failure states; loading longer than 15 seconds offers
+retry and recovers automatically if initialization finishes. Unknown routes show
+a message rather than an empty switch result. No authentication bypass was added.
+
+Browser checks verified the actual hosted sign-in form without application console
+errors, visible stalled-loading feedback, retry restarting the timer, and recovery
+from a controlled component render failure. Retry target was 44px tall and the
+changed surface had no document overflow at the existing desktop viewport. Static
+HTTP inspection confirmed loading content before JavaScript. A temporary QA HTML
+page was removed. The 159 existing tests, workspace types and dashboard build
+passed. Screenshot: `tmp/verification/clerk-sign-in-fixed.png`.

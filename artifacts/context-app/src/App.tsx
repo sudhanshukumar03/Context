@@ -10,13 +10,14 @@ import {
   FileText, Download, Webhook, ListChecks,
 } from "lucide-react";
 import {
-  ClerkProvider, SignIn, SignUp, Show, useClerk, OrganizationSwitcher,
+  ClerkProvider, ClerkLoading, ClerkLoaded, ClerkFailed, SignIn, SignUp, Show, useClerk, OrganizationSwitcher,
 } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { dark } from "@clerk/themes";
 import { Switch, Route, useLocation, Router as WouterRouter } from "wouter";
 import DemoVideoInline from "./components/DemoVideoInline";
 import WebhookKeySettings from "./components/WebhookKeySettings";
+import { ApplicationStatus, AuthenticationLoading } from "./components/ApplicationStartup";
 import { ClerkSession, DevSession, isDevAuthBypass, useAuth, useUser } from "./lib/auth-session";
 
 const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
@@ -72,10 +73,10 @@ const clerkAppearance = {
 };
 
 function SignInPage() {
-  return <div className="flex min-h-[100dvh] items-center justify-center bg-slate-950 px-4"><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} appearance={clerkAppearance} /></div>;
+  return <div className="flex min-h-[100dvh] items-center justify-center bg-slate-950 px-4"><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} appearance={clerkAppearance} fallback={<AuthenticationLoading contained />} /></div>;
 }
 function SignUpPage() {
-  return <div className="flex min-h-[100dvh] items-center justify-center bg-slate-950 px-4"><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} appearance={clerkAppearance} /></div>;
+  return <div className="flex min-h-[100dvh] items-center justify-center bg-slate-950 px-4"><SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} appearance={clerkAppearance} fallback={<AuthenticationLoading contained />} /></div>;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -2148,12 +2149,15 @@ function ClerkProviderWithRoutes() {
     <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`}
       routerPush={(to) => setLocation(stripBase(to))} routerReplace={(to) => setLocation(stripBase(to), { replace: true })}>
-      <ClerkSession><Switch>
+      <ClerkLoading><AuthenticationLoading /></ClerkLoading>
+      <ClerkFailed><ApplicationStatus failed title="Sign-in could not load" message="Check your connection, then try again. You can also open this page in a regular browser." /></ClerkFailed>
+      <ClerkLoaded><ClerkSession><Switch>
         <Route path="/" component={HomeRedirect} />
         <Route path="/sign-in/*?" component={SignInPage} />
         <Route path="/sign-up/*?" component={SignUpPage} />
         <Route path="/sign-out" component={SignOutPage} />
-      </Switch></ClerkSession>
+        <Route><ApplicationStatus failed title="Page not found" message="Open Context from the main page, or try the sign-in link again." /></Route>
+      </Switch></ClerkSession></ClerkLoaded>
     </ClerkProvider>
   );
 }

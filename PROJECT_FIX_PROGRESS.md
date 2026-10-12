@@ -79,3 +79,9 @@ Completed steps and verification will be appended below.
   Vite private-directory denies verified (403), signed-out/demo-header access
   rejected (401), and default restart retains Clerk mode. A completed user session
   and real team/member checks still await browser sign-in.
+- Blank startup-screen fix: initial HTML now includes visible loading content;
+  React boot/import failures and render failures show recovery UI. Clerk loading,
+  failed initialization and sign-in/sign-up form mounting have visible fallbacks.
+  Slow sign-in offers retry after 15 seconds. Browser checks verified real Clerk
+  form loading, the timeout/retry cycle and render-error recovery. Temporary QA
+  page removed. Existing 159 tests, workspace types and dashboard build pass.

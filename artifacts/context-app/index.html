@@ -17,9 +17,24 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      #startup-panel { box-sizing: border-box; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 24px; background: #020617; color: #f1f5f9; font: 16px/1.6 system-ui, sans-serif; }
+      #startup-panel section { box-sizing: border-box; width: 100%; max-width: 420px; padding: 28px; border: 1px solid #334155; border-radius: 16px; background: #0f172a; }
+      #startup-panel p { color: #cbd5e1; }
+      #startup-panel a { color: #c7d2fe; display: inline-flex; align-items: center; min-height: 44px; }
+      #startup-panel a:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 4px; }
+      body { margin: 0; }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div id="startup-panel" role="status"><section>
+      <strong>Context</strong>
+      <h1>Opening your workspace</h1>
+      <p>Loading secure sign-in. This may take a moment.</p>
+      <p>If this screen stays here, check your connection or open the page in your regular browser.</p>
+      <a href="">Reload page</a>
+      <noscript><p>JavaScript is required to open Context.</p></noscript>
+    </section></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

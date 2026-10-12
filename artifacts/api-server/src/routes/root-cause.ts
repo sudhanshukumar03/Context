@@ -4,6 +4,7 @@ import { eq, desc, gte, and, inArray } from "drizzle-orm";
 import { db, services, serviceDependencies, serviceEvents, serviceMessages } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
+import { resolveAiConfiguration } from "@workspace/integrations-openai-ai-server/config";
 
 const router = Router();
 
@@ -90,7 +91,7 @@ Rules:
 - No hallucination — every claim must map to the provided context`;
 
     const response = await openai.chat.completions.create({
-      model: process.env.GEMINI_MODEL || process.env.OPENAI_MODEL || "gemini-2.0-flash",
+      model: resolveAiConfiguration().model,
       temperature: 0.15,
       max_tokens: 600,
       messages: [{ role: "system", content: systemPrompt }, { role: "user", content: "Analyse now." }],

@@ -3,6 +3,7 @@ import { eq, desc, gte, and, inArray } from "drizzle-orm";
 import { db, services, serviceDependencies, serviceEvents, serviceMessages } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
+import { resolveAiConfiguration } from "@workspace/integrations-openai-ai-server/config";
 
 const router = Router();
 
@@ -133,7 +134,7 @@ Write the post-mortem in this EXACT Markdown structure (do not deviate):
     const { openai } = await import("@workspace/integrations-openai-ai-server");
 
     const response = await openai.chat.completions.create({
-      model: process.env.GEMINI_MODEL || process.env.OPENAI_MODEL || "gemini-2.0-flash",
+      model: resolveAiConfiguration().model,
       temperature: 0.3,
       max_tokens: 1800,
       messages: [

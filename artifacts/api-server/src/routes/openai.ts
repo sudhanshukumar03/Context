@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { eq, and, desc } from "drizzle-orm";
 import { db, conversations, messages } from "@workspace/db";
 import { openai } from "@workspace/integrations-openai-ai-server";
+import { resolveAiConfiguration } from "@workspace/integrations-openai-ai-server/config";
 import { requireAuth } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
 import { z } from "zod";
@@ -76,7 +77,7 @@ router.post("/openai/conversations/:id/messages", requireAuth, async (req: Reque
 
     let fullResponse = "";
     const stream = await openai.chat.completions.create({
-      model: process.env.GEMINI_MODEL || process.env.OPENAI_MODEL || "gemini-2.0-flash",
+      model: resolveAiConfiguration().model,
       max_completion_tokens: 8192,
       messages: [
         { role: "system", content: systemPrompt },

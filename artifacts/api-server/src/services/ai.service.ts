@@ -2,8 +2,9 @@ import { openai } from "@workspace/integrations-openai-ai-server";
 import { logger } from "../lib/logger.js";
 import { z } from "zod";
 import type { Request } from "express";
+import { resolveAiConfiguration } from "@workspace/integrations-openai-ai-server/config";
 
-const MODEL = process.env.GEMINI_MODEL || process.env.OPENAI_MODEL || "gemini-2.0-flash";
+const MODEL = resolveAiConfiguration().model;
 const TEMPERATURE = 0.3;
 const MAX_TOKENS = 1024;
 const ATTEMPT_TIMEOUT_MS = 15_000;

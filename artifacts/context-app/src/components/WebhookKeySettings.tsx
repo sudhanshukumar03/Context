@@ -3,13 +3,14 @@ import { useAuth } from "../lib/auth-session";
 
 type Key = { id: number; name: string; prefix: string };
 export default function WebhookKeySettings() {
-  const { getToken } = useAuth();
+  const { getToken, orgId } = useAuth();
   const [keys, setKeys] = useState<Key[]>([]);
   const [secret, setSecret] = useState<{ id: number; token: string } | null>(null);
   const [name, setName] = useState("Monitoring");
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState("Loading webhook keys…");
   const mounted = useRef(true);
+  const createButton = useRef<HTMLButtonElement>(null);
   async function request(path: string, method = "GET", body?: object, signal?: AbortSignal) {
     const token = await getToken();
     const response = await fetch(`/api/webhook-keys${path}`, { method, signal,
@@ -21,20 +22,21 @@ export default function WebhookKeySettings() {
   }
   useEffect(() => {
     mounted.current = true;
+    setKeys([]); setSecret(null); setBusy(true); setMessage("Loading webhook keys…");
     const controller = new AbortController();
     request("", "GET", undefined, controller.signal).then((data) => {
-      if (mounted.current) { setKeys(data as Key[]); setMessage(""); }
+      if (!controller.signal.aborted && mounted.current) { setKeys(data as Key[]); setMessage(""); }
     }).catch((error) => { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Unable to load keys"); })
-      .finally(() => { if (mounted.current) setBusy(false); });
+      .finally(() => { if (!controller.signal.aborted && mounted.current) setBusy(false); });
     return () => { mounted.current = false; controller.abort(); };
-  }, [getToken]);
+  }, [getToken, orgId]);
   async function create() {
     if (busy) return;
     setBusy(true); setMessage("Creating key…");
     try {
       const key = await request("", "POST", { name }) as Key & { token: string };
       if (!mounted.current) return;
-      setKeys((current) => [key, ...current]); setSecret({ id: key.id, token: key.token });
+      setKeys((current) => [{ id: key.id, name: key.name, prefix: key.prefix }, ...current]); setSecret({ id: key.id, token: key.token });
       setMessage("Key created. Copy it now; it is shown only once.");
     } catch (error) { if (mounted.current) setMessage(error instanceof Error ? error.message : "Unable to create key"); }
     finally { if (mounted.current) setBusy(false); }
@@ -47,6 +49,7 @@ export default function WebhookKeySettings() {
       if (!mounted.current) return;
       setKeys((current) => current.filter((key) => key.id !== id));
       setSecret((current) => current?.id === id ? null : current); setMessage("Key revoked. It can no longer ingest events.");
+      requestAnimationFrame(() => createButton.current?.focus());
     } catch (error) { if (mounted.current) setMessage(error instanceof Error ? error.message : "Unable to revoke key"); }
     finally { if (mounted.current) setBusy(false); }
   }
@@ -59,7 +62,7 @@ export default function WebhookKeySettings() {
         <input value={name} onChange={(event) => setName(event.target.value)} required maxLength={80} disabled={busy}
           className={`${control} w-full bg-transparent`} />
       </label>
-      <button type="submit" disabled={busy || !name.trim()} className={`${control} self-end bg-indigo-600 text-white`}>Create key</button>
+      <button ref={createButton} type="submit" disabled={busy || !name.trim()} className={`${control} self-end bg-indigo-600 text-white`}>Create key</button>
     </form>
     <p role="status" aria-live="polite" className="mt-2 min-h-10 text-xs">{message}</p>
     {secret && <div className="mb-3 space-y-2">

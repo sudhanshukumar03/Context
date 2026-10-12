@@ -10,7 +10,7 @@ import {
   FileText, Download, Webhook, ListChecks,
 } from "lucide-react";
 import {
-  ClerkProvider, SignIn, SignUp, Show, useClerk,
+  ClerkProvider, SignIn, SignUp, Show, useClerk, OrganizationSwitcher,
 } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { dark } from "@clerk/themes";
@@ -1540,6 +1540,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {!isDevAuthBypass && <OrganizationSwitcher appearance={{ elements: { organizationSwitcherTrigger: "min-h-11 min-w-11", organizationSwitcherTriggerIcon: "text-indigo-400" } }} />}
             <RoleSelector role={role} onChange={setRole} />
             <button
               onClick={() => { setIsLive(l => !l); }}
@@ -1634,7 +1635,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
         </div>
 
         <nav aria-label="Dashboard views" style={{ borderTop: "1px solid var(--ctx-border)" }}>
-          <div role="tablist" aria-label="Dashboard sections" className="max-w-6xl mx-auto px-4 sm:px-6 flex gap-0.5">
+          <div role="tablist" aria-label="Dashboard sections" className="max-w-6xl mx-auto px-4 sm:px-6 flex gap-0.5 overflow-x-auto">
             {TABS.map(({ id, label, icon: Icon, count }) => (
               <button
                 key={id}
@@ -2097,10 +2098,11 @@ function Landing({ onSignIn, onSignUp }: { onSignIn: () => void; onSignUp: () =>
 
 function HomeRedirect() {
   const [, setLocation] = useLocation();
+  const { orgId } = useAuth();
   if (isDevAuthBypass) return <Dashboard onBack={() => setLocation("/welcome")} />;
   return (
     <>
-      <Show when="signed-in"><Dashboard onBack={() => setLocation("/sign-out")} /></Show>
+      <Show when="signed-in"><Dashboard key={orgId ?? "personal"} onBack={() => setLocation("/sign-out")} /></Show>
       <Show when="signed-out"><Landing onSignIn={() => setLocation("/sign-in")} onSignUp={() => setLocation("/sign-up")} /></Show>
     </>
   );

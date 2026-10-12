@@ -27,3 +27,6 @@ Organization invitations and other planned provider connectors require product
 policy/account setup beyond these existing-flow fixes; record remaining work.
 
 Completed steps and verification will be appended below.
+
+- dbda37d: approved additive schema/migration files. 86 tests pass, workspace
+  types pass, API build passes. No database connection/migration executed.

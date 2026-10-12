@@ -13,6 +13,7 @@ import rootCauseRouter from "./root-cause.js";
 import postmortemRouter from "./postmortem.js";
 import webhookRouter from "./webhook.js";
 import notifyRouter from "./notify.js";
+import webhookKeysRouter from "./webhook-keys.js";
 
 const router: IRouter = Router();
 
@@ -29,6 +30,7 @@ router.use(insightsRouter);
 router.use(rootCauseRouter);
 router.use(postmortemRouter);
 router.use(webhookRouter);
+router.use(webhookKeysRouter);
 router.use(notifyRouter);
 
 export default router;

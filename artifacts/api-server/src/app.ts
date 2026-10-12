@@ -93,7 +93,8 @@ app.use("/api", (_req: Request, res: Response) => {
 // Global JSON error handler — catches unhandled async throws from route handlers
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
-  logger.error({ err, url: req.url, method: req.method }, "unhandled route error");
+  logger.error({ errorType: err instanceof Error ? err.name : "UnknownError", requestId: req.id,
+    url: req.url.split("?")[0], method: req.method }, "unhandled route error");
   const isProd = process.env.NODE_ENV === "production";
   const message = isProd ? "Internal server error" : (err instanceof Error ? err.message : "Internal server error");
   if (!res.headersSent) {

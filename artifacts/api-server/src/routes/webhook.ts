@@ -1,31 +1,12 @@
 import { Router, type Request, type Response } from "express";
 import { eq, and } from "drizzle-orm";
-import { db, services, serviceEvents, users } from "@workspace/db";
+import { db, services, serviceEvents } from "@workspace/db";
 import { ok, fail } from "../lib/response.js";
+import { resolveWebhookOrganization } from "../services/webhook-credentials.js";
 
 const router = Router();
 
 // ── Resolve organization from API key (Clerk user ID) ─────────────────────────
-
-async function resolveOrg(apiKey: string): Promise<number | null> {
-  if (!apiKey) return null;
-  const [clerkUser] = await db.select({ organizationId: users.organizationId })
-    .from(users)
-    .where(eq(users.clerkUserId, apiKey))
-    .limit(1);
-  if (clerkUser?.organizationId) return clerkUser.organizationId;
-
-  // Fallback for internal JWT users / numeric ID
-  const numericId = apiKey.startsWith("user_") ? parseInt(apiKey.slice(5), 10) : parseInt(apiKey, 10);
-  if (!isNaN(numericId)) {
-    const [localUser] = await db.select({ organizationId: users.organizationId })
-      .from(users)
-      .where(eq(users.id, numericId))
-      .limit(1);
-    return localUser?.organizationId ?? null;
-  }
-  return null;
-}
 
 // ── Upsert service by name within an org ──────────────────────────────────────
 
@@ -44,7 +25,7 @@ async function upsertService(orgId: number, name: string): Promise<number> {
 // ── POST /api/ingest/webhook ───────────────────────────────────────────────────
 // Generic webhook format — works with any alerting tool that supports JSON webhooks.
 //
-// Authentication: pass your Clerk user ID as the ?apiKey= query param.
+// Authentication: use a generated webhook key via X-API-Key (preferred) or ?apiKey=.
 // You can find it in the dashboard under Settings → Webhook Integration.
 //
 // Payload shape:
@@ -58,13 +39,7 @@ async function upsertService(orgId: number, name: string): Promise<number> {
 // }
 
 router.post("/ingest/webhook", async (req: Request, res: Response) => {
-  const apiKey =
-    (req.query.apiKey as string) ||
-    (req.query.apikey as string) ||
-    (req.headers["x-api-key"] as string) ||
-    (req.headers.authorization?.replace(/^Bearer\s+/i, "") as string) ||
-    "";
-  const orgId = await resolveOrg(apiKey);
+  const orgId = await resolveWebhookOrganization(req);
   if (!orgId) {
     fail(res, "Invalid or missing API key. Provide via ?apiKey= query param, X-API-Key, or Authorization header", 401);
     return;
@@ -124,13 +99,7 @@ router.post("/ingest/webhook", async (req: Request, res: Response) => {
 // Supports: trigger, acknowledge, resolve events
 
 router.post("/ingest/webhook/pagerduty", async (req: Request, res: Response) => {
-  const apiKey =
-    (req.query.apiKey as string) ||
-    (req.query.apikey as string) ||
-    (req.headers["x-api-key"] as string) ||
-    (req.headers.authorization?.replace(/^Bearer\s+/i, "") as string) ||
-    "";
-  const orgId = await resolveOrg(apiKey);
+  const orgId = await resolveWebhookOrganization(req);
   if (!orgId) {
     fail(res, "Invalid or missing API key. Provide via ?apiKey= query param, X-API-Key, or Authorization header", 401);
     return;

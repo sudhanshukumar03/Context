@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { eq, desc, or, inArray, and, gte } from "drizzle-orm";
 import { db, services, serviceDependencies, serviceEvents, serviceMessages } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
+import { requireOrganizationAdmin } from "../middleware/organization-permissions.js";
 import { ok, fail } from "../lib/response.js";
 import { requestIncidentAnswer } from "../services/incident-ai.js";
 import { logAiError } from "../services/ai.service.js";
@@ -209,7 +210,7 @@ router.get("/insights/timeline", requireAuth, async (req: Request, res: Response
 // ── POST /demo/seed ───────────────────────────────────────────────────────────
 // Seeds sample incident data for the demo flow
 
-router.post("/demo/seed", requireAuth, async (req: Request, res: Response) => {
+router.post("/demo/seed", requireAuth, requireOrganizationAdmin, async (req: Request, res: Response) => {
   const orgId = req.auth!.organizationId ?? 0;
 
   try {

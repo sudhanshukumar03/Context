@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db, services, serviceDependencies, serviceEvents, serviceMessages } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
+import { requireOrganizationAdmin } from "../middleware/organization-permissions.js";
 import { ok, fail } from "../lib/response.js";
 
 const router = Router();
@@ -45,7 +46,7 @@ const MessagesUploadSchema = z.object({
 
 // ── POST /upload/services ─────────────────────────────────────────────────────
 
-router.post("/upload/services", requireAuth, async (req: Request, res: Response) => {
+router.post("/upload/services", requireAuth, requireOrganizationAdmin, async (req: Request, res: Response) => {
   const parsed = ServicesUploadSchema.safeParse(req.body);
   if (!parsed.success) { fail(res, "Invalid request: " + parsed.error.issues[0]?.message); return; }
 
@@ -95,7 +96,7 @@ router.post("/upload/services", requireAuth, async (req: Request, res: Response)
 
 // ── POST /upload/events ───────────────────────────────────────────────────────
 
-router.post("/upload/events", requireAuth, async (req: Request, res: Response) => {
+router.post("/upload/events", requireAuth, requireOrganizationAdmin, async (req: Request, res: Response) => {
   const parsed = EventsUploadSchema.safeParse(req.body);
   if (!parsed.success) { fail(res, "Invalid request: " + parsed.error.issues[0]?.message); return; }
 
@@ -139,7 +140,7 @@ router.post("/upload/events", requireAuth, async (req: Request, res: Response) =
 
 // ── POST /upload/messages ─────────────────────────────────────────────────────
 
-router.post("/upload/messages", requireAuth, async (req: Request, res: Response) => {
+router.post("/upload/messages", requireAuth, requireOrganizationAdmin, async (req: Request, res: Response) => {
   const parsed = MessagesUploadSchema.safeParse(req.body);
   if (!parsed.success) { fail(res, "Invalid request: " + parsed.error.issues[0]?.message); return; }
 

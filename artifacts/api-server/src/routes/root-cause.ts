@@ -3,6 +3,7 @@ import { Router, type Request, type Response } from "express";
 import { eq, desc, gte, and, inArray } from "drizzle-orm";
 import { db, services, serviceDependencies, serviceEvents, serviceMessages } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
+import { requireOrganizationAdmin } from "../middleware/organization-permissions.js";
 import { ok, fail } from "../lib/response.js";
 import { requestRootCause } from "../services/incident-ai.js";
 
@@ -439,7 +440,7 @@ router.post("/insights/simulate-action", requireAuth, async (req: Request, res: 
 
 // ── POST /demo/reset ──────────────────────────────────────────────────────────
 
-router.post("/demo/reset", requireAuth, async (req: Request, res: Response) => {
+router.post("/demo/reset", requireAuth, requireOrganizationAdmin, async (req: Request, res: Response) => {
   const orgId = req.auth!.organizationId ?? 0;
   try {
     const orgSvcs = await db.select({ id: services.id }).from(services).where(eq(services.organizationId, orgId));
@@ -460,7 +461,7 @@ router.post("/demo/reset", requireAuth, async (req: Request, res: Response) => {
 
 // ── POST /demo/advance ────────────────────────────────────────────────────────
 
-router.post("/demo/advance", requireAuth, async (req: Request, res: Response) => {
+router.post("/demo/advance", requireAuth, requireOrganizationAdmin, async (req: Request, res: Response) => {
   const { step } = req.body as { step: number };
   const orgId = req.auth!.organizationId ?? 0;
 

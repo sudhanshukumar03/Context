@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import { db, documents } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
+import { requireOrganizationAdmin } from "../middleware/organization-permissions.js";
 import { ok, fail } from "../lib/response.js";
 
 const router = Router();
@@ -36,7 +37,7 @@ function extractTextContent(buffer: Buffer, mimetype: string): string {
   return buffer.toString("utf-8").slice(0, 50000);
 }
 
-router.post("/upload/docs", requireAuth, upload.array("files", 5), async (req: Request, res: Response) => {
+router.post("/upload/docs", requireAuth, requireOrganizationAdmin, upload.array("files", 5), async (req: Request, res: Response) => {
   const files = req.files as Express.Multer.File[] | undefined;
   if (!files || files.length === 0) { fail(res, "No files uploaded"); return; }
 
@@ -69,7 +70,7 @@ router.post("/upload/docs", requireAuth, upload.array("files", 5), async (req: R
   }
 });
 
-router.post("/upload/team", requireAuth, async (req: Request, res: Response) => {
+router.post("/upload/team", requireAuth, requireOrganizationAdmin, async (req: Request, res: Response) => {
   // Accept JSON payload describing team members and store as a document
   const { members } = req.body as { members?: unknown[] };
   if (!Array.isArray(members) || members.length === 0) {
@@ -96,7 +97,7 @@ router.post("/upload/team", requireAuth, async (req: Request, res: Response) => 
   }
 });
 
-router.post("/upload/tasks", requireAuth, async (req: Request, res: Response) => {
+router.post("/upload/tasks", requireAuth, requireOrganizationAdmin, async (req: Request, res: Response) => {
   const { tasks } = req.body as { tasks?: unknown[] };
   if (!Array.isArray(tasks) || tasks.length === 0) {
     fail(res, "tasks array required"); return;

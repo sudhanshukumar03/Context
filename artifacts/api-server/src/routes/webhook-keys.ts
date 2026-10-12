@@ -4,11 +4,12 @@ import { z } from "zod";
 import rateLimit from "express-rate-limit";
 import { db, webhookKeys } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
+import { requireOrganizationAdmin } from "../middleware/organization-permissions.js";
 import { fail, ok } from "../lib/response.js";
 import { createWebhookKey } from "../services/webhook-credentials.js";
 
 const router = Router();
-router.use("/webhook-keys", requireAuth, (req, res, next) => {
+router.use("/webhook-keys", requireAuth, requireOrganizationAdmin, (req, res, next) => {
   if (!req.auth?.organizationId) { fail(res, "Organization required", 403); return; }
   next();
 });

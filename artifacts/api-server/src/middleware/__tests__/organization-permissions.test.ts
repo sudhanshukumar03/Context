@@ -12,7 +12,7 @@ describe("server-enforced organization permissions", () => {
     const next = vi.fn();
     const req = { auth: { organizationId: 10, clerkOrganizationId: "org_real", organizationRole: role }, body: { role: "admin" } } as unknown as Request;
     requireOrganizationAdmin(req, {} as Response, next);
-    expect(next).not.toHaveBeenCalled(); expect(mocks.fail).toHaveBeenCalledWith(req && {}, expect.any(String), 403);
+    expect(next).not.toHaveBeenCalled(); expect(mocks.fail).toHaveBeenCalledWith({}, expect.any(String), 403);
   });
   it("allows a verified Clerk organization admin", () => {
     const next = vi.fn(); requireOrganizationAdmin({ auth: { organizationId: 10, clerkOrganizationId: "org_real", organizationRole: "org:admin" } } as Request, {} as Response, next);

@@ -6,6 +6,8 @@ import { requireAuth } from "../middleware/auth.js";
 import { requireOrganizationAdmin } from "../middleware/organization-permissions.js";
 import { ok, fail } from "../lib/response.js";
 import { requestRootCause } from "../services/incident-ai.js";
+import { createHash } from "node:crypto";
+import { runAiTool } from "./ai-tools-execution.js";
 
 const router = Router();
 
@@ -25,7 +27,7 @@ interface LLMEnrichment {
   reasoning: string[];
 }
 
-const llmCache = new Map<number, { ts: number; data: LLMEnrichment }>();
+const llmCache = new Map<number, { ts: number; fingerprint: string; data: LLMEnrichment }>();
 const LLM_TTL = 30_000;
 
 async function getLLMEnrichment(
@@ -37,10 +39,13 @@ async function getLLMEnrichment(
   recentEventsCtx: string,
   recentMsgsCtx: string,
   depCtx: string,
-  logger: { warn: (o: object, m: string) => void }
+  request: Request
 ): Promise<LLMEnrichment | null> {
+  if (!process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY && !process.env.AI_INTEGRATIONS_OPENAI_API_KEY) return null;
+  const fingerprint = createHash("sha256").update(JSON.stringify([rootSvcName, cascadePath, impacted,
+    incidentMinutes, recentEventsCtx, recentMsgsCtx, depCtx])).digest("hex");
   const cached = llmCache.get(orgId);
-  if (cached && Date.now() - cached.ts < LLM_TTL) return cached.data;
+  if (cached && cached.fingerprint === fingerprint && Date.now() - cached.ts < LLM_TTL) return cached.data;
 
   try {
     const systemPrompt = `You are an expert site reliability engineer performing real-time root cause analysis.
@@ -89,12 +94,15 @@ Rules:
 - reasoning: exactly 3 steps, each citing a concrete event, timestamp, or dependency edge
 - No hallucination — every claim must map to the provided context`;
 
-    const data = await requestRootCause(systemPrompt);
+    const data = await runAiTool({ auth: request.auth, path: request.path, body: { fingerprint } },
+      () => requestRootCause(systemPrompt)) as LLMEnrichment;
 
-    llmCache.set(orgId, { ts: Date.now(), data });
+    if (llmCache.size >= 128) llmCache.delete(llmCache.keys().next().value!);
+    llmCache.set(orgId, { ts: Date.now(), fingerprint, data });
     return data;
   } catch (err) {
-    logger.warn({ errorType: err instanceof Error ? err.name : "UnknownError" }, "LLM enrichment failed — using heuristics");
+    request.log.warn({ organizationId: orgId, requestId: request.id,
+      errorType: err instanceof Error ? err.name : "UnknownError" }, "LLM enrichment failed — using heuristics");
     return null;
   }
 }
@@ -245,7 +253,7 @@ router.get("/insights/root-cause", requireAuth, async (req: Request, res: Respon
     // LLM enrichment (cached 30s per org)
     const llm = await getLLMEnrichment(
       orgId, rootSvc.name, cascadePath, impacted, incidentMinutes,
-      eventCtx, msgCtx, depCtx, req.log
+      eventCtx, msgCtx, depCtx, req
     );
 
     // Heuristic fallbacks

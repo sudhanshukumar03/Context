@@ -78,8 +78,9 @@ control. Temporary viewport overrides were reset. Screenshot:
   deployment secrets/domain/origins. Prepared instructions are in `DEPLOYMENT.md`.
 - Clerk test organization creation, admin controls, personal/team switching and
   second-account Member access are verified. Member views and role-lens restrictions
-  pass. A live AI answer remains blocked by Gemini HTTP 429; extended membership
-  removal and disposable-key checks need specific authorization. Details are in
+  pass. Shared-key creation, ingestion/replay and revocation now pass live. A live
+  AI answer remains blocked by Gemini HTTP 429; extended membership removal still
+  needs specific authorization. Details are in
   `SHARED_TEAM_TEST.md`.
 - Install the reusable workflow in the deployment repository and configure its
   Actions secrets; perform a live deployment-delivery check there.
@@ -441,3 +442,24 @@ revocation and revoked-delivery rejection are verified live. Successful shared
 ingestion/replay remains pending approval for a replacement disposable key. No
 additional key, role change, invitation or membership removal was performed.
 Detailed evidence and next steps are in SHARED_TEAM_TEST.md.
+
+## Follow-up: replacement-key lifecycle completed — 2026-10-13
+
+The user explicitly approved one replacement Context Test QA key after the
+issuer-filter correction. The complete live check passes: initial synthetic info
+delivery returned HTTP 200/duplicate=false; replay returned HTTP 200/duplicate=true
+with the same event ID. Exactly one team event was saved. Service statuses and
+update timestamps and all personal workspace counts remained unchanged.
+
+The replacement was revoked through the Admin UI. A new delivery using it returned
+HTTP 401 and changed no data. Both approved QA keys are revoked; the team has zero
+active keys, five healthy services, 15 events and six messages (Timeline 21).
+Read-only final checks found no cross-workspace links. The temporary secret was
+removed and test references discarded. Proof: tmp/verification/context-qa-key-complete.png
+and the safe lifecycle/isolation reports. No code changed in this retest; the
+preceding 39 regressions, API typecheck/build and startup checks remain valid.
+
+The remaining live team checks are Member removal/restoration, which still needs
+specific authorization, and distinct Slack destinations. Successful live AI answers remain
+blocked by Gemini rate/quota limits. No additional invitation, role change,
+membership removal, Slack message or production database change was performed.

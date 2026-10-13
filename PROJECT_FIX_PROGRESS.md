@@ -183,3 +183,13 @@ Completed steps and verification will be appended below.
   fail-closed behavior remain. Two regressions added; 39 focused tests across six
   files, API typecheck/build and restarted local smoke checks pass. Live ingestion/
   replay retest needs approval for one replacement key; none has been created.
+- The user approved one replacement QA key. Full live lifecycle now passes:
+  initial info event HTTP 200/duplicate=false, replay HTTP 200/duplicate=true with
+  the same event ID, exactly one saved event. Revocation through the Admin UI
+  succeeded; a new delivery returned HTTP 401 and changed no data. Both QA keys
+  are revoked, team has zero active keys and Timeline 21. Five service statuses/
+  update timestamps and personal workspace counts are unchanged; no cross-team
+  references exist. Temporary secret removed and in-memory references discarded.
+  Evidence: tmp/verification/context-qa-key-complete.png and shared-key-lifecycle.json.
+  Member removal/restoration and distinct Slack destinations remain unverified;
+  Gemini still needs quota/rate recovery for successful live answer generation.

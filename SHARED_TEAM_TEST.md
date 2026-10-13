@@ -29,8 +29,8 @@ switcher. It began empty, with no services, timeline or webhook keys.
 | Member controls | Key creation/revocation unavailable; demo and shared Slack controls disabled | Passed live for visible controls; shared upload/reset writes covered by automated permission tests |
 | Clerk member management | Member cannot invite, change roles, edit or delete the organization | Passed live; two members correctly listed, no admin actions exposed |
 | Role lenses | Engineer/SRE/Manager selection does not change member permissions | Passed live in all three lenses; restored SRE |
-| Shared QA key creation/revocation | Admin can create and revoke the disposable team key | Passed live; original QA key is revoked and team has zero active keys |
-| Shared QA ingestion/replay | One info event is stored; replay adds none | Initial request rejected with 401 before any write; issuer-filter bug fixed and tested, replacement-key approval needed for a live retest |
+| Shared QA key creation/revocation | Admin can create and revoke the disposable team key | Passed live; first and approved replacement QA keys are revoked, zero active team keys |
+| Shared QA ingestion/replay | One info event is stored; replay adds none | Passed live with approved replacement: HTTP 200, duplicate=false then duplicate=true, same event ID and one persisted event |
 | Revoked QA delivery | A revoked key cannot ingest or change data | Passed live: HTTP 401, no count/health changes |
 | Membership revoked | Removed member loses access after session refresh; keys issued by that member cannot ingest | Requires separate authorization for membership change and a disposable test key |
 | Slack destinations | Preferences remain account/workspace scoped | Automated coverage passed; distinct live destinations not configured |
@@ -91,10 +91,10 @@ Direct browser navigation to a protected API was blocked by the client; crafted
 live Member mutation requests were not performed or bypassed. Server enforcement
 is supported by the focused signed-session tests, separately from UI verification.
 
-The original Admin account is now signed in to Context Test after the authorized
-QA-key attempt. The first disposable key has been revoked. Membership removal and
-a replacement test key need their own specific authorization before extended live
-checks; distinct Slack destinations remain unconfigured.
+The original Admin account is signed in to Context Test after the completed
+replacement-key test. Both approved disposable keys are revoked. Membership
+removal needs its own specific authorization before an extended live check;
+distinct Slack destinations remain unconfigured.
 
 Follow-up: Gemini HTTP 429 now produces a safe HTTP 503 message explaining
 provider rate/quota exhaustion and recommending a later retry. The real Member
@@ -107,11 +107,12 @@ been changed; a successful live answer remains unverified. Screenshot:
 
 ## Prepared next live checks
 
-The user approved steps 1–3 for one disposable key. The first attempt was stopped
-after its initial ingestion returned HTTP 401, and that key was revoked. A second
-key has not been approved or created. Step 4 remains unapproved. The plan uses
-only Context Test and the generated local database; the original personal
-Monitoring key is outside the test scope.
+The user approved steps 1–3 for one disposable key. The first attempt stopped
+after its initial ingestion returned HTTP 401, and that key was revoked. The user
+then specifically approved one replacement key, and all three steps passed live
+after the issuer-filter fix. Step 4 remains unapproved. The plan uses only Context
+Test and the generated local database; the original personal Monitoring key is
+outside the test scope.
 
 1. Using the original Admin account, create one key named `Context Test QA`.
    Keep its one-time secret private, use it only against the local ingestion route
@@ -161,3 +162,27 @@ replacement key. Safe evidence: `tmp/verification/shared-key-first-attempt.json`
 `tmp/verification/qa-membership-inspection.json`,
 `tmp/verification/qa-membership-filter-fixed.json` and
 `tmp/verification/context-qa-key-revoked.png`.
+
+## Approved replacement-key test completed
+
+The user specifically approved one replacement `Context Test QA` key. It was
+created through the signed-in Admin UI after the issuer-filter fix was activated.
+The initial synthetic Payments API info event returned HTTP 200 with
+`duplicate=false`; replay returned HTTP 200 with `duplicate=true` and the same
+event ID. Shared event count increased exactly once, from 14 to 15. The five
+services' statuses and update timestamps were unchanged, as were all personal
+workspace service/event/message/active-key counts.
+
+The replacement key was revoked through the real UI. Delivery with a different
+event ID then returned HTTP 401 and changed no database state. The team has zero
+active keys. Its dashboard refresh shows Timeline 21 (15 events and six messages)
+and the key-revoked status. Read-only final checks confirm five healthy services,
+unchanged personal data and no cross-workspace event/message/dependency links.
+The private secret file was removed and in-memory test references discarded.
+
+Safe evidence: `tmp/verification/shared-key-lifecycle.json`,
+`tmp/verification/shared-tenant-isolation.json` and
+`tmp/verification/context-qa-key-complete.png`. No further key, role change,
+invitation, membership removal, Slack message or production mutation occurred.
+Remaining live team checks are Member removal/restoration and distinct Slack
+destinations; live AI answer generation still awaits Gemini quota/rate recovery.

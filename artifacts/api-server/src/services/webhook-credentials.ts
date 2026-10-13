@@ -27,7 +27,9 @@ export async function resolveWebhookOrganization(req: Request): Promise<number |
   // Check current membership for each shared key use, including after removal/demotion.
   const organizationId = key.organizationSlug.slice("clerk-org-".length);
   const url = new URL(`https://api.clerk.com/v1/organizations/${encodeURIComponent(organizationId)}/memberships`);
-  url.searchParams.append("user_id[]", key.clerkUserId); url.searchParams.set("limit", "1");
+  // Clerk uses repeated user_id parameters, not bracket-suffixed array keys.
+  // An ignored filter plus limit=1 can otherwise return a different member.
+  url.searchParams.append("user_id", key.clerkUserId); url.searchParams.set("limit", "1");
   const response = await fetch(url, { headers: { Authorization: `Bearer ${process.env.CLERK_SECRET_KEY}` }, signal: AbortSignal.timeout(5000) });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("Webhook membership verification unavailable");

@@ -85,4 +85,32 @@ describe("webhook credentials", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 503 })));
     await expect(resolveWebhookOrganization(request(createWebhookKey().token))).rejects.toThrow("verification unavailable");
   });
+  it("filters the actual issuer when a newer member is first in the organization", async () => {
+    vi.stubEnv("CLERK_SECRET_KEY", "test-only");
+    mocks.rows = [{ organizationId: 20, organizationSlug: "clerk-org-org_team", clerkUserId: "user_admin" }];
+    const provider = vi.fn(async (input: string | URL) => {
+      const url = new URL(String(input));
+      // The provider ignores unsupported bracketed parameter names and returns
+      // its newest member first. The issuer must be selected before limit=1.
+      const issuerSelected = url.searchParams.getAll("user_id").includes("user_admin");
+      return new Response(JSON.stringify({ total_count: issuerSelected ? 1 : 2, data: [{
+        role: issuerSelected ? "org:admin" : "org:member",
+        public_user_data: { user_id: issuerSelected ? "user_admin" : "user_member" },
+      }] }));
+    });
+    vi.stubGlobal("fetch", provider);
+    expect(await resolveWebhookOrganization(request(createWebhookKey().token))).toBe(20);
+    const url = new URL(String(provider.mock.calls[0][0]));
+    expect(url.searchParams.getAll("user_id")).toEqual(["user_admin"]);
+    expect(url.searchParams.has("user_id[]")).toBe(false);
+    expect(url.searchParams.get("limit")).toBe("1");
+  });
+  it("does not accept a different admin returned by the membership provider", async () => {
+    vi.stubEnv("CLERK_SECRET_KEY", "test-only");
+    mocks.rows = [{ organizationId: 20, organizationSlug: "clerk-org-org_team", clerkUserId: "user_removed" }];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{
+      role: "org:admin", public_user_data: { user_id: "user_other_admin" },
+    }] }))));
+    expect(await resolveWebhookOrganization(request(createWebhookKey().token))).toBeNull();
+  });
 });

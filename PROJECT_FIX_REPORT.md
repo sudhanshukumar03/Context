@@ -414,3 +414,30 @@ The next disposable-key/replay/revocation check and a separate Member-removal/
 restoration check have concrete procedures in SHARED_TEAM_TEST.md. They require
 specific authorization before external access or credentials change. No live key,
 role, invitation or membership was changed during this follow-up.
+
+## Follow-up: approved disposable shared key — 2026-10-13
+
+The original Admin restored sign-in through its existing Google session and
+created the one approved Context Test QA key. Its first synthetic info delivery
+failed with HTTP 401 before any write, exposing an issuer-filter defect. The QA
+key was immediately revoked through the application. A subsequent delivery with
+that key returned 401 and changed no data. Team counts remain five healthy
+services, 14 events, six messages and zero active keys; original personal counts
+and Monitoring key are preserved. The temporary QA secret was discarded.
+
+Clerk ignored the hand-built `user_id[]` parameter. Combined with limit=1 this
+returned the newer Member, incorrectly rejecting the real Admin's credential.
+Changed it to `user_id`, matching the installed SDK's repeated query serialization.
+The documented user-ID filter is described in Clerk's
+[membership API documentation](https://clerk.com/docs/reference/backend/organization/get-organization-membership-list).
+Read-only live checks now return exactly the matching Admin. Current membership,
+exact issuer and org:admin checks still apply; no cached or fabricated role can
+authorize an unrelated issuer.
+
+Two regressions cover the newer-member ordering and unrelated-admin rejection.
+The focused signed-session/key/ingestion suite passes 39 tests across six files;
+API typecheck/build and restarted isolated-app smoke checks pass. Creation,
+revocation and revoked-delivery rejection are verified live. Successful shared
+ingestion/replay remains pending approval for a replacement disposable key. No
+additional key, role change, invitation or membership removal was performed.
+Detailed evidence and next steps are in SHARED_TEAM_TEST.md.

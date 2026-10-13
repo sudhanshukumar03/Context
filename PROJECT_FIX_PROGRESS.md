@@ -171,3 +171,15 @@ Completed steps and verification will be appended below.
   Screenshot: tmp/verification/context-member-ai-rate-limit.png. A concrete
   disposable-key/replay/revocation plan is prepared in SHARED_TEAM_TEST.md;
   no live key or membership change has been performed in this follow-up.
+- The user approved one disposable Context Test QA key. Original Admin sign-in
+  restored using its existing Google session; key creation and revocation passed
+  in the real UI. Initial ingestion failed with 401 and saved no event. The key
+  was immediately revoked; another delivery returned 401 with no database changes.
+  Shared counts remain five healthy services, 14 events/six messages, zero active
+  keys; original personal counts/key remain unchanged. Private QA secret discarded.
+- Fixed the discovered Clerk issuer-filter bug: `user_id[]` was ignored, letting
+  limit=1 return the newer Member. `user_id` selects the actual issuer; read-only
+  live verification now returns the matching Admin. Exact issuer/role checks and
+  fail-closed behavior remain. Two regressions added; 39 focused tests across six
+  files, API typecheck/build and restarted local smoke checks pass. Live ingestion/
+  replay retest needs approval for one replacement key; none has been created.

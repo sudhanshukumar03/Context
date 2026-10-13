@@ -29,6 +29,9 @@ switcher. It began empty, with no services, timeline or webhook keys.
 | Member controls | Key creation/revocation unavailable; demo and shared Slack controls disabled | Passed live for visible controls; shared upload/reset writes covered by automated permission tests |
 | Clerk member management | Member cannot invite, change roles, edit or delete the organization | Passed live; two members correctly listed, no admin actions exposed |
 | Role lenses | Engineer/SRE/Manager selection does not change member permissions | Passed live in all three lenses; restored SRE |
+| Shared QA key creation/revocation | Admin can create and revoke the disposable team key | Passed live; original QA key is revoked and team has zero active keys |
+| Shared QA ingestion/replay | One info event is stored; replay adds none | Initial request rejected with 401 before any write; issuer-filter bug fixed and tested, replacement-key approval needed for a live retest |
+| Revoked QA delivery | A revoked key cannot ingest or change data | Passed live: HTTP 401, no count/health changes |
 | Membership revoked | Removed member loses access after session refresh; keys issued by that member cannot ingest | Requires separate authorization for membership change and a disposable test key |
 | Slack destinations | Preferences remain account/workspace scoped | Automated coverage passed; distinct live destinations not configured |
 
@@ -88,9 +91,10 @@ Direct browser navigation to a protected API was blocked by the client; crafted
 live Member mutation requests were not performed or bypassed. Server enforcement
 is supported by the focused signed-session tests, separately from UI verification.
 
-The Member dashboard remains signed in to Context Test. Membership removal and
-the disposable credential lifecycle need their own specific authorization before
-those extended live checks; distinct Slack destinations remain unconfigured.
+The original Admin account is now signed in to Context Test after the authorized
+QA-key attempt. The first disposable key has been revoked. Membership removal and
+a replacement test key need their own specific authorization before extended live
+checks; distinct Slack destinations remain unconfigured.
 
 Follow-up: Gemini HTTP 429 now produces a safe HTTP 503 message explaining
 provider rate/quota exhaustion and recommending a later retry. The real Member
@@ -103,9 +107,11 @@ been changed; a successful live answer remains unverified. Screenshot:
 
 ## Prepared next live checks
 
-The following plan has not been executed or approved. It uses only Context Test
-and the generated local database; the original personal Monitoring key is outside
-the test scope.
+The user approved steps 1–3 for one disposable key. The first attempt was stopped
+after its initial ingestion returned HTTP 401, and that key was revoked. A second
+key has not been approved or created. Step 4 remains unapproved. The plan uses
+only Context Test and the generated local database; the original personal
+Monitoring key is outside the test scope.
 
 1. Using the original Admin account, create one key named `Context Test QA`.
    Keep its one-time secret private, use it only against the local ingestion route
@@ -127,3 +133,31 @@ If an authorized check fails, stop before further writes, preserve safe failure
 metadata and revoke the QA key if it was created. Restore the Member invitation
 only if that restoration was explicitly authorized. Synthetic evidence is retained;
 no deletion/reset is needed.
+
+## First QA-key attempt and issuer-filter correction
+
+The approved `Context Test QA` key was created by the original Admin through the
+real application UI. Its initial info delivery returned HTTP 401 and persisted
+no event; replay was not attempted. The key was immediately revoked through the
+UI. A new delivery with that revoked key also returned 401, with no changes to
+services, events, messages or personal key counts. The shared workspace still
+has five healthy services, 14 events, six messages and zero active keys. The
+one-time secret was kept out of outputs/screenshots and its temporary file was
+removed after the rejected-delivery check.
+
+Read-only Clerk verification reproduced the cause: `user_id[]` was ignored, so
+`limit=1` returned the newer Member rather than the key's Admin issuer. The query
+now uses `user_id`, consistent with the installed SDK's repeated-parameter
+serialization and Clerk's documented issuer filter. Corrected live verification
+returns exactly the matching Admin. The exact issuer ID and admin role are still
+both required; other users, removed/demoted issuers and provider errors cannot
+authorize a shared key. No role or membership change was made.
+
+Two regressions cover a newer Member preceding the issuer and an unrelated Admin
+being rejected. The focused signed-session/key/ingestion suite passes 39 tests
+across six files. API typecheck/build and restarted local smoke checks pass.
+Successful shared ingestion and replay remain pending a specifically approved
+replacement key. Safe evidence: `tmp/verification/shared-key-first-attempt.json`,
+`tmp/verification/qa-membership-inspection.json`,
+`tmp/verification/qa-membership-filter-fixed.json` and
+`tmp/verification/context-qa-key-revoked.png`.

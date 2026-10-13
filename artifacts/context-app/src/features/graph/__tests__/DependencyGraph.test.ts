@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { computeLayout } from "../DependencyGraph.js";
 import type { GraphNode, GraphEdge } from "../../../types.js";
 
-describe("DependencyGraph Physics Layout Engine (ARC-002)", () => {
+describe("Dependency graph layout", () => {
   it("handles empty nodes gracefully", () => {
     const layout = computeLayout([], [], 800, 600);
     expect(layout.size).toBe(0);
@@ -36,5 +36,27 @@ describe("DependencyGraph Physics Layout Engine (ARC-002)", () => {
       expect(pos!.y).toBeGreaterThanOrEqual(0);
       expect(pos!.y).toBeLessThanOrEqual(H);
     }
+  });
+
+  it("places callers before their dependencies and is stable when input order changes", () => {
+    const nodes = ["checkout", "payments", "database"].map(id => ({ id, label: id, status: "healthy", color: "", description: null }));
+    const edges = [{ from: "checkout", to: "payments", label: "calls" }, { from: "payments", to: "database", label: "queries" }];
+    const layout = computeLayout(nodes, edges, 840, 390);
+    expect(layout.get("checkout")!.x).toBeLessThan(layout.get("payments")!.x);
+    expect(layout.get("payments")!.x).toBeLessThan(layout.get("database")!.x);
+    expect(computeLayout([...nodes].reverse(), [...edges].reverse(), 840, 390)).toEqual(layout);
+    const positions = [...layout.values()];
+    for (let i = 0; i < positions.length; i++) for (let j = i + 1; j < positions.length; j++) expect(Math.abs(positions[i].x - positions[j].x) >= 224 || Math.abs(positions[i].y - positions[j].y) >= 88).toBe(true);
+  });
+
+  it("handles cycles, disconnected services, duplicates and missing edge endpoints", () => {
+    const nodes = ["a", "b", "c", "isolated"].map(id => ({ id, label: id, status: "healthy", color: "", description: null }));
+    const edges = [{ from: "a", to: "b", label: "uses" }, { from: "b", to: "a", label: "uses" }, { from: "b", to: "c", label: "uses" }, { from: "b", to: "c", label: "duplicate" }, { from: "unknown", to: "a", label: "missing" }];
+    const layout = computeLayout(nodes, edges, 740, 550);
+    expect(layout.size).toBe(4);
+    expect(layout.get("a")!.x).toBe(layout.get("b")!.x);
+    expect(layout.get("c")!.x).toBeGreaterThan(layout.get("b")!.x);
+    expect(new Set([...layout.values()].map(pos => `${pos.x}:${pos.y}`)).size).toBe(4);
+    expect(Math.abs(layout.get("a")!.y - layout.get("b")!.y)).toBeGreaterThan(88);
   });
 });

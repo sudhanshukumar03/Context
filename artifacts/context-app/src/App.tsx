@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { motion, AnimatePresence, MotionConfig, useReducedMotion } from "framer-motion";
+import { motion, AnimatePresence, MotionConfig } from "framer-motion";
 import {
   Sparkles, Bot, ChevronRight, ArrowRight, CheckCircle2, X, Sun, Moon,
   AlertTriangle, Activity, Network, MessageSquare, Clock, RefreshCw,
@@ -19,7 +19,9 @@ import DemoVideoInline from "./components/DemoVideoInline";
 import ContextLogo, { ContextMark } from "./components/ContextLogo";
 import WebhookKeySettings from "./components/WebhookKeySettings";
 import SlackSettingsModal from "./components/SlackSettingsModal";
-import AiRequestStatus from "./components/AiRequestStatus";
+import AIAssistant from "./features/ai/IncidentAssistant";
+import { TimelineTab, IncidentHistoryTab } from "./features/timeline/IncidentTimeline";
+import { chronological, categoryOf, CATEGORY_META, recordTitle, timeLabel } from "./features/timeline/timeline-model";
 import WorkspaceActions from "./components/WorkspaceActions";
 import { ApplicationStatus, AuthenticationLoading } from "./components/ApplicationStartup";
 import { ClerkSession, DevSession, isDevAuthBypass, useAuth, useUser } from "./lib/auth-session";
@@ -436,412 +438,6 @@ function PredictionsPanel({ predictions }: { predictions: Prediction[] }) {
 
 // ── Timeline with phases ──────────────────────────────────────────────────────
 
-type IncidentPhase = "Trigger" | "Amplification" | "Impact" | "Mitigation" | "Recovery";
-interface PhaseGroup { phase: IncidentPhase; icon: string; items: TimelineItem[]; }
-
-function assignPhase(item: TimelineItem, index: number, all: TimelineItem[]): IncidentPhase {
-  if (item.kind === "event" && item.type === "recovery") return "Recovery";
-  if (item.kind === "event" && (item.type === "recovery" || item.title?.toLowerCase().includes("recover") || item.title?.toLowerCase().includes("restor"))) return "Mitigation";
-  if (item.kind === "event" && item.type === "deployment" && index === all.length - 1) return "Trigger";
-  if (item.kind === "event" && item.severity === "critical" && index >= all.length * 0.6) return "Amplification";
-  if (item.severity === "critical" || item.title?.toLowerCase().includes("impact") || item.title?.toLowerCase().includes("checkout") || item.title?.toLowerCase().includes("revenue")) return "Impact";
-  if (item.kind === "event" && (item.type === "deployment" || item.type === "failure") && index >= all.length - 3) return "Trigger";
-  if (item.kind === "message" && (item.content?.toLowerCase().includes("rollback") || item.content?.toLowerCase().includes("fix") || item.content?.toLowerCase().includes("recover"))) return "Mitigation";
-  const criticalsBefore = all.slice(0, index).filter(a => a.severity === "critical").length;
-  if (criticalsBefore === 0 && item.severity === "critical") return "Trigger";
-  if (criticalsBefore > 0 && item.severity === "critical") return "Amplification";
-  return "Impact";
-}
-
-const PHASE_META: Record<IncidentPhase, { icon: string; color: string; bg: string }> = {
-  Trigger: { icon: "⚡", color: "text-red-400", bg: "bg-red-500/8 border-red-500/15" },
-  Amplification: { icon: "🔥", color: "text-orange-400", bg: "bg-orange-500/8 border-orange-500/15" },
-  Impact: { icon: "💥", color: "text-amber-400", bg: "bg-amber-500/8 border-amber-500/15" },
-  Mitigation: { icon: "🛠", color: "text-indigo-400", bg: "bg-indigo-500/8 border-indigo-500/15" },
-  Recovery: { icon: "✅", color: "text-emerald-400", bg: "bg-emerald-500/8 border-emerald-500/15" },
-};
-
-function groupIntoPhases(feed: TimelineItem[]): PhaseGroup[] {
-  if (!feed.length) return [];
-  const reversed = [...feed].reverse();
-  const groups = new Map<IncidentPhase, TimelineItem[]>();
-  reversed.forEach((item, i) => {
-    const phase = assignPhase(item, i, reversed);
-    if (!groups.has(phase)) groups.set(phase, []);
-    groups.get(phase)!.push(item);
-  });
-  const order: IncidentPhase[] = ["Trigger", "Amplification", "Impact", "Mitigation", "Recovery"];
-  return order.filter(p => groups.has(p)).map(p => ({ phase: p, icon: PHASE_META[p].icon, items: groups.get(p)!.reverse() }));
-}
-
-function TimelineTab({ feed, loading }: { feed: TimelineItem[]; loading: boolean }) {
-  const [collapsedPhases, setCollapsedPhases] = useState<Set<IncidentPhase>>(new Set());
-  const [showRaw, setShowRaw] = useState(false);
-  const [search, setSearch] = useState("");
-
-  const filteredFeed = useMemo(() => {
-    if (!search.trim()) return feed;
-    const q = search.toLowerCase();
-    return feed.filter(item =>
-      (item.title ?? "").toLowerCase().includes(q) ||
-      (item.content ?? "").toLowerCase().includes(q) ||
-      (item.serviceName ?? "").toLowerCase().includes(q) ||
-      (item.description ?? "").toLowerCase().includes(q)
-    );
-  }, [feed, search]);
-
-  if (loading) return <div className="space-y-3">{[0,1,2,3,4].map(i => <div key={i} className="rounded-xl border border-white/6 bg-white/2 h-16 animate-pulse" />)}</div>;
-
-  if (!feed.length) return (
-    <div className="flex flex-col items-center justify-center py-20 text-slate-600 gap-3">
-      <Clock size={28} className="opacity-30" />
-      <p className="text-sm">No activity yet — run the demo to populate the timeline</p>
-    </div>
-  );
-
-  const phases = groupIntoPhases(filteredFeed);
-  const togglePhase = (p: IncidentPhase) => setCollapsedPhases(prev => { const n = new Set(prev); n.has(p) ? n.delete(p) : n.add(p); return n; });
-
-  const renderItem = (item: TimelineItem) => (
-    <div key={item.id} className="rounded-xl px-4 py-3" style={{ background: "var(--ctx-surface)", border: "1px solid var(--ctx-border)" }}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          {item.kind === "event" ? (
-            <>
-              <div className="flex items-center gap-2 mb-1">
-                <Terminal size={11} className="text-slate-500 flex-shrink-0" />
-                <span className="text-sm font-semibold text-white">{item.title}</span>
-                {item.severity && <SeverityBadge severity={item.severity} />}
-              </div>
-              {item.description && <p className="text-sm text-slate-500 leading-relaxed">{item.description}</p>}
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-2 mb-1">
-                <MessageSquare size={11} className="text-indigo-400 flex-shrink-0" />
-                <span className="text-sm font-semibold text-indigo-400">#{item.channel}</span>
-                <span className="text-sm text-slate-500">— {item.author}</span>
-              </div>
-              <p className="text-sm text-slate-300 leading-relaxed">{item.content}</p>
-            </>
-          )}
-        </div>
-        <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          {item.serviceName && <span className="text-xs text-slate-600 font-medium">{item.serviceName}</span>}
-          <span className="text-xs text-slate-700">{timeAgo(item.createdAt)}</span>
-        </div>
-      </div>
-    </div>
-  );
-
-  const searchBar = (
-    <div className="relative mb-4">
-      <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
-      <input name="timeline-search" type="search" aria-label="Search timeline events, services and messages" autoComplete="off" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events, services, messages…"
-        className="ctx-input w-full rounded-xl text-sm pl-8 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-colors" style={{ background: "var(--ctx-input-bg)", border: "1px solid var(--ctx-border)", color: "var(--ctx-text)" }} />
-      {search && <button onClick={() => setSearch("")} aria-label="Clear timeline search" className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300"><X size={16} aria-hidden="true" /></button>}
-    </div>
-  );
-
-  if (showRaw || !phases.length) {
-    return (
-      <div>
-        {searchBar}
-        {phases.length > 0 && (
-          <div className="flex justify-end mb-3">
-            <button onClick={() => setShowRaw(!showRaw)} className="text-sm text-slate-500 hover:text-white flex items-center gap-1">
-              <Eye size={11} />{showRaw ? "Show phases" : "Raw feed"}
-            </button>
-          </div>
-        )}
-        {filteredFeed.length === 0 && search ? (
-          <div className="text-center py-12 text-slate-600 text-sm">No results for "{search}"</div>
-        ) : (
-          <div className="space-y-3">{filteredFeed.map(renderItem)}</div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {searchBar}
-      <div className="flex justify-end">
-        <button onClick={() => setShowRaw(true)} className="text-sm text-slate-500 hover:text-white flex items-center gap-1">
-          <Eye size={11} />Raw feed
-        </button>
-      </div>
-      {filteredFeed.length === 0 && search && (
-        <div className="text-center py-12 text-slate-600 text-sm">No results for "{search}"</div>
-      )}
-      {phases.map(({ phase, items }) => {
-        const meta = PHASE_META[phase];
-        const isCollapsed = collapsedPhases.has(phase);
-        return (
-          <div key={phase} className={`rounded-2xl border overflow-hidden ${meta.bg}`}>
-            <button onClick={() => togglePhase(phase)} className="w-full flex items-center justify-between px-4 py-3">
-              <div className="flex items-center gap-2">
-                <span className="text-base">{meta.icon}</span>
-                <span className={`text-sm font-semibold ${meta.color}`}>{phase}</span>
-                <span className="text-xs text-slate-600">{items.length} event{items.length !== 1 ? "s" : ""}</span>
-              </div>
-              <ChevronDown size={14} className={`text-slate-600 transition-transform ${isCollapsed ? "" : "rotate-180"}`} />
-            </button>
-            <AnimatePresence>
-              {!isCollapsed && (
-                <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden">
-                  <div className="px-4 pb-4 space-y-2">{items.map(renderItem)}</div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── AI Incident Commander ─────────────────────────────────────────────────────
-
-interface ChatMessage { role: "user" | "ai"; text: string; answer?: { confidence: number; sources: string[]; reasoning: string[]; impact: string[]; actions: string[] }; }
-
-function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string, svcName: string) => void }) {
-  const { getToken } = useAuth();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [requestPhase, setRequestPhase] = useState<"preparing" | "answer">("preparing");
-  const reducedMotion = useReducedMotion();
-  const [insights, setInsights] = useState<AutoInsight[]>([]);
-  const [insightsLoading, setInsightsLoading] = useState(true);
-  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-
-  const copyMessage = useCallback((text: string, idx: number) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedIdx(idx);
-      setTimeout(() => setCopiedIdx(null), 2000);
-    }).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!mounted.current) return;
-        const data = await apiFetch("/ai/auto-insights", token) as AutoInsight[];
-        setInsights(data);
-      } catch { /* ignore */ }
-      setInsightsLoading(false);
-    })();
-  }, [getToken]);
-
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "nearest" }); }, [messages, loading, reducedMotion]);
-
-  const SUGGESTIONS: Record<Role, string[]> = {
-    engineer: ["Why is Checkout failing?", "What changed in the last deployment?", "How do I stop the retry storm?", "Which service should I fix first?"],
-    sre: ["What is the blast radius of this incident?", "What's the MTTR estimate?", "Show the failure propagation chain", "What's the circuit breaker status?"],
-    manager: ["What is the revenue impact?", "When will this be resolved?", "Which customers are affected?", "Give me a plain English summary"],
-  };
-
-  const ask = useCallback(async (question: string) => {
-    if (!question.trim() || loading) return;
-    setInput("");
-    setMessages(m => [...m, { role: "user", text: question }]);
-    setLoading(true);
-    setRequestPhase("preparing");
-    try {
-      const token = await getToken();
-      if (!mounted.current) return;
-      setRequestPhase("answer");
-      const data = await apiFetch("/ai/incident-ask", token, { method: "POST", body: JSON.stringify({ question, role }) }) as { answer: string; confidence: number; sources: string[]; reasoning: string[]; impact: string[]; actions: string[] };
-      if (!mounted.current) return;
-      setMessages(m => [...m, { role: "ai", text: data.answer, answer: data }]);
-    } catch (err) {
-      if (mounted.current) setMessages(m => [...m, { role: "ai", text: err instanceof Error ? err.message : "Something went wrong." }]);
-    } finally { if (mounted.current) setLoading(false); }
-  }, [getToken, loading, role]);
-
-  const insightSeverity: Record<string, string> = {
-    critical: "border-red-500/20 bg-red-500/6",
-    warning: "border-amber-500/20 bg-amber-500/6",
-    info: "border-emerald-500/20 bg-emerald-500/6",
-  };
-
-  return (
-    <div className="flex flex-col h-full min-h-[520px] gap-4">
-      {/* Auto-insights */}
-      {!insightsLoading && insights.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Zap size={12} className="text-indigo-400" />
-            <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">Auto-detected insights</p>
-          </div>
-          {insights.map((ins, i) => (
-            <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}
-              className={`rounded-xl border px-4 py-3 ${insightSeverity[ins.severity] ?? insightSeverity.info}`}>
-              <div className="flex items-center gap-2 mb-1">
-                <span className={`text-xs font-bold uppercase ${ins.severity === "critical" ? "text-red-400" : ins.severity === "warning" ? "text-amber-400" : "text-emerald-400"}`}>{ins.severity}</span>
-                <span className="text-sm font-semibold text-white">{ins.title}</span>
-              </div>
-              <p className="text-sm text-slate-400 leading-relaxed">{ins.description}</p>
-              {ins.affectedServices.length > 0 && (
-                <div className="flex gap-1.5 mt-2 flex-wrap">
-                  {ins.affectedServices.map((s, si) => (
-                    <button key={`${s}-${si}`} onClick={() => onAction("restart", s)}
-                      className="inline-flex items-center gap-1 rounded-md bg-white/5 border border-white/10 px-2 py-0.5 text-xs text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
-                      <Wrench size={9} />{s}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          ))}
-        </div>
-      )}
-      {insightsLoading && (
-        <div className="rounded-xl border border-white/6 bg-white/2 h-20 animate-pulse" />
-      )}
-
-      {/* Chat */}
-      <div className="flex-1 overflow-y-auto space-y-4 pb-4" role="log" aria-label="Incident conversation" aria-live="polite" aria-relevant="additions">
-        {!messages.length && (
-          <div className="py-4">
-            <div className="flex flex-col items-center text-center mb-6">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center mb-3">
-                <Bot size={18} className="text-indigo-400" aria-hidden="true" />
-              </div>
-              <h3 className="text-sm font-semibold text-white mb-1">AI Incident Commander</h3>
-              <p className="text-sm text-slate-500 max-w-xs">Ask anything. Powered by your live service graph and event data.</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {SUGGESTIONS[role].map((s, si) => (
-                <button key={`${s}-${si}`} onClick={() => ask(s)}
-                  className="text-left rounded-xl border border-white/8 bg-white/2 hover:bg-indigo-500/5 hover:border-indigo-500/20 px-3 py-2.5 text-sm text-slate-400 hover:text-indigo-300 transition-colors">
-                  <ChevronRight size={10} className="inline mr-1 opacity-50" />{s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {messages.map((msg, i) => (
-          <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            {msg.role === "ai" && (
-              <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Bot size={12} className="text-white" aria-hidden="true" />
-              </div>
-            )}
-            <div className={`min-w-0 max-w-full sm:max-w-[85%] rounded-2xl px-4 py-4 break-words ${msg.role === "user" ? "bg-indigo-600 text-white text-sm" : "ctx-ai-response border"}`}>
-              {msg.role === "ai" ? (
-                <div>
-                  <div className="flex items-start justify-between gap-2 mb-0.5">
-                    <p className="text-sm text-slate-200 leading-relaxed flex-1">{msg.text}</p>
-                    <button onClick={() => copyMessage(msg.text, i)} title="Copy response" aria-label={copiedIdx === i ? "Response copied" : "Copy response"}
-                      className="flex-shrink-0 mt-0.5 p-1 rounded text-slate-600 hover:text-slate-300 transition-colors">
-                      {copiedIdx === i ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                    </button>
-                  </div>
-                  {msg.answer && (
-                    <div className="mt-3 space-y-2.5 border-t border-white/6 pt-3">
-                      {/* Confidence */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500 uppercase tracking-wide">Confidence</span>
-                        <div className="flex-1 h-1 rounded-full bg-white/8 overflow-hidden">
-                          <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.round(msg.answer.confidence * 100)}%` }} />
-                        </div>
-                        <span className="text-sm text-white font-semibold">{Math.round(msg.answer.confidence * 100)}%</span>
-                      </div>
-                      {/* Reasoning chain */}
-                      {msg.answer.reasoning?.length > 0 && (
-                        <div className="rounded-lg bg-indigo-500/8 border border-indigo-500/15 px-3 py-2.5">
-                          <p className="text-xs font-bold text-indigo-400 uppercase tracking-wide mb-2">Why this happened</p>
-                          <ol className="space-y-1">
-                            {msg.answer.reasoning.map((step, i) => (
-                              <li key={i} className="flex items-start gap-2 text-sm text-slate-400 leading-relaxed">
-                                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
-                                {step}
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                      )}
-                      {/* Impact */}
-                      {msg.answer.impact?.length > 0 && (
-                        <div className="rounded-lg bg-red-500/6 border border-red-500/15 px-3 py-2.5">
-                          <p className="text-xs font-bold text-red-400 uppercase tracking-wide mb-2">Impact</p>
-                          <ul className="space-y-1">
-                            {msg.answer.impact.map((item, i) => (
-                              <li key={i} className="flex items-start gap-2 text-sm text-slate-400">
-                                <span className="text-red-500 mt-0.5 flex-shrink-0">•</span>{item}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {/* Actions */}
-                      {msg.answer.actions?.length > 0 && (
-                        <div>
-                          <p className="text-xs font-bold text-emerald-400 uppercase tracking-wide mb-2">Recommended actions</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {msg.answer.actions.map((action, i) => {
-                              const isRollback = action.toLowerCase().includes("rollback") || action.toLowerCase().includes("revert");
-                              const isRestart = action.toLowerCase().includes("restart") || action.toLowerCase().includes("pool");
-                              const act = isRollback ? "rollback" : isRestart ? "restart" : "throttle";
-                              const Icon = isRollback ? RotateCcw : isRestart ? RefreshCw : Pause;
-                              return (
-                                <button key={i} onClick={() => onAction(act, "")}
-                                  className="flex items-center gap-1.5 rounded-lg bg-emerald-500/8 border border-emerald-500/20 px-2.5 py-1.5 text-sm text-emerald-400 hover:bg-emerald-500/15 transition-colors">
-                                  <Icon size={10} />{action}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-                      {/* Sources */}
-                      {msg.answer.sources?.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {msg.answer.sources.map((s, si) => <span key={`${s}-${si}`} className="inline-flex items-center rounded-md border border-white/8 bg-white/4 px-2 py-0.5 text-xs text-slate-600">source: {s}</span>)}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : <p>{msg.text}</p>}
-            </div>
-          </div>
-        ))}
-
-        {loading && (
-          <div className="flex gap-3">
-            <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0"><Bot size={12} className="text-white" aria-hidden="true" /></div>
-            <AiRequestStatus phase={requestPhase} />
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      <div className="border-t border-white/8 pt-4">
-        <label htmlFor="incident-question" className="block text-sm font-medium mb-2">Ask about your services</label>
-        <form onSubmit={e => { e.preventDefault(); ask(input); }} className="flex gap-2 items-start">
-          <input id="incident-question" name="question" autoComplete="off" aria-describedby="incident-question-hint" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask about any incident, service, or risk…"
-            className="ctx-input min-w-0 flex-1 rounded-xl border text-base px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors" />
-          <button type="submit" disabled={!input.trim() || loading} aria-label={loading ? "Waiting for AI response" : "Send question"}
-            className="min-h-12 min-w-12 px-3 sm:px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white transition-colors flex items-center justify-center gap-2">
-            <Send size={18} aria-hidden="true" /><span className="hidden sm:inline text-sm font-semibold">Send</span>
-          </button>
-        </form>
-        <p id="incident-question-hint" className="ctx-muted text-sm mt-2">Answers use the service graph and events in this workspace.</p>
-      </div>
-    </div>
-  );
-}
-
-// ── Risk Card (extracted to obey Rules of Hooks) ──────────────────────────────
-
 function RiskCard({ risk: r, role, onAction }: { risk: RiskEntry; role: Role; onAction: (a: string, s: string) => void }) {
   const [exp, setExp] = useState(false);
   const Icon = serviceIcon(r.service.name);
@@ -934,100 +530,37 @@ function CopyButton({ text, className = "" }: { text: string; className?: string
   );
 }
 
-function OverviewTab({ risks, services, rootCause, predictions, loading, role, onAction, userId }: {
+function OverviewTab({ risks, services, rootCause, predictions, loading, role, onAction, userId, feed, onNavigate }: {
   risks: RiskEntry[]; services: Service[]; rootCause: RootCause | null; predictions: Prediction[];
   loading: boolean; role: Role; onAction: (a: string, s: string) => void; userId?: string;
+  feed: TimelineItem[]; onNavigate: (tab: "timeline" | "graph" | "ai") => void;
 }) {
-  const counts = { healthy: 0, at_risk: 0, degraded: 0, failing: 0 };
-  for (const s of services) (counts as Record<string, number>)[s.status] = ((counts as Record<string, number>)[s.status] ?? 0) + 1;
-
-  if (loading) return <div className="space-y-4">{[0,1,2].map(i => <div key={i} className="rounded-2xl border border-white/6 bg-white/2 h-28 animate-pulse" />)}</div>;
-
-  return (
-    <div className="space-y-6">
-      {/* Health summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "Healthy", count: counts.healthy, color: "text-emerald-400", bg: "bg-emerald-500/8 border-emerald-500/15" },
-          { label: "At Risk", count: counts.at_risk, color: "text-amber-400", bg: "bg-amber-500/8 border-amber-500/15" },
-          { label: "Degraded", count: counts.degraded, color: "text-orange-400", bg: "bg-orange-500/8 border-orange-500/15" },
-          { label: "Failing", count: counts.failing, color: "text-red-400", bg: "bg-red-500/8 border-red-500/15" },
-        ].map(({ label, count, color, bg }) => (
-          <div key={label} className={`rounded-xl border px-4 py-3 ${bg}`}>
-            <div className="text-2xl font-bold text-white mb-0.5">{count}</div>
-            <div className={`text-sm font-medium ${color}`}>{label}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* No data prompt */}
-      {!services.length && (
-        <div className="rounded-xl border border-indigo-500/15 bg-indigo-500/5 p-5 flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/15 flex items-center justify-center flex-shrink-0"><Sparkles size={18} className="text-indigo-400" /></div>
-          <div>
-            <p className="text-sm font-semibold text-white mb-1">No data yet</p>
-            <p className="text-sm text-slate-500">Open <span className="text-indigo-400 font-medium">Workspace actions</span> and choose <span className="text-indigo-400 font-medium">Run demo</span> to start the incident scenario.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Root cause panel */}
-      {rootCause && <RootCausePanel rootCause={rootCause} role={role} onAction={onAction} services={services} />}
-
-      {/* Predictions */}
-      {predictions.length > 0 && <PredictionsPanel predictions={predictions} />}
-
-      {/* Active risks */}
-      {risks.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle size={13} className="text-red-400" />
-            <h3 className="text-sm font-semibold text-white">Active Risk Details</h3>
-            <span className="inline-flex items-center rounded-full bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 text-xs font-medium">{risks.length}</span>
-          </div>
-          <div className="space-y-3">
-            {risks.map(r => (
-              <RiskCard key={r.service.id} risk={r} role={role} onAction={onAction} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Services grid */}
-      {services.length > 0 && (
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Server size={13} className="text-slate-400" />
-            <h3 className="text-sm font-semibold text-white">All Services</h3>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {services.map(svc => {
-              const Icon = serviceIcon(svc.name);
-              const color = STATUS_COLOR[svc.status] ?? "#64748b";
-              return (
-                <div key={svc.id} className="rounded-xl px-4 py-3 flex items-center gap-3" style={{ background: "var(--ctx-surface)", border: "1px solid var(--ctx-border)" }}>
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: color + "18" }}>
-                    <Icon size={14} style={{ color }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-white truncate">{svc.name}</div>
-                    {svc.description && <div className="text-sm text-slate-600 truncate">{svc.description}</div>}
-                  </div>
-                  <StatusBadge status={svc.status} />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Integrations panel */}
-      <IntegrationsPanel userId={userId} />
+  const [onlyAffected, setOnlyAffected] = useState(false);
+  const affected = services.filter(service => service.status !== "healthy");
+  const priority: Record<string, number> = { failing: 0, degraded: 1, at_risk: 2, healthy: 3 };
+  const visibleServices = [...(onlyAffected ? affected : services)].sort((a, b) => priority[a.status] - priority[b.status] || a.name.localeCompare(b.name));
+  const recent = chronological(feed).slice(-3).reverse();
+  if (loading) return <p className="ctx-empty" role="status">Loading workspace health…</p>;
+  return <div className="ctx-overview">
+    <div className="ctx-page-heading"><h2>Workspace overview</h2><p>Current health, services that need attention, and the latest recorded activity.</p></div>
+    <section className={`ctx-panel ctx-health-brief ${affected.length ? "has-alerts" : ""}`}>
+      <div className="ctx-health-message"><span className={`ctx-health-icon ctx-status-${affected.length ? "warning" : "healthy"}`}>{affected.length ? <AlertTriangle size={25} aria-hidden="true" /> : <CheckCircle2 size={25} aria-hidden="true" />}</span><div><h3>{!services.length ? "Waiting for service data" : affected.length ? `${affected.length} service${affected.length === 1 ? " needs" : "s need"} attention` : "All recorded services are healthy"}</h3><p>{services.length ? `${services.length - affected.length} of ${services.length} services healthy` : "Connect an alert source or ask an admin to run a demo."}{affected.length ? ` · ${affected.map(service => service.name).join(", ")}` : ""}</p>{rootCause && affected.length > 0 && <p className="ctx-health-analysis"><strong>Latest analysis:</strong> {rootCause.cause}</p>}</div></div>
+      <button className="ctx-primary-button" onClick={() => onNavigate(affected.length ? "ai" : "timeline")}>{affected.length ? "Investigate with AI" : "Review activity"}<ArrowRight size={17} aria-hidden="true" /></button>
+    </section>
+    <div className="ctx-overview-grid">
+      <section className="ctx-panel ctx-service-inventory"><div className="ctx-section-heading"><div><h3>Service health</h3><p>Recorded status and ownership, ordered by attention needed.</p></div><button className="ctx-secondary-button" onClick={() => onNavigate("graph")}>Explore dependencies</button></div>
+        <div className="ctx-inventory-filter"><button className={!onlyAffected ? "is-selected" : ""} aria-pressed={!onlyAffected} onClick={() => setOnlyAffected(false)}>All services <span>{services.length}</span></button><button className={onlyAffected ? "is-selected" : ""} aria-pressed={onlyAffected} onClick={() => setOnlyAffected(true)}>Needs attention <span>{affected.length}</span></button></div>
+        <div className="ctx-service-table" role="table" aria-label="Service health and ownership"><div className="ctx-service-row ctx-service-table-head" role="row"><span role="columnheader">Service</span><span role="columnheader">Health</span><span role="columnheader">Owner / priority</span></div>
+          {visibleServices.map(service => { const Icon = serviceIcon(service.name); return <div key={service.id} className="ctx-service-row" role="row"><div role="cell" className="ctx-service-name"><Icon size={18} className="ctx-muted" aria-hidden="true" /><div><strong>{service.name}</strong>{service.description && <p>{service.description}</p>}</div></div><div role="cell"><span className={`ctx-badge ctx-status-${service.status}`}>{service.status.replace(/_/g, " ")}</span></div><div role="cell" className="ctx-service-owner"><strong>{service.ownerTeam || "Owner not provided"}</strong><span>{service.criticality} priority</span></div></div>; })}
+        </div>{!visibleServices.length && <div className="ctx-empty"><p>{onlyAffected ? "No services currently need attention." : "No services recorded yet."}</p></div>}
+      </section>
+      <aside className="ctx-overview-aside"><section className="ctx-panel ctx-recent-activity"><div className="ctx-section-heading"><h3>Latest activity</h3><Clock size={18} className="ctx-muted" aria-hidden="true" /></div>{recent.length ? <ol>{recent.map(item => <li key={`${item.kind}:${item.id}`}><span className={`ctx-category ctx-tone-${categoryOf(item)}`}>{CATEGORY_META[categoryOf(item)].label}</span><p>{recordTitle(item)}</p><span className="ctx-muted">{item.serviceName || "Team update"}</span><time dateTime={item.createdAt}>{timeLabel(item.createdAt, true)}</time></li>)}</ol> : <p className="ctx-muted">No activity recorded yet.</p>}<button className="ctx-secondary-button" onClick={() => onNavigate("timeline")}>Open full timeline<ArrowRight size={16} aria-hidden="true" /></button></section>
+      <section className="ctx-panel ctx-investigation-guide"><h3>A path through an incident</h3><ol><li><strong>Check the sequence</strong><p>Find the earliest alert and nearby changes in Timeline.</p></li><li><strong>Trace dependencies</strong><p>Use Graph to see which services rely on the affected service.</p></li><li><strong>Review the evidence</strong><p>Ask AI to explain the records and possible next steps.</p></li></ol></section></aside>
     </div>
-  );
+    {(risks.length > 0 || predictions.length > 0 || (rootCause && affected.length > 0)) && <details className="ctx-panel ctx-overview-diagnostics"><summary><div><strong>Investigation details</strong><span>{risks.length} active risk records · {predictions.length} predictions</span></div><ChevronDown size={18} aria-hidden="true" /></summary><div>{rootCause && <RootCausePanel rootCause={rootCause} role={role} onAction={onAction} services={services} />}{predictions.length > 0 && <PredictionsPanel predictions={predictions} />}{risks.map(risk => <RiskCard key={risk.service.id} risk={risk} role={role} onAction={onAction} />)}</div></details>}
+    <details className="ctx-panel ctx-connections-setup"><summary><div><strong>Connections & ingestion</strong><span>Supported sources, webhook keys and setup instructions</span></div><ChevronDown size={18} aria-hidden="true" /></summary><div><IntegrationsPanel userId={userId} /></div></details>
+  </div>;
 }
-
-// ── Integrations Panel ────────────────────────────────────────────────────────
 
 const LIVE_INTEGRATIONS = [
   { name: "GitHub Actions", desc: "Deployment evidence from workflows", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", icon: Package },
@@ -1057,14 +590,14 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
         <Webhook size={13} className="text-indigo-400" />
         <h3 className="text-sm font-semibold text-white">Integrations</h3>
         <span className="ml-auto text-xs font-semibold rounded-full px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-          {LIVE_INTEGRATIONS.length} live · {COMING_SOON.length} coming
+          {LIVE_INTEGRATIONS.length} supported · {COMING_SOON.length} coming
         </span>
       </div>
 
       <div className="px-4 py-4 space-y-5">
         {/* Live */}
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-600 mb-2.5">Available now</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-600 mb-2.5">Supported sources</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {LIVE_INTEGRATIONS.map(({ name, desc, color, bg, icon: Icon }) => (
               <div key={name} className={`rounded-xl border px-3 py-2.5 flex items-start gap-2.5 ${bg}`}>
@@ -1117,7 +650,7 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <p className="text-sm font-semibold text-slate-400">{name}</p>
-                    <span className="text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                    <span className="text-xs font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
                       Planned
                     </span>
                   </div>
@@ -1177,113 +710,6 @@ function RoleSelector({ role, onChange }: { role: Role; onChange: (r: Role) => v
 }
 
 // ── Incident History Tab ──────────────────────────────────────────────────────
-
-interface IncidentSession {
-  id: string;
-  startedAt: string;
-  endedAt: string;
-  services: string[];
-  criticalCount: number;
-  hasRecovery: boolean;
-  items: TimelineItem[];
-}
-
-function buildSessions(feed: TimelineItem[]): IncidentSession[] {
-  if (!feed.length) return [];
-  const sorted = [...feed].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  const sessions: IncidentSession[] = [];
-  let current: TimelineItem[] = [sorted[0]];
-  for (let i = 1; i < sorted.length; i++) {
-    const gap = new Date(sorted[i].createdAt).getTime() - new Date(sorted[i - 1].createdAt).getTime();
-    if (gap > 2 * 60 * 60 * 1000) { // new session if >2h gap
-      sessions.push(makeSession(current));
-      current = [];
-    }
-    current.push(sorted[i]);
-  }
-  if (current.length) sessions.push(makeSession(current));
-  return sessions.reverse();
-}
-
-function makeSession(items: TimelineItem[]): IncidentSession {
-  const services = [...new Set(items.map(i => i.serviceName).filter(Boolean) as string[])];
-  return {
-    id: items[0].id,
-    startedAt: items[0].createdAt,
-    endedAt: items[items.length - 1].createdAt,
-    services,
-    criticalCount: items.filter(i => i.severity === "critical").length,
-    hasRecovery: items.some(i => i.type === "recovery" || (i.kind === "message" && i.content?.toLowerCase().includes("recover"))),
-    items,
-  };
-}
-
-function IncidentHistoryTab({ feed, loading }: { feed: TimelineItem[]; loading: boolean }) {
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const sessions = useMemo(() => buildSessions(feed), [feed]);
-
-  if (loading) return <div className="space-y-3">{[0,1,2].map(i => <div key={i} className="h-20 rounded-xl border border-white/6 bg-white/2 animate-pulse" />)}</div>;
-  if (!sessions.length) return (
-    <div className="rounded-xl border border-indigo-500/15 bg-indigo-500/5 p-6 text-center">
-      <p className="text-sm text-slate-500">No incident history yet.</p>
-      <p className="text-sm text-slate-600 mt-1">Run the demo to generate incident data.</p>
-    </div>
-  );
-
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-slate-600">{sessions.length} incident session{sessions.length !== 1 ? "s" : ""} on record</p>
-      {sessions.map((s, idx) => {
-        const isOpen = expanded === s.id;
-        const duration = Math.round((new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()) / 60000);
-        return (
-          <div key={s.id} className={`rounded-xl border overflow-hidden transition-colors ${s.hasRecovery ? "border-emerald-500/20 bg-emerald-500/[0.03]" : "border-red-500/20 bg-red-500/[0.03]"}`}>
-            <button className="w-full flex items-center gap-3 px-4 py-3 text-left" onClick={() => setExpanded(isOpen ? null : s.id)}>
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.hasRecovery ? "bg-emerald-500" : "bg-red-500"}`} />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold text-white">Incident #{sessions.length - idx}</span>
-                  <span className={`text-xs font-bold uppercase px-1.5 py-0.5 rounded border ${s.hasRecovery ? "text-emerald-400 border-emerald-500/25 bg-emerald-500/10" : "text-red-400 border-red-500/25 bg-red-500/10"}`}>
-                    {s.hasRecovery ? "resolved" : "unresolved"}
-                  </span>
-                  {s.criticalCount > 0 && <span className="text-xs text-red-400">{s.criticalCount} critical</span>}
-                </div>
-                <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-600 flex-wrap">
-                  <span>{new Date(s.startedAt).toLocaleString()}</span>
-                  <span>·</span>
-                  <span>{duration}m duration</span>
-                  <span>·</span>
-                  <span>{s.services.slice(0, 3).join(", ")}{s.services.length > 3 ? ` +${s.services.length - 3}` : ""}</span>
-                </div>
-              </div>
-              <ChevronDown size={13} className={`text-slate-600 flex-shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
-            </button>
-            <AnimatePresence>
-              {isOpen && (
-                <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden">
-                  <div className="border-t border-white/6 px-4 pb-4 pt-3 space-y-2 max-h-72 overflow-y-auto">
-                    {s.items.slice().reverse().map(item => (
-                      <div key={item.id} className="flex items-start gap-2.5 text-sm">
-                        <span className={`w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0 ${item.severity === "critical" ? "bg-red-500" : item.severity === "warning" ? "bg-amber-400" : "bg-slate-600"}`} />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-white/80">{item.title ?? item.content}</span>
-                          {item.serviceName && <span className="text-slate-600 ml-1.5">· {item.serviceName}</span>}
-                        </div>
-                        <span className="text-slate-700 font-mono text-xs flex-shrink-0">{new Date(item.createdAt).toLocaleTimeString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── Dashboard ─────────────────────────────────────────────────────────────────
 
 type Tab = "overview" | "graph" | "timeline" | "ai" | "history";
 
@@ -1512,8 +938,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           <div className="flex items-center justify-between md:justify-start gap-3 min-w-0 w-full md:w-auto">
             <ContextLogo compact />
-            {!isDevAuthBypass ? <OrganizationSwitcher appearance={{ elements: { organizationSwitcherTrigger: "min-h-11 min-w-11 max-w-[220px] rounded-xl text-sm", organizationSwitcherTriggerIcon: "text-indigo-400" } }}
-              organizationProfileProps={{ appearance: organizationProfileAppearance }} /> : <span className="ctx-muted text-sm">Personal workspace</span>}
+            {!isDevAuthBypass ? <OrganizationSwitcher appearance={{ variables: { colorForeground: isDark ? "#f8fafc" : "#17243b", colorMutedForeground: isDark ? "#b6c2d4" : "#475569", colorBackground: isDark ? "#101a2f" : "#ffffff", colorInput: isDark ? "#1e293b" : "#eef2f7", colorInputForeground: isDark ? "#f8fafc" : "#17243b", colorNeutral: isDark ? "#e2e8f0" : "#17243b" }, elements: { organizationSwitcherTrigger: "ctx-organization-trigger min-h-11 min-w-11 max-w-[220px] rounded-xl text-sm", organizationSwitcherTriggerIcon: "text-indigo-400" } }}
+              organizationProfileProps={{ appearance: { ...organizationProfileAppearance, baseTheme: isDark ? dark : undefined, variables: { colorForeground: isDark ? "#f8fafc" : "#17243b", colorBackground: isDark ? "#101a2f" : "#ffffff", colorInputForeground: isDark ? "#f8fafc" : "#17243b" }, elements: { cardBox: "ctx-organization-profile !w-[min(960px,calc(100vw-2rem))] !max-w-full rounded-2xl overflow-hidden border shadow-2xl" } } }} /> : <span className="ctx-muted text-sm">Personal workspace</span>}
           </div>
           <div className="flex items-center justify-between md:justify-start gap-2 w-full md:w-auto" aria-label="Workspace controls">
             <RoleSelector role={role} onChange={setRole} />
@@ -1602,6 +1028,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                 aria-controls={`panel-${id}`}
                 tabIndex={tab === id ? 0 : -1}
                 onKeyDown={event => {
+                  if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
                   const index = TABS.findIndex(item => item.id === id);
                   const next = event.key === "ArrowRight" ? (index + 1) % TABS.length : event.key === "ArrowLeft" ? (index + TABS.length - 1) % TABS.length : event.key === "Home" ? 0 : event.key === "End" ? TABS.length - 1 : null;
                   if (next === null) return;
@@ -1674,14 +1101,14 @@ function Dashboard({ onBack }: { onBack: () => void }) {
             transition={{ duration: 0.18 }}
           >
             {tab === "overview" && (
-              <OverviewTab risks={risks} services={services} rootCause={rootCause} predictions={predictions} loading={loading} role={role} onAction={handleAction} userId={user?.id} />
+              <OverviewTab risks={risks} services={services} rootCause={rootCause} predictions={predictions} loading={loading} role={role} onAction={handleAction} userId={user?.id} feed={timeline} onNavigate={setTab} />
             )}
             {tab === "graph" && (
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-base font-semibold text-white">Service Dependency Graph</h2>
-                    <p className="text-sm text-slate-500 mt-0.5">Click any node to inspect. Pulsing edges show active failure propagation.</p>
+                    <p className="text-sm text-slate-500 mt-0.5">Trace which services use each other, then select a service to inspect its connections.</p>
                   </div>
                 </div>
                 <Card className="p-4 overflow-hidden">
@@ -1709,7 +1136,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-base font-semibold text-white">Incident Timeline</h2>
-                    <p className="text-sm text-slate-500 mt-0.5">Events grouped into incident phases — Trigger → Amplification → Impact → Mitigation</p>
+                    <p className="text-sm text-slate-500 mt-0.5">Follow recorded changes, alerts, responses and recovery in time order.</p>
                   </div>
                 </div>
                 <TimelineTab feed={timeline} loading={loading} />
@@ -1725,9 +1152,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                     </p>
                   </div>
                 </div>
-                <Card className="p-4 sm:p-5">
-                  <AIAssistant role={role} onAction={handleAction} />
-                </Card>
+                <AIAssistant role={role} request={apiFetch} />
               </div>
             )}
             {tab === "history" && (
@@ -1735,7 +1160,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-base font-semibold text-white">Incident History</h2>
-                    <p className="text-sm text-slate-500 mt-0.5">Past incident sessions — grouped by time window, expandable for full event detail</p>
+                    <p className="text-sm text-slate-500 mt-0.5">Review past activity windows and the evidence recorded within each one.</p>
                   </div>
                 </div>
                 <IncidentHistoryTab feed={timeline} loading={loading} />

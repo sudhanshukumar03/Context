@@ -146,3 +146,18 @@ Completed steps and verification will be appended below.
   Detailed checklist/evidence: SHARED_TEAM_TEST.md.
 - Admin signed out after live checks; Context sign-in opened for the invited
   account. Waiting for the user to accept the invitation and sign in as Member.
+- Second-account sign-in completed; the approved invitation was accepted and
+  Context Test selected. Clerk confirms Member/Admin roles for the two accounts.
+  Member overview, graph, timeline, resolved history and automatic AI insights
+  load. Key controls are unavailable and shared demo/Slack controls disabled in
+  Engineer, SRE and Manager views. Clerk exposes no invite/role/edit/delete admin
+  controls. Read-only counts confirm the second account's personal workspace is
+  empty and no cross-workspace event/message/dependency references exist.
+- Fixed the organization manager's inherited 420px sign-in-card width; desktop
+  dialog is 960px, member table 649px without horizontal overflow. Disabled demo
+  styling is clearer. Dashboard typecheck and build pass. The Member AI question
+  reached Gemini but received HTTP 429 after three attempts; key/model availability
+  passes. Successful answer generation, explicitly authorized extended revocation/
+  disposable-key checks and distinct live Slack destinations remain unverified.
+  Browser API navigation was client-blocked; crafted live mutation requests were
+  not bypassed. Focused server authorization evidence remains 27 passing tests.

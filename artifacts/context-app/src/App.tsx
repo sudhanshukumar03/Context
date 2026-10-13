@@ -74,6 +74,11 @@ const clerkAppearance = {
   },
 };
 
+// Organization profiles contain a sidebar and tables; sign-in cards stay compact.
+const organizationProfileAppearance = {
+  elements: { cardBox: "!bg-slate-900 !w-[min(960px,calc(100vw-2rem))] !max-w-full rounded-2xl overflow-hidden border border-white/10 shadow-2xl" },
+};
+
 function SignInPage() {
   return <div className="flex min-h-[100dvh] items-center justify-center bg-slate-950 px-4"><SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} appearance={clerkAppearance} fallback={<AuthenticationLoading contained />} /></div>;
 }
@@ -1575,7 +1580,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {!isDevAuthBypass && <OrganizationSwitcher appearance={{ elements: { organizationSwitcherTrigger: "min-h-11 min-w-11", organizationSwitcherTriggerIcon: "text-indigo-400" } }} />}
+            {!isDevAuthBypass && <OrganizationSwitcher appearance={{ elements: { organizationSwitcherTrigger: "min-h-11 min-w-11", organizationSwitcherTriggerIcon: "text-indigo-400" } }}
+              organizationProfileProps={{ appearance: organizationProfileAppearance }} />}
             <RoleSelector role={role} onChange={setRole} />
             <button
               onClick={() => { setIsLive(l => !l); }}
@@ -1658,7 +1664,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
             </button>
             <button onClick={() => { setShowDemo(d => !d); setIsLive(true); }} disabled={!canManageWorkspace}
               title={canManageWorkspace ? "Run the demo scenario" : "An organization admin can run a shared demo"}
-              className="flex items-center gap-1.5 text-[11px] font-semibold rounded-lg border border-indigo-500/25 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 px-3 py-1.5 transition-all">
+              className="flex items-center gap-1.5 text-[11px] font-semibold rounded-lg border border-indigo-500/25 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 px-3 py-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
               <Play size={11} />
               <span className="hidden sm:inline">Run Demo</span>
             </button>

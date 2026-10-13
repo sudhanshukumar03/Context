@@ -76,9 +76,11 @@ control. Temporary viewport overrides were reset. Screenshot:
 
 - Apply reviewed migrations/initialization to the intended database and configure
   deployment secrets/domain/origins. Prepared instructions are in `DEPLOYMENT.md`.
-- Clerk test organization creation, creator/admin controls and personal/team
-  switching are verified. The approved Member invitation is sent; its acceptance
-  and live member permissions still need the second account's sign-in.
+- Clerk test organization creation, admin controls, personal/team switching and
+  second-account Member access are verified. Member views and role-lens restrictions
+  pass. A live AI answer remains blocked by Gemini HTTP 429; extended membership
+  removal and disposable-key checks need specific authorization. Details are in
+  `SHARED_TEAM_TEST.md`.
 - Install the reusable workflow in the deployment repository and configure its
   Actions secrets; perform a live deployment-delivery check there.
 - Production Docker build/run, authentication guards, asset serving, database
@@ -369,7 +371,25 @@ team/personal screenshots. The live checklist is in SHARED_TEAM_TEST.md.
 The 27 focused signed-session, tenant-selection, organization-permission and
 webhook-key tests passed. These do not replace second-account browser checks.
 An ordinary Member invitation for the user-designated second test account was
-prepared, approved and sent. Clerk confirms success and lists one pending Member
-invitation; inbox receipt, acceptance and live member permission checks remain
-in progress. No membership removal, new webhook key, Slack message or production
-database change was performed during this check.
+prepared, approved, sent and accepted. After the user signed in, Clerk confirmed
+Member access to Context Test. Overview, five-node graph, 20-item timeline,
+resolved incident history and automatic AI insights load. The Member cannot use
+key creation/revocation, shared demo or Slack controls; restrictions persist in
+Engineer, SRE and Manager lenses. Clerk exposes no invitation, role-change,
+organization-edit or delete controls. Its two-account table correctly shows
+Admin and Member. A fresh read-only database check confirms the second account's
+empty personal workspace and unchanged, isolated team records.
+
+The incident-question request reached Gemini, which returned HTTP 429 after
+three attempts. Provider key/model availability is confirmed; successful Member
+answer generation remains unverified. Direct API navigation was client-blocked,
+so crafted live mutation requests were not attempted through an alternate route;
+the 27 signed-session and authorization tests remain the server-side evidence.
+
+Fixed organization-profile clipping by separating its width from the 420px
+authentication card. The dialog measures 960px on the tested desktop; its member
+table measures 649px for both client and scroll widths, with no page overflow.
+Disabled Run Demo is now visibly dimmed. Dashboard typecheck and production build
+pass. No membership removal, new webhook key, Slack message or production database
+change was performed. Extended revocation/key checks and distinct Slack destinations
+remain outside the completed live checks.

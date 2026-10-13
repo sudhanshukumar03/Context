@@ -36,3 +36,7 @@ The browser-inspection service disconnected before the redesigned AI conversatio
 ### Local app restart
 
 The local API and dashboard were both stopped after the interruption. `pnpm local:start` restarted them with the saved Clerk and Gemini modes and retained the isolated database. Startup checks passed for API/database connectivity, the dashboard/API proxy, blocking private configuration files, and rejecting signed-out protected requests. The dashboard is available at `http://127.0.0.1:31800`.
+
+### Notification visibility follow-up
+
+Notification titles, metadata, the heading and close control now use explicit theme tokens rather than white utility text. Titles wrap, empty titles fall back to message content or a clear event label, and separators follow the panel's theme. Dashboard build and typecheck passed. Rendered notification verification and a fresh screenshot remain pending because browser inspection is still disconnected.

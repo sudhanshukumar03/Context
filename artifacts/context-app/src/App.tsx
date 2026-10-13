@@ -957,6 +957,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
               <button
                 onClick={() => { setShowNotifs(n => !n); setNotifCount(0); }}
                 aria-label="View notifications" aria-expanded={showNotifs}
+                aria-controls={showNotifs ? "critical-notifications" : undefined}
                 className="ctx-header-button relative"
                 title="Notifications"
               >
@@ -970,25 +971,27 @@ function Dashboard({ onBack }: { onBack: () => void }) {
               <AnimatePresence>
                 {showNotifs && (
                   <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-                    className="ctx-popover fixed right-4 top-28 md:absolute md:right-0 md:top-full md:mt-2 z-50 w-72 max-w-[calc(100vw-2rem)] rounded-xl border shadow-2xl overflow-hidden">
-                    <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between">
-                      <span className="text-sm font-semibold text-white">Notifications</span>
-                      <button onClick={() => setShowNotifs(false)} aria-label="Close notifications" className="p-2 min-w-11 min-h-11 flex items-center justify-center rounded hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
-                        <X size={12} className="text-slate-400 hover:text-white" />
+                    id="critical-notifications" role="region" aria-labelledby="notification-heading"
+                    style={{ background: "var(--ctx-panel)", color: "var(--ctx-text)", borderColor: "var(--ctx-border)" }}
+                    className="ctx-popover fixed right-4 top-28 md:absolute md:right-0 md:top-full md:mt-2 z-50 w-80 max-w-[calc(100vw_-_2rem)] rounded-xl border shadow-2xl overflow-hidden">
+                    <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: "var(--ctx-border)" }}>
+                      <span id="notification-heading" className="text-sm font-semibold" style={{ color: "var(--ctx-text)" }}>Notifications</span>
+                      <button onClick={() => setShowNotifs(false)} aria-label="Close notifications" style={{ color: "var(--ctx-muted)" }} className="p-2 min-w-11 min-h-11 flex items-center justify-center rounded hover:bg-black/5 dark:hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                        <X size={16} aria-hidden="true" />
                       </button>
                     </div>
                     <div className="max-h-64 overflow-y-auto">
                       {timeline.filter(t => t.severity === "critical").slice(0, 10).map(t => (
-                        <div key={t.id} className="px-4 py-2.5 border-b border-white/5 last:border-0 flex items-start gap-2.5">
+                        <div key={`${t.kind}:${t.id}`} className="px-4 py-3 border-b last:border-0 flex items-start gap-2.5" style={{ borderColor: "var(--ctx-border)" }}>
                           <span className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-white/80 leading-snug truncate">{t.title ?? t.content}</p>
-                            <p className="text-xs text-slate-600 mt-0.5">{t.serviceName} · {new Date(t.createdAt).toLocaleTimeString()}</p>
+                            <p className="text-sm font-medium leading-relaxed break-words" style={{ color: "var(--ctx-text)" }}>{t.title?.trim() || t.content?.trim() || "Critical event reported"}</p>
+                            <p className="text-xs mt-1" style={{ color: "var(--ctx-muted)" }}>{t.serviceName || "Workspace"} · {timeLabel(t.createdAt)}</p>
                           </div>
                         </div>
                       ))}
                       {timeline.filter(t => t.severity === "critical").length === 0 && (
-                        <p className="px-4 py-4 text-sm text-slate-600 text-center">No critical alerts</p>
+                        <p className="px-4 py-4 text-sm text-center" style={{ color: "var(--ctx-muted)" }}>No critical alerts</p>
                       )}
                     </div>
                   </motion.div>

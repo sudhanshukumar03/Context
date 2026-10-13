@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, MotionConfig, useReducedMotion } from "framer-motion";
 import {
   Sparkles, Bot, ChevronRight, ArrowRight, CheckCircle2, X, Sun, Moon,
   AlertTriangle, Activity, Network, MessageSquare, Clock, RefreshCw,
@@ -19,6 +19,8 @@ import DemoVideoInline from "./components/DemoVideoInline";
 import ContextLogo, { ContextMark } from "./components/ContextLogo";
 import WebhookKeySettings from "./components/WebhookKeySettings";
 import SlackSettingsModal from "./components/SlackSettingsModal";
+import AiRequestStatus from "./components/AiRequestStatus";
+import WorkspaceActions from "./components/WorkspaceActions";
 import { ApplicationStatus, AuthenticationLoading } from "./components/ApplicationStartup";
 import { ClerkSession, DevSession, isDevAuthBypass, useAuth, useUser } from "./lib/auth-session";
 import { readSlackWebhook, saveSlackWebhook } from "./lib/workspace-preferences";
@@ -143,10 +145,10 @@ const SEVERITY_BG: Record<string, string> = {
   critical: "bg-red-500/10 text-red-400 border-red-500/20",
 };
 function StatusBadge({ status }: { status: string }) {
-  return <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium ${STATUS_BG[status] ?? "bg-slate-500/10 text-slate-400 border-slate-500/20"}`}><span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: STATUS_COLOR[status] ?? "#64748b" }} />{status.replace("_", " ")}</span>;
+  return <span className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-medium ${STATUS_BG[status] ?? "bg-slate-500/10 text-slate-400 border-slate-500/20"}`}><span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: STATUS_COLOR[status] ?? "#64748b" }} />{status.replace("_", " ")}</span>;
 }
 function SeverityBadge({ severity }: { severity: string }) {
-  return <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-medium ${SEVERITY_BG[severity] ?? SEVERITY_BG.info}`}>{severity}</span>;
+  return <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${SEVERITY_BG[severity] ?? SEVERITY_BG.info}`}>{severity}</span>;
 }
 const SERVICE_ICONS: Record<string, React.ElementType> = { checkout: Package, payments: Database, database: Database, auth: Shield, notification: Radio, default: Server };
 function serviceIcon(name: string): React.ElementType {
@@ -180,22 +182,22 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-red-400">🔥 Root Cause</span>
-              <span className="inline-flex items-center rounded-md border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-600 dark:text-red-300">{confidence}% confidence</span>
+              <span className="text-xs font-bold uppercase tracking-widest text-red-400">🔥 Root Cause</span>
+              <span className="inline-flex items-center rounded-md border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-xs font-semibold text-red-600 dark:text-red-300">{confidence}% confidence</span>
               {rootCause.llmEnriched && (
-                <span className="inline-flex items-center gap-1 rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold text-indigo-300">
+                <span className="inline-flex items-center gap-1 rounded-md border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-xs font-semibold text-indigo-300">
                   <Bot size={9} aria-hidden="true" />AI‑reasoned
                 </span>
               )}
               {rootCause.incidentMinutes > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/20 bg-amber-500/8 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/20 bg-amber-500/8 px-2 py-0.5 text-xs font-semibold text-amber-300">
                   <Timer size={9} />{rootCause.incidentMinutes}m elapsed
                 </span>
               )}
             </div>
             <p className="text-sm font-semibold text-white leading-snug">{rootCause.cause}</p>
             {role === "manager" && (
-              <p className="text-xs text-red-300/70 mt-1">📉 Revenue impact: <span className="font-semibold text-red-300">{rootCause.estimatedLoss}</span></p>
+              <p className="text-sm text-red-300/70 mt-1">📉 Revenue impact: <span className="font-semibold text-red-300">{rootCause.estimatedLoss}</span></p>
             )}
           </div>
         </div>
@@ -211,11 +213,11 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
               {/* Cascade chain */}
               {rootCause.cascadePath.length > 1 && (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">🔗 Failure cascade</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">🔗 Failure cascade</p>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {rootCause.cascadePath.map((name, i) => (
                       <span key={i} className="flex items-center gap-1.5">
-                        <span className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${i === 0 ? "bg-red-500/15 border-red-500/25 text-red-600 dark:text-red-300" : "bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300"}`}>{name}</span>
+                        <span className={`px-2.5 py-1 rounded-lg text-sm font-medium border ${i === 0 ? "bg-red-500/15 border-red-500/25 text-red-600 dark:text-red-300" : "bg-amber-500/10 border-amber-500/20 text-amber-700 dark:text-amber-300"}`}>{name}</span>
                         {i < rootCause.cascadePath.length - 1 && <ArrowRight size={12} className="text-slate-600" />}
                       </span>
                     ))}
@@ -227,14 +229,14 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
                 {/* Impacted services */}
                 {rootCause.impactedServices.length > 0 && (
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">📉 Impacted services</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">📉 Impacted services</p>
                     <div className="flex flex-wrap gap-1.5">
                       {rootCause.impactedServices.map((s, i) => (
-                        <span key={`${s}-${i}`} className="px-2 py-0.5 rounded-md bg-orange-500/10 border border-orange-500/20 text-[11px] text-orange-300">{s}</span>
+                        <span key={`${s}-${i}`} className="px-2 py-0.5 rounded-md bg-orange-500/10 border border-orange-500/20 text-sm text-orange-300">{s}</span>
                       ))}
                     </div>
                     {role === "manager" && (
-                      <p className="text-[11px] text-slate-500 mt-2">Estimated loss: <span className="text-amber-400 font-semibold">{rootCause.estimatedLoss}</span></p>
+                      <p className="text-sm text-slate-500 mt-2">Estimated loss: <span className="text-amber-400 font-semibold">{rootCause.estimatedLoss}</span></p>
                     )}
                   </div>
                 )}
@@ -242,13 +244,13 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
                 {/* LLM reasoning chain */}
                 {rootCause.reasoning && rootCause.reasoning.length > 0 && (
                   <div className="sm:col-span-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
                       <ListChecks size={10} className="inline mr-1 text-indigo-400" />AI reasoning chain
                     </p>
                     <ol className="space-y-1.5">
                       {rootCause.reasoning.map((step, i) => (
-                        <li key={i} className="flex items-start gap-2 text-[11px] text-slate-400 leading-relaxed">
-                          <span className="flex-shrink-0 w-4 h-4 rounded-full bg-indigo-500/15 border border-indigo-500/20 text-indigo-400 text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                        <li key={i} className="flex items-start gap-2 text-sm text-slate-400 leading-relaxed">
+                          <span className="flex-shrink-0 w-4 h-4 rounded-full bg-indigo-500/15 border border-indigo-500/20 text-indigo-400 text-xs font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
                           {step}
                         </li>
                       ))}
@@ -258,7 +260,7 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
 
                 {/* Confidence bar */}
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">AI confidence</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">AI confidence</p>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-2 rounded-full bg-white/8 overflow-hidden">
                       <motion.div initial={{ width: 0 }} animate={{ width: `${confidence}%` }} transition={{ duration: 1, ease: "easeOut" }}
@@ -272,7 +274,7 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
               {/* Action buttons */}
               {role === "engineer" && rootCause.suggestedFixes.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">🛠 Suggested actions</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">🛠 Suggested actions</p>
                   <div className="flex flex-wrap gap-2 mb-3">
                     {rootCause.suggestedFixes.slice(0, 3).map((fix, i) => {
                       const isRollback = fix.toLowerCase().includes("roll");
@@ -282,7 +284,7 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
                       const svcName = rootCause.cascadePath[0] ?? "";
                       return (
                         <button key={i} onClick={() => onAction(action, svcName)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${i === 0 ? "bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white" : "bg-white/5 hover:bg-white/10 border-white/10 text-slate-300"}`}>
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${i === 0 ? "bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white" : "bg-white/5 hover:bg-white/10 border-white/10 text-slate-300"}`}>
                           <Icon size={11} />{fix}
                         </button>
                       );
@@ -290,7 +292,7 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
                   </div>
                   {/* Engineer-specific fix commands */}
                   <div className="ctx-terminal rounded-lg border px-3 py-2.5" style={{ background: "#1e293b", borderColor: "var(--ctx-border)" }}>
-                    <p className="text-[9px] font-bold uppercase tracking-widest text-slate-600 mb-2">Quick fix commands</p>
+                    <p className="text-xs font-bold uppercase tracking-widest text-slate-600 mb-2">Quick fix commands</p>
                     <div className="space-y-1.5">
                       {(() => {
                         const targetSvc = (rootCause.cascadePath[0] ?? "service").toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-") || "service";
@@ -301,8 +303,8 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
                         ];
                       })().map(({ label, cmd }, i) => (
                         <div key={i} className="flex items-start justify-between gap-2">
-                          <code className="text-[10px] text-emerald-400 font-mono flex-1 leading-relaxed">{cmd}</code>
-                          <button onClick={() => navigator.clipboard?.writeText(cmd).catch(() => {})} className="flex-shrink-0 p-1 text-slate-700 hover:text-slate-400 transition-colors" title={`Copy: ${label}`}><Copy size={10} /></button>
+                          <code className="text-xs text-emerald-400 font-mono flex-1 leading-relaxed">{cmd}</code>
+                          <button onClick={() => navigator.clipboard?.writeText(cmd).catch(() => {})} className="flex-shrink-0 p-1 text-slate-700 hover:text-slate-400 transition-colors" aria-label={`Copy ${label} command`} title={`Copy: ${label}`}><Copy size={10} /></button>
                         </div>
                       ))}
                     </div>
@@ -311,7 +313,7 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
               )}
               {role === "sre" && rootCause.suggestedFixes.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">🛠 Suggested actions</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">🛠 Suggested actions</p>
                   <div className="flex flex-wrap gap-2">
                     {rootCause.suggestedFixes.slice(0, 3).map((fix, i) => {
                       const isRollback = fix.toLowerCase().includes("roll");
@@ -321,7 +323,7 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
                       const svcName = rootCause.cascadePath[0] ?? "";
                       return (
                         <button key={i} onClick={() => onAction(action, svcName)}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${i === 0 ? "bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white" : "bg-white/5 hover:bg-white/10 border-white/10 text-slate-300"}`}>
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${i === 0 ? "bg-indigo-600 hover:bg-indigo-500 border-indigo-500 text-white" : "bg-white/5 hover:bg-white/10 border-white/10 text-slate-300"}`}>
                           <Icon size={11} />{fix}
                         </button>
                       );
@@ -332,23 +334,23 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
               {role === "manager" && (
                 <div className="space-y-3">
                   <div className="rounded-xl bg-indigo-500/8 border border-indigo-500/15 px-4 py-3">
-                    <p className="text-xs font-semibold text-indigo-300 mb-1.5">Executive Summary</p>
-                    <p className="text-xs text-slate-400 leading-relaxed">
+                    <p className="text-sm font-semibold text-indigo-300 mb-1.5">Executive Summary</p>
+                    <p className="text-sm text-slate-400 leading-relaxed">
                       <strong className="text-white">{rootCause.cascadePath[0]}</strong> is experiencing a critical failure that has cascaded to {rootCause.impactedServices.length} downstream service{rootCause.impactedServices.length !== 1 ? "s" : ""}{rootCause.incidentMinutes > 0 ? `, ongoing for ${rootCause.incidentMinutes} minutes` : ""}. Engineering is actively working on a resolution.
                     </p>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="rounded-lg bg-red-500/8 border border-red-500/15 px-3 py-2 text-center">
                       <div className="text-sm font-bold text-white">{rootCause.impactedServices.length + 1}</div>
-                      <div className="text-[9px] text-red-400 uppercase tracking-wide">Services down</div>
+                      <div className="text-xs text-red-400 uppercase tracking-wide">Services down</div>
                     </div>
                     <div className="rounded-lg bg-amber-500/8 border border-amber-500/15 px-3 py-2 text-center">
                       <div className="text-sm font-bold text-white">{rootCause.incidentMinutes > 0 ? `${rootCause.incidentMinutes}m` : "—"}</div>
-                      <div className="text-[9px] text-amber-400 uppercase tracking-wide">Elapsed</div>
+                      <div className="text-xs text-amber-400 uppercase tracking-wide">Elapsed</div>
                     </div>
                     <div className="rounded-lg bg-orange-500/8 border border-orange-500/15 px-3 py-2 text-center">
-                      <div className="text-[11px] font-bold text-white truncate">{confidence}%</div>
-                      <div className="text-[9px] text-orange-400 uppercase tracking-wide">AI confidence</div>
+                      <div className="text-sm font-bold text-white truncate">{confidence}%</div>
+                      <div className="text-xs text-orange-400 uppercase tracking-wide">AI confidence</div>
                     </div>
                   </div>
                 </div>
@@ -357,7 +359,7 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
               {/* Alternative root-cause candidates */}
               {rootCause.candidates && rootCause.candidates.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
                     <span className="inline-block w-1.5 h-1.5 rounded-full bg-slate-500 mr-1.5 mb-px" />
                     Other candidates
                     <span className="ml-1.5 text-slate-600 normal-case tracking-normal font-normal">— ranked by probability</span>
@@ -367,10 +369,10 @@ function RootCausePanel({ rootCause, role, onAction, services }: { rootCause: Ro
                       <div key={i} className="flex items-center gap-3 rounded-lg bg-white/[0.03] border border-white/6 px-3 py-2">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-xs font-medium text-slate-300">{c.service}</span>
-                            <span className="text-[10px] font-semibold text-slate-500">{c.confidence}%</span>
+                            <span className="text-sm font-medium text-slate-300">{c.service}</span>
+                            <span className="text-xs font-semibold text-slate-500">{c.confidence}%</span>
                           </div>
-                          <p className="text-[10px] text-slate-600 leading-relaxed truncate">{c.reasoning}</p>
+                          <p className="text-xs text-slate-600 leading-relaxed truncate">{c.reasoning}</p>
                         </div>
                         <div className="flex-shrink-0 w-12">
                           <div className="h-1 rounded-full bg-white/8 overflow-hidden">
@@ -405,20 +407,20 @@ function PredictionsPanel({ predictions }: { predictions: Prediction[] }) {
       <div className="flex items-center gap-2 mb-3">
         <TrendingDown size={13} className="text-orange-400" />
         <h3 className="text-sm font-semibold text-white">⚠️ Likely Next Failures</h3>
-        <span className="inline-flex items-center rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20 px-2 py-0.5 text-[10px] font-medium">{predictions.length}</span>
+        <span className="inline-flex items-center rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20 px-2 py-0.5 text-xs font-medium">{predictions.length}</span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {predictions.map((p) => {
           const style = RISK_STYLE[p.riskLevel] ?? RISK_STYLE.low;
           return (
             <div key={p.serviceId} className={`rounded-xl border ${style.bg} px-4 py-3 flex items-center gap-3`}>
-              <div className={`text-[10px] font-bold rounded-md px-1.5 py-0.5 border ${style.bg} ${style.text} flex-shrink-0`}>{style.label}</div>
+              <div className={`text-xs font-bold rounded-md px-1.5 py-0.5 border ${style.bg} ${style.text} flex-shrink-0`}>{style.label}</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-white truncate">{p.service}</span>
-                  <span className={`text-[10px] font-medium flex-shrink-0 ${style.text}`}>{p.timeToFailure}</span>
+                  <span className="text-sm font-semibold text-white truncate">{p.service}</span>
+                  <span className={`text-xs font-medium flex-shrink-0 ${style.text}`}>{p.timeToFailure}</span>
                 </div>
-                <p className="text-[11px] text-slate-500 truncate">{p.reason}</p>
+                <p className="text-sm text-slate-500 truncate">{p.reason}</p>
               </div>
             </div>
           );
@@ -508,25 +510,25 @@ function TimelineTab({ feed, loading }: { feed: TimelineItem[]; loading: boolean
             <>
               <div className="flex items-center gap-2 mb-1">
                 <Terminal size={11} className="text-slate-500 flex-shrink-0" />
-                <span className="text-xs font-semibold text-white">{item.title}</span>
+                <span className="text-sm font-semibold text-white">{item.title}</span>
                 {item.severity && <SeverityBadge severity={item.severity} />}
               </div>
-              {item.description && <p className="text-[11px] text-slate-500 leading-relaxed">{item.description}</p>}
+              {item.description && <p className="text-sm text-slate-500 leading-relaxed">{item.description}</p>}
             </>
           ) : (
             <>
               <div className="flex items-center gap-2 mb-1">
                 <MessageSquare size={11} className="text-indigo-400 flex-shrink-0" />
-                <span className="text-[11px] font-semibold text-indigo-400">#{item.channel}</span>
-                <span className="text-[11px] text-slate-500">— {item.author}</span>
+                <span className="text-sm font-semibold text-indigo-400">#{item.channel}</span>
+                <span className="text-sm text-slate-500">— {item.author}</span>
               </div>
-              <p className="text-xs text-slate-300 leading-relaxed">{item.content}</p>
+              <p className="text-sm text-slate-300 leading-relaxed">{item.content}</p>
             </>
           )}
         </div>
         <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          {item.serviceName && <span className="text-[10px] text-slate-600 font-medium">{item.serviceName}</span>}
-          <span className="text-[10px] text-slate-700">{timeAgo(item.createdAt)}</span>
+          {item.serviceName && <span className="text-xs text-slate-600 font-medium">{item.serviceName}</span>}
+          <span className="text-xs text-slate-700">{timeAgo(item.createdAt)}</span>
         </div>
       </div>
     </div>
@@ -535,9 +537,9 @@ function TimelineTab({ feed, loading }: { feed: TimelineItem[]; loading: boolean
   const searchBar = (
     <div className="relative mb-4">
       <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events, services, messages…"
-        className="ctx-input w-full rounded-xl text-sm pl-8 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all" style={{ background: "var(--ctx-input-bg)", border: "1px solid var(--ctx-border)", color: "var(--ctx-text)" }} />
-      {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300"><X size={12} /></button>}
+      <input name="timeline-search" type="search" aria-label="Search timeline events, services and messages" autoComplete="off" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search events, services, messages…"
+        className="ctx-input w-full rounded-xl text-sm pl-8 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-colors" style={{ background: "var(--ctx-input-bg)", border: "1px solid var(--ctx-border)", color: "var(--ctx-text)" }} />
+      {search && <button onClick={() => setSearch("")} aria-label="Clear timeline search" className="absolute right-1 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300"><X size={16} aria-hidden="true" /></button>}
     </div>
   );
 
@@ -547,7 +549,7 @@ function TimelineTab({ feed, loading }: { feed: TimelineItem[]; loading: boolean
         {searchBar}
         {phases.length > 0 && (
           <div className="flex justify-end mb-3">
-            <button onClick={() => setShowRaw(!showRaw)} className="text-[11px] text-slate-500 hover:text-white flex items-center gap-1">
+            <button onClick={() => setShowRaw(!showRaw)} className="text-sm text-slate-500 hover:text-white flex items-center gap-1">
               <Eye size={11} />{showRaw ? "Show phases" : "Raw feed"}
             </button>
           </div>
@@ -565,7 +567,7 @@ function TimelineTab({ feed, loading }: { feed: TimelineItem[]; loading: boolean
     <div className="space-y-4">
       {searchBar}
       <div className="flex justify-end">
-        <button onClick={() => setShowRaw(true)} className="text-[11px] text-slate-500 hover:text-white flex items-center gap-1">
+        <button onClick={() => setShowRaw(true)} className="text-sm text-slate-500 hover:text-white flex items-center gap-1">
           <Eye size={11} />Raw feed
         </button>
       </div>
@@ -581,7 +583,7 @@ function TimelineTab({ feed, loading }: { feed: TimelineItem[]; loading: boolean
               <div className="flex items-center gap-2">
                 <span className="text-base">{meta.icon}</span>
                 <span className={`text-sm font-semibold ${meta.color}`}>{phase}</span>
-                <span className="text-[10px] text-slate-600">{items.length} event{items.length !== 1 ? "s" : ""}</span>
+                <span className="text-xs text-slate-600">{items.length} event{items.length !== 1 ? "s" : ""}</span>
               </div>
               <ChevronDown size={14} className={`text-slate-600 transition-transform ${isCollapsed ? "" : "rotate-180"}`} />
             </button>
@@ -608,6 +610,8 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [requestPhase, setRequestPhase] = useState<"preparing" | "answer">("preparing");
+  const reducedMotion = useReducedMotion();
   const [insights, setInsights] = useState<AutoInsight[]>([]);
   const [insightsLoading, setInsightsLoading] = useState(true);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
@@ -634,7 +638,7 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
     })();
   }, [getToken]);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "nearest" }); }, [messages, loading, reducedMotion]);
 
   const SUGGESTIONS: Record<Role, string[]> = {
     engineer: ["Why is Checkout failing?", "What changed in the last deployment?", "How do I stop the retry storm?", "Which service should I fix first?"],
@@ -647,14 +651,17 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
     setInput("");
     setMessages(m => [...m, { role: "user", text: question }]);
     setLoading(true);
+    setRequestPhase("preparing");
     try {
       const token = await getToken();
       if (!mounted.current) return;
+      setRequestPhase("answer");
       const data = await apiFetch("/ai/incident-ask", token, { method: "POST", body: JSON.stringify({ question, role }) }) as { answer: string; confidence: number; sources: string[]; reasoning: string[]; impact: string[]; actions: string[] };
+      if (!mounted.current) return;
       setMessages(m => [...m, { role: "ai", text: data.answer, answer: data }]);
     } catch (err) {
-      setMessages(m => [...m, { role: "ai", text: err instanceof Error ? err.message : "Something went wrong." }]);
-    } finally { setLoading(false); }
+      if (mounted.current) setMessages(m => [...m, { role: "ai", text: err instanceof Error ? err.message : "Something went wrong." }]);
+    } finally { if (mounted.current) setLoading(false); }
   }, [getToken, loading, role]);
 
   const insightSeverity: Record<string, string> = {
@@ -670,21 +677,21 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Zap size={12} className="text-indigo-400" />
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Auto-detected insights</p>
+            <p className="text-sm font-semibold uppercase tracking-wider text-slate-500">Auto-detected insights</p>
           </div>
           {insights.map((ins, i) => (
             <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}
               className={`rounded-xl border px-4 py-3 ${insightSeverity[ins.severity] ?? insightSeverity.info}`}>
               <div className="flex items-center gap-2 mb-1">
-                <span className={`text-[10px] font-bold uppercase ${ins.severity === "critical" ? "text-red-400" : ins.severity === "warning" ? "text-amber-400" : "text-emerald-400"}`}>{ins.severity}</span>
-                <span className="text-xs font-semibold text-white">{ins.title}</span>
+                <span className={`text-xs font-bold uppercase ${ins.severity === "critical" ? "text-red-400" : ins.severity === "warning" ? "text-amber-400" : "text-emerald-400"}`}>{ins.severity}</span>
+                <span className="text-sm font-semibold text-white">{ins.title}</span>
               </div>
-              <p className="text-[11px] text-slate-400 leading-relaxed">{ins.description}</p>
+              <p className="text-sm text-slate-400 leading-relaxed">{ins.description}</p>
               {ins.affectedServices.length > 0 && (
                 <div className="flex gap-1.5 mt-2 flex-wrap">
                   {ins.affectedServices.map((s, si) => (
                     <button key={`${s}-${si}`} onClick={() => onAction("restart", s)}
-                      className="inline-flex items-center gap-1 rounded-md bg-white/5 border border-white/10 px-2 py-0.5 text-[10px] text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+                      className="inline-flex items-center gap-1 rounded-md bg-white/5 border border-white/10 px-2 py-0.5 text-xs text-slate-400 hover:text-white hover:bg-white/10 transition-colors">
                       <Wrench size={9} />{s}
                     </button>
                   ))}
@@ -699,7 +706,7 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
       )}
 
       {/* Chat */}
-      <div className="flex-1 overflow-y-auto space-y-4 pb-4">
+      <div className="flex-1 overflow-y-auto space-y-4 pb-4" role="log" aria-label="Incident conversation" aria-live="polite" aria-relevant="additions">
         {!messages.length && (
           <div className="py-4">
             <div className="flex flex-col items-center text-center mb-6">
@@ -707,12 +714,12 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
                 <Bot size={18} className="text-indigo-400" aria-hidden="true" />
               </div>
               <h3 className="text-sm font-semibold text-white mb-1">AI Incident Commander</h3>
-              <p className="text-xs text-slate-500 max-w-xs">Ask anything. Powered by your live service graph and event data.</p>
+              <p className="text-sm text-slate-500 max-w-xs">Ask anything. Powered by your live service graph and event data.</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {SUGGESTIONS[role].map((s, si) => (
                 <button key={`${s}-${si}`} onClick={() => ask(s)}
-                  className="text-left rounded-xl border border-white/8 bg-white/2 hover:bg-indigo-500/5 hover:border-indigo-500/20 px-3 py-2.5 text-[11px] text-slate-400 hover:text-indigo-300 transition-all">
+                  className="text-left rounded-xl border border-white/8 bg-white/2 hover:bg-indigo-500/5 hover:border-indigo-500/20 px-3 py-2.5 text-sm text-slate-400 hover:text-indigo-300 transition-colors">
                   <ChevronRight size={10} className="inline mr-1 opacity-50" />{s}
                 </button>
               ))}
@@ -727,12 +734,12 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
                 <Bot size={12} className="text-white" aria-hidden="true" />
               </div>
             )}
-            <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${msg.role === "user" ? "bg-indigo-600 text-white text-sm" : "bg-slate-800/80 border border-white/8"}`}>
+            <div className={`min-w-0 max-w-full sm:max-w-[85%] rounded-2xl px-4 py-4 break-words ${msg.role === "user" ? "bg-indigo-600 text-white text-sm" : "ctx-ai-response border"}`}>
               {msg.role === "ai" ? (
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-0.5">
                     <p className="text-sm text-slate-200 leading-relaxed flex-1">{msg.text}</p>
-                    <button onClick={() => copyMessage(msg.text, i)} title="Copy response"
+                    <button onClick={() => copyMessage(msg.text, i)} title="Copy response" aria-label={copiedIdx === i ? "Response copied" : "Copy response"}
                       className="flex-shrink-0 mt-0.5 p-1 rounded text-slate-600 hover:text-slate-300 transition-colors">
                       {copiedIdx === i ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
                     </button>
@@ -741,20 +748,20 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
                     <div className="mt-3 space-y-2.5 border-t border-white/6 pt-3">
                       {/* Confidence */}
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wide">Confidence</span>
+                        <span className="text-xs text-slate-500 uppercase tracking-wide">Confidence</span>
                         <div className="flex-1 h-1 rounded-full bg-white/8 overflow-hidden">
                           <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.round(msg.answer.confidence * 100)}%` }} />
                         </div>
-                        <span className="text-[11px] text-white font-semibold">{Math.round(msg.answer.confidence * 100)}%</span>
+                        <span className="text-sm text-white font-semibold">{Math.round(msg.answer.confidence * 100)}%</span>
                       </div>
                       {/* Reasoning chain */}
                       {msg.answer.reasoning?.length > 0 && (
                         <div className="rounded-lg bg-indigo-500/8 border border-indigo-500/15 px-3 py-2.5">
-                          <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wide mb-2">Why this happened</p>
+                          <p className="text-xs font-bold text-indigo-400 uppercase tracking-wide mb-2">Why this happened</p>
                           <ol className="space-y-1">
                             {msg.answer.reasoning.map((step, i) => (
-                              <li key={i} className="flex items-start gap-2 text-[11px] text-slate-400 leading-relaxed">
-                                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-indigo-500/20 text-indigo-400 text-[9px] font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
+                              <li key={i} className="flex items-start gap-2 text-sm text-slate-400 leading-relaxed">
+                                <span className="flex-shrink-0 w-4 h-4 rounded-full bg-indigo-500/20 text-indigo-400 text-xs font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
                                 {step}
                               </li>
                             ))}
@@ -764,10 +771,10 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
                       {/* Impact */}
                       {msg.answer.impact?.length > 0 && (
                         <div className="rounded-lg bg-red-500/6 border border-red-500/15 px-3 py-2.5">
-                          <p className="text-[10px] font-bold text-red-400 uppercase tracking-wide mb-2">Impact</p>
+                          <p className="text-xs font-bold text-red-400 uppercase tracking-wide mb-2">Impact</p>
                           <ul className="space-y-1">
                             {msg.answer.impact.map((item, i) => (
-                              <li key={i} className="flex items-start gap-2 text-[11px] text-slate-400">
+                              <li key={i} className="flex items-start gap-2 text-sm text-slate-400">
                                 <span className="text-red-500 mt-0.5 flex-shrink-0">•</span>{item}
                               </li>
                             ))}
@@ -777,7 +784,7 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
                       {/* Actions */}
                       {msg.answer.actions?.length > 0 && (
                         <div>
-                          <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide mb-2">Recommended actions</p>
+                          <p className="text-xs font-bold text-emerald-400 uppercase tracking-wide mb-2">Recommended actions</p>
                           <div className="flex flex-wrap gap-1.5">
                             {msg.answer.actions.map((action, i) => {
                               const isRollback = action.toLowerCase().includes("rollback") || action.toLowerCase().includes("revert");
@@ -786,7 +793,7 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
                               const Icon = isRollback ? RotateCcw : isRestart ? RefreshCw : Pause;
                               return (
                                 <button key={i} onClick={() => onAction(act, "")}
-                                  className="flex items-center gap-1.5 rounded-lg bg-emerald-500/8 border border-emerald-500/20 px-2.5 py-1.5 text-[11px] text-emerald-400 hover:bg-emerald-500/15 transition-all">
+                                  className="flex items-center gap-1.5 rounded-lg bg-emerald-500/8 border border-emerald-500/20 px-2.5 py-1.5 text-sm text-emerald-400 hover:bg-emerald-500/15 transition-colors">
                                   <Icon size={10} />{action}
                                 </button>
                               );
@@ -797,7 +804,7 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
                       {/* Sources */}
                       {msg.answer.sources?.length > 0 && (
                         <div className="flex flex-wrap gap-1.5 pt-1">
-                          {msg.answer.sources.map((s, si) => <span key={`${s}-${si}`} className="inline-flex items-center rounded-md border border-white/8 bg-white/4 px-2 py-0.5 text-[10px] text-slate-600">source: {s}</span>)}
+                          {msg.answer.sources.map((s, si) => <span key={`${s}-${si}`} className="inline-flex items-center rounded-md border border-white/8 bg-white/4 px-2 py-0.5 text-xs text-slate-600">source: {s}</span>)}
                         </div>
                       )}
                     </div>
@@ -811,23 +818,23 @@ function AIAssistant({ role, onAction }: { role: Role; onAction: (action: string
         {loading && (
           <div className="flex gap-3">
             <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center flex-shrink-0"><Bot size={12} className="text-white" aria-hidden="true" /></div>
-            <div className="rounded-2xl px-4 py-3 bg-slate-800/80 border border-white/8">
-              <div className="flex gap-1">{[0,1,2].map(i => <motion.div key={i} className="w-1.5 h-1.5 rounded-full bg-indigo-400" animate={{ opacity: [0.3,1,0.3] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }} />)}</div>
-            </div>
+            <AiRequestStatus phase={requestPhase} />
           </div>
         )}
         <div ref={bottomRef} />
       </div>
 
       <div className="border-t border-white/8 pt-4">
-        <form onSubmit={e => { e.preventDefault(); ask(input); }} className="flex gap-2">
-          <input value={input} onChange={e => setInput(e.target.value)} placeholder="Ask about any incident, service, or risk…"
-            className="flex-1 rounded-xl bg-slate-800/80 border border-white/10 text-sm text-white placeholder:text-slate-600 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all" />
-          <button type="submit" disabled={!input.trim() || loading}
-            className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white transition-all flex items-center gap-1.5">
-            <Send size={13} />
+        <label htmlFor="incident-question" className="block text-sm font-medium mb-2">Ask about your services</label>
+        <form onSubmit={e => { e.preventDefault(); ask(input); }} className="flex gap-2 items-start">
+          <input id="incident-question" name="question" autoComplete="off" aria-describedby="incident-question-hint" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask about any incident, service, or risk…"
+            className="ctx-input min-w-0 flex-1 rounded-xl border text-base px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-colors" />
+          <button type="submit" disabled={!input.trim() || loading} aria-label={loading ? "Waiting for AI response" : "Send question"}
+            className="min-h-12 min-w-12 px-3 sm:px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white transition-colors flex items-center justify-center gap-2">
+            <Send size={18} aria-hidden="true" /><span className="hidden sm:inline text-sm font-semibold">Send</span>
           </button>
         </form>
+        <p id="incident-question-hint" className="ctx-muted text-sm mt-2">Answers use the service graph and events in this workspace.</p>
       </div>
     </div>
   );
@@ -851,18 +858,18 @@ function RiskCard({ risk: r, role, onAction }: { risk: RiskEntry; role: Role; on
               <span className="text-sm font-semibold text-white">{r.service.name}</span>
               <StatusBadge status={r.service.status} />
             </div>
-            {r.rootCause && <p className="text-[11px] text-slate-500">← depends on <span className="text-red-400">{r.rootCause.name}</span></p>}
+            {r.rootCause && <p className="text-sm text-slate-500">← depends on <span className="text-red-400">{r.rootCause.name}</span></p>}
             <div className="flex items-center gap-1.5 mt-1">
               {r.service.criticality && (
-                <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase ${r.service.criticality === "high" ? "bg-red-500/10 border-red-500/20 text-red-400" : r.service.criticality === "medium" ? "bg-amber-500/10 border-amber-500/20 text-amber-400" : "bg-slate-500/10 border-slate-500/20 text-slate-400"}`}>{r.service.criticality}</span>
+                <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-bold uppercase ${r.service.criticality === "high" ? "bg-red-500/10 border-red-500/20 text-red-400" : r.service.criticality === "medium" ? "bg-amber-500/10 border-amber-500/20 text-amber-400" : "bg-slate-500/10 border-slate-500/20 text-slate-400"}`}>{r.service.criticality}</span>
               )}
               {r.service.ownerTeam && (
-                <span className="text-[10px] text-slate-600">👤 {r.service.ownerTeam}</span>
+                <span className="text-xs text-slate-600">👤 {r.service.ownerTeam}</span>
               )}
             </div>
           </div>
         </div>
-        <button onClick={() => setExp(!exp)} className="text-slate-600 hover:text-slate-300 flex-shrink-0">
+        <button onClick={() => setExp(!exp)} aria-label={`${exp ? "Hide" : "Show"} risk details for ${r.service.name}`} aria-expanded={exp} className="text-slate-600 hover:text-slate-300 flex-shrink-0">
           <ChevronDown size={14} className={`transition-transform ${exp ? "rotate-180" : ""}`} />
         </button>
       </div>
@@ -872,14 +879,14 @@ function RiskCard({ risk: r, role, onAction }: { risk: RiskEntry; role: Role; on
             <div className="mt-3 pt-3 border-t border-white/6 space-y-2">
               <div className="flex items-start gap-2 rounded-lg bg-amber-500/5 border border-amber-500/10 px-3 py-2">
                 <Zap size={11} className="text-amber-400 mt-0.5 flex-shrink-0" />
-                <p className="text-[11px] text-amber-300 leading-relaxed">{r.reasoning}</p>
+                <p className="text-sm text-amber-300 leading-relaxed">{r.reasoning}</p>
               </div>
               {r.recentEvent && (
                 <div className="rounded-lg bg-white/3 px-3 py-2 flex items-start gap-2">
                   <AlertCircle size={11} className="text-slate-500 mt-0.5 flex-shrink-0" />
                   <div>
-                    <p className="text-[11px] text-slate-300 font-medium">{r.recentEvent.title}</p>
-                    {r.recentEvent.description && <p className="text-[10px] text-slate-600 mt-0.5">{r.recentEvent.description}</p>}
+                    <p className="text-sm text-slate-300 font-medium">{r.recentEvent.title}</p>
+                    {r.recentEvent.description && <p className="text-xs text-slate-600 mt-0.5">{r.recentEvent.description}</p>}
                   </div>
                 </div>
               )}
@@ -887,7 +894,7 @@ function RiskCard({ risk: r, role, onAction }: { risk: RiskEntry; role: Role; on
                 <div className="flex gap-2 flex-wrap pt-1">
                   {["rollback", "throttle", "restart"].map(a => (
                     <button key={a} onClick={() => onAction(a, r.service.name)}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all capitalize">
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-medium bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-colors capitalize">
                       <Wrench size={10} />{a}
                     </button>
                   ))}
@@ -941,14 +948,14 @@ function OverviewTab({ risks, services, rootCause, predictions, loading, role, o
       {/* Health summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Healthy", count: counts.healthy, c: "#22c55e", bg: "bg-emerald-500/8 border-emerald-500/15" },
-          { label: "At Risk", count: counts.at_risk, c: "#f59e0b", bg: "bg-amber-500/8 border-amber-500/15" },
-          { label: "Degraded", count: counts.degraded, c: "#f97316", bg: "bg-orange-500/8 border-orange-500/15" },
-          { label: "Failing", count: counts.failing, c: "#ef4444", bg: "bg-red-500/8 border-red-500/15" },
-        ].map(({ label, count, c, bg }) => (
+          { label: "Healthy", count: counts.healthy, color: "text-emerald-400", bg: "bg-emerald-500/8 border-emerald-500/15" },
+          { label: "At Risk", count: counts.at_risk, color: "text-amber-400", bg: "bg-amber-500/8 border-amber-500/15" },
+          { label: "Degraded", count: counts.degraded, color: "text-orange-400", bg: "bg-orange-500/8 border-orange-500/15" },
+          { label: "Failing", count: counts.failing, color: "text-red-400", bg: "bg-red-500/8 border-red-500/15" },
+        ].map(({ label, count, color, bg }) => (
           <div key={label} className={`rounded-xl border px-4 py-3 ${bg}`}>
             <div className="text-2xl font-bold text-white mb-0.5">{count}</div>
-            <div className="text-[11px] font-medium" style={{ color: c }}>{label}</div>
+            <div className={`text-sm font-medium ${color}`}>{label}</div>
           </div>
         ))}
       </div>
@@ -959,7 +966,7 @@ function OverviewTab({ risks, services, rootCause, predictions, loading, role, o
           <div className="w-10 h-10 rounded-xl bg-indigo-500/15 flex items-center justify-center flex-shrink-0"><Sparkles size={18} className="text-indigo-400" /></div>
           <div>
             <p className="text-sm font-semibold text-white mb-1">No data yet</p>
-            <p className="text-xs text-slate-500">Click <span className="text-indigo-400 font-medium">▶ Run Demo</span> in the header to start the live incident scenario.</p>
+            <p className="text-sm text-slate-500">Open <span className="text-indigo-400 font-medium">Workspace actions</span> and choose <span className="text-indigo-400 font-medium">Run demo</span> to start the incident scenario.</p>
           </div>
         </div>
       )}
@@ -976,7 +983,7 @@ function OverviewTab({ risks, services, rootCause, predictions, loading, role, o
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle size={13} className="text-red-400" />
             <h3 className="text-sm font-semibold text-white">Active Risk Details</h3>
-            <span className="inline-flex items-center rounded-full bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 text-[10px] font-medium">{risks.length}</span>
+            <span className="inline-flex items-center rounded-full bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 text-xs font-medium">{risks.length}</span>
           </div>
           <div className="space-y-3">
             {risks.map(r => (
@@ -1004,7 +1011,7 @@ function OverviewTab({ risks, services, rootCause, predictions, loading, role, o
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-white truncate">{svc.name}</div>
-                    {svc.description && <div className="text-[11px] text-slate-600 truncate">{svc.description}</div>}
+                    {svc.description && <div className="text-sm text-slate-600 truncate">{svc.description}</div>}
                   </div>
                   <StatusBadge status={svc.status} />
                 </div>
@@ -1049,7 +1056,7 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
       <div className="px-4 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid var(--ctx-border)" }}>
         <Webhook size={13} className="text-indigo-400" />
         <h3 className="text-sm font-semibold text-white">Integrations</h3>
-        <span className="ml-auto text-[10px] font-semibold rounded-full px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+        <span className="ml-auto text-xs font-semibold rounded-full px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
           {LIVE_INTEGRATIONS.length} live · {COMING_SOON.length} coming
         </span>
       </div>
@@ -1057,14 +1064,14 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
       <div className="px-4 py-4 space-y-5">
         {/* Live */}
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2.5">Available now</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-600 mb-2.5">Available now</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             {LIVE_INTEGRATIONS.map(({ name, desc, color, bg, icon: Icon }) => (
               <div key={name} className={`rounded-xl border px-3 py-2.5 flex items-start gap-2.5 ${bg}`}>
                 <Icon size={13} className={`${color} mt-0.5 flex-shrink-0`} />
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold text-white leading-none mb-0.5">{name}</p>
-                  <p className="text-[10px] text-slate-500 leading-snug">{desc}</p>
+                  <p className="text-sm font-semibold text-white leading-none mb-0.5">{name}</p>
+                  <p className="text-xs text-slate-500 leading-snug">{desc}</p>
                 </div>
               </div>
             ))}
@@ -1080,18 +1087,18 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
               { label: "GitHub Actions deployments", url: `${window.location.origin}/api/ingest/github-actions` },
             ].map(({ label, url }) => (
               <div key={label} className="rounded-lg border px-3 py-2.5" style={{ background: "var(--ctx-surface)", borderColor: "var(--ctx-border)" }}>
-                <p className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: "var(--ctx-text-2)" }}>{label}</p>
+                <p className="text-sm font-bold uppercase tracking-wider mb-1.5" style={{ color: "var(--ctx-text-2)" }}>{label}</p>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-1.5 py-0.5 flex-shrink-0">POST</span>
-                  <code className="text-xs font-mono flex-1 min-w-0 truncate" style={{ color: "var(--ctx-text-2)" }}>{url}</code>
+                  <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-1.5 py-0.5 flex-shrink-0">POST</span>
+                  <code className="text-sm font-mono flex-1 min-w-0 truncate" style={{ color: "var(--ctx-text-2)" }}>{url}</code>
                   <CopyButton text={url} />
                 </div>
               </div>
             ))}
             <div className="rounded-lg border px-3 py-2.5" style={{ background: "var(--ctx-surface)", borderColor: "var(--ctx-border)" }}>
-              <p className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: "var(--ctx-text-2)" }}>Example payload</p>
+              <p className="text-sm font-bold uppercase tracking-wider mb-1.5" style={{ color: "var(--ctx-text-2)" }}>Example payload</p>
               <div className="flex items-start gap-1.5">
-                <pre className="text-xs font-mono leading-relaxed flex-1 whitespace-pre-wrap" style={{ color: "var(--ctx-text-2)" }}>{payload}</pre>
+                <pre className="text-sm font-mono leading-relaxed flex-1 whitespace-pre-wrap" style={{ color: "var(--ctx-text-2)" }}>{payload}</pre>
                 <CopyButton text={payload} className="mt-0.5" />
               </div>
             </div>
@@ -1100,7 +1107,7 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
 
         {/* Coming soon */}
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-2.5">Coming soon</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-600 mb-2.5">Coming soon</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {COMING_SOON.map(({ name, desc, icon: Icon }) => (
               <div key={name}
@@ -1109,19 +1116,19 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
                 <Icon size={13} className="text-slate-600 mt-0.5 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
-                    <p className="text-xs font-semibold text-slate-400">{name}</p>
+                    <p className="text-sm font-semibold text-slate-400">{name}</p>
                     <span className="text-[8px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
                       Planned
                     </span>
                   </div>
-                  <p className="text-[10px] text-slate-600 leading-snug">{desc}</p>
+                  <p className="text-xs text-slate-600 leading-snug">{desc}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <p className="text-xs text-slate-400">Planned connectors have no scheduled release date. You can send supported alerts through the generic webhook today.</p>
+        <p className="text-sm text-slate-400">Planned connectors have no scheduled release date. You can send supported alerts through the generic webhook today.</p>
       </div>
     </div>
   );
@@ -1137,11 +1144,13 @@ const ROLES: { id: Role; label: string; icon: React.ElementType; desc: string }[
 
 function RoleSelector({ role, onChange }: { role: Role; onChange: (r: Role) => void }) {
   const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
   const current = ROLES.find(r => r.id === role)!;
   return (
-    <div className="relative">
-      <button onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/8 px-3 py-1.5 text-[11px] text-slate-300 transition-all">
+    <div className="relative" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}
+      onKeyDown={event => { if (event.key === "Escape") { setOpen(false); trigger.current?.focus(); } }}>
+      <button ref={trigger} onClick={() => setOpen(!open)} aria-label={`${current.label} view`} aria-expanded={open}
+        className="ctx-header-button flex items-center gap-2 rounded-xl border px-3 text-sm transition-colors">
         <current.icon size={11} />
         <span className="hidden sm:inline">{current.label}</span>
         <ChevronDown size={11} className={`text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
@@ -1149,14 +1158,14 @@ function RoleSelector({ role, onChange }: { role: Role; onChange: (r: Role) => v
       <AnimatePresence>
         {open && (
           <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-            className="ctx-dropdown absolute right-0 top-9 z-50 w-52 rounded-xl overflow-hidden" style={{ border: "1px solid var(--ctx-border)", background: "var(--ctx-bg)", boxShadow: "0 8px 30px rgba(0,0,0,0.18)" }}>
+            className="ctx-dropdown absolute left-0 top-full mt-2 z-50 w-52 rounded-xl overflow-hidden" style={{ border: "1px solid var(--ctx-border)", background: "var(--ctx-bg)", boxShadow: "0 8px 30px rgba(0,0,0,0.18)" }}>
             {ROLES.map(r => (
-              <button key={r.id} onClick={() => { onChange(r.id); setOpen(false); }}
+              <button key={r.id} onClick={() => { onChange(r.id); setOpen(false); trigger.current?.focus(); }}
                 className={`w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors ${r.id === role ? "bg-indigo-500/8" : ""}`}>
                 <r.icon size={13} className={r.id === role ? "text-indigo-400" : "text-slate-500"} />
                 <div>
-                  <p className={`text-xs font-semibold ${r.id === role ? "text-indigo-400" : "text-white"}`}>{r.label}</p>
-                  <p className="text-[10px] text-slate-500">{r.desc}</p>
+                  <p className={`text-sm font-semibold ${r.id === role ? "text-indigo-400" : "text-white"}`}>{r.label}</p>
+                  <p className="text-xs text-slate-500">{r.desc}</p>
                 </div>
               </button>
             ))}
@@ -1217,13 +1226,13 @@ function IncidentHistoryTab({ feed, loading }: { feed: TimelineItem[]; loading: 
   if (!sessions.length) return (
     <div className="rounded-xl border border-indigo-500/15 bg-indigo-500/5 p-6 text-center">
       <p className="text-sm text-slate-500">No incident history yet.</p>
-      <p className="text-xs text-slate-600 mt-1">Run the demo to generate incident data.</p>
+      <p className="text-sm text-slate-600 mt-1">Run the demo to generate incident data.</p>
     </div>
   );
 
   return (
     <div className="space-y-3">
-      <p className="text-[11px] text-slate-600">{sessions.length} incident session{sessions.length !== 1 ? "s" : ""} on record</p>
+      <p className="text-sm text-slate-600">{sessions.length} incident session{sessions.length !== 1 ? "s" : ""} on record</p>
       {sessions.map((s, idx) => {
         const isOpen = expanded === s.id;
         const duration = Math.round((new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime()) / 60000);
@@ -1233,13 +1242,13 @@ function IncidentHistoryTab({ feed, loading }: { feed: TimelineItem[]; loading: 
               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${s.hasRecovery ? "bg-emerald-500" : "bg-red-500"}`} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-semibold text-white">Incident #{sessions.length - idx}</span>
-                  <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${s.hasRecovery ? "text-emerald-400 border-emerald-500/25 bg-emerald-500/10" : "text-red-400 border-red-500/25 bg-red-500/10"}`}>
+                  <span className="text-sm font-semibold text-white">Incident #{sessions.length - idx}</span>
+                  <span className={`text-xs font-bold uppercase px-1.5 py-0.5 rounded border ${s.hasRecovery ? "text-emerald-400 border-emerald-500/25 bg-emerald-500/10" : "text-red-400 border-red-500/25 bg-red-500/10"}`}>
                     {s.hasRecovery ? "resolved" : "unresolved"}
                   </span>
-                  {s.criticalCount > 0 && <span className="text-[9px] text-red-400">{s.criticalCount} critical</span>}
+                  {s.criticalCount > 0 && <span className="text-xs text-red-400">{s.criticalCount} critical</span>}
                 </div>
-                <div className="flex items-center gap-3 mt-0.5 text-[10px] text-slate-600 flex-wrap">
+                <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-600 flex-wrap">
                   <span>{new Date(s.startedAt).toLocaleString()}</span>
                   <span>·</span>
                   <span>{duration}m duration</span>
@@ -1254,13 +1263,13 @@ function IncidentHistoryTab({ feed, loading }: { feed: TimelineItem[]; loading: 
                 <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden">
                   <div className="border-t border-white/6 px-4 pb-4 pt-3 space-y-2 max-h-72 overflow-y-auto">
                     {s.items.slice().reverse().map(item => (
-                      <div key={item.id} className="flex items-start gap-2.5 text-[11px]">
+                      <div key={item.id} className="flex items-start gap-2.5 text-sm">
                         <span className={`w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0 ${item.severity === "critical" ? "bg-red-500" : item.severity === "warning" ? "bg-amber-400" : "bg-slate-600"}`} />
                         <div className="flex-1 min-w-0">
                           <span className="text-white/80">{item.title ?? item.content}</span>
                           {item.serviceName && <span className="text-slate-600 ml-1.5">· {item.serviceName}</span>}
                         </div>
-                        <span className="text-slate-700 font-mono text-[9px] flex-shrink-0">{new Date(item.createdAt).toLocaleTimeString()}</span>
+                        <span className="text-slate-700 font-mono text-xs flex-shrink-0">{new Date(item.createdAt).toLocaleTimeString()}</span>
                       </div>
                     ))}
                   </div>
@@ -1463,7 +1472,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
   ];
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--ctx-bg)", color: "var(--ctx-text)" }}>
+    <div className="ctx-dashboard min-h-screen" style={{ background: "var(--ctx-bg)", color: "var(--ctx-text)" }}>
+      <a href="#dashboard-content" className="ctx-skip-link">Skip to dashboard content</a>
       {/* Greeting toast */}
       <AnimatePresence>
         {greetingMsg && (
@@ -1498,63 +1508,35 @@ function Dashboard({ onBack }: { onBack: () => void }) {
         )}
       </AnimatePresence>
 
-      <header className="sticky top-0 z-30 backdrop-blur-sm" style={{ borderBottom: "1px solid var(--ctx-border)", background: "var(--ctx-bg-alpha)" }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+      <header className="sticky top-0 z-30 backdrop-blur-md" style={{ borderBottom: "1px solid var(--ctx-border)", background: "var(--ctx-bg-alpha)" }}>
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
+          <div className="flex items-center justify-between md:justify-start gap-3 min-w-0 w-full md:w-auto">
             <ContextLogo compact />
-            {isLive && (
-              <span className="flex items-center gap-1.5 rounded-full bg-red-500/10 border border-red-500/20 px-2.5 py-1 text-[10px] font-bold text-red-400">
-                <motion.span className="w-1.5 h-1.5 rounded-full bg-red-500" animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1, repeat: Infinity }} />
-                LIVE
-              </span>
-            )}
-            {hasIncident && !isLive && (
-              <span className="hidden sm:flex items-center gap-1 rounded-full bg-red-500/10 border border-red-500/20 px-2.5 py-1 text-[10px] font-semibold text-red-400">
-                <AlertTriangle size={9} />Active Incident
-              </span>
-            )}
+            {!isDevAuthBypass ? <OrganizationSwitcher appearance={{ elements: { organizationSwitcherTrigger: "min-h-11 min-w-11 max-w-[220px] rounded-xl text-sm", organizationSwitcherTriggerIcon: "text-indigo-400" } }}
+              organizationProfileProps={{ appearance: organizationProfileAppearance }} /> : <span className="ctx-muted text-sm">Personal workspace</span>}
           </div>
-
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {!isDevAuthBypass && <OrganizationSwitcher appearance={{ elements: { organizationSwitcherTrigger: "min-h-11 min-w-11", organizationSwitcherTriggerIcon: "text-indigo-400" } }}
-              organizationProfileProps={{ appearance: organizationProfileAppearance }} />}
+          <div className="flex items-center justify-between md:justify-start gap-2 w-full md:w-auto" aria-label="Workspace controls">
             <RoleSelector role={role} onChange={setRole} />
-            <button
-              onClick={() => { setIsLive(l => !l); }}
-              title={isLive ? "Pause live updates" : "Enable live updates"}
+            <button onClick={() => setIsLive(value => !value)} aria-pressed={isLive}
               aria-label={isLive ? "Disable live telemetry streaming" : "Enable live telemetry streaming"}
-              className={`p-2 min-w-[32px] min-h-[32px] flex items-center justify-center rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${isLive ? "text-red-400 bg-red-500/10 hover:bg-red-500/20" : "text-slate-500 hover:text-white hover:bg-white/5"}`}
-            >
-              <Radio size={14} />
+              title={isLive ? "Pause live updates" : "Enable live updates"}
+              className="ctx-header-button" data-active={isLive}>
+              <Radio size={18} aria-hidden="true" />
             </button>
-            <button
-              onClick={fetchAll}
-              disabled={refreshing}
-              aria-label="Refresh telemetry and incidents"
-              className="p-2 min-w-[32px] min-h-[32px] flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-              title="Refresh"
-            >
-              <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-            </button>
-            <button
-              onClick={toggleDark}
-              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              className="p-2 min-w-[32px] min-h-[32px] items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-colors hidden sm:flex focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {isDark ? <Sun size={14} /> : <Moon size={14} />}
+            <button onClick={fetchAll} disabled={refreshing} aria-label="Refresh telemetry and incidents" title="Refresh telemetry" className="ctx-header-button">
+              <RefreshCw size={18} aria-hidden="true" className={refreshing ? "animate-spin" : ""} />
             </button>
             {/* Notification bell */}
             <div className="relative">
               <button
                 onClick={() => { setShowNotifs(n => !n); setNotifCount(0); }}
-                aria-label="View notifications"
-                className="relative p-2 min-w-[32px] min-h-[32px] flex items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-white/5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                aria-label="View notifications" aria-expanded={showNotifs}
+                className="ctx-header-button relative"
                 title="Notifications"
               >
-                <Siren size={14} />
+                <Siren size={18} aria-hidden="true" />
                 {notifCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-red-500 text-[8px] font-bold text-white flex items-center justify-center leading-none">
+                  <span className="absolute -top-0.5 -right-0.5 min-w-5 h-5 px-1 rounded-full bg-red-500 text-xs font-bold text-white flex items-center justify-center leading-none">
                     {notifCount}
                   </span>
                 )}
@@ -1562,10 +1544,10 @@ function Dashboard({ onBack }: { onBack: () => void }) {
               <AnimatePresence>
                 {showNotifs && (
                   <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
-                    className="absolute right-0 top-10 z-50 w-72 rounded-xl border border-white/10 bg-[#0f1629] shadow-2xl overflow-hidden">
+                    className="ctx-popover fixed right-4 top-28 md:absolute md:right-0 md:top-full md:mt-2 z-50 w-72 max-w-[calc(100vw-2rem)] rounded-xl border shadow-2xl overflow-hidden">
                     <div className="px-4 py-3 border-b border-white/8 flex items-center justify-between">
-                      <span className="text-xs font-semibold text-white">Notifications</span>
-                      <button onClick={() => setShowNotifs(false)} aria-label="Close notifications" className="p-1 min-w-[28px] min-h-[28px] flex items-center justify-center rounded hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+                      <span className="text-sm font-semibold text-white">Notifications</span>
+                      <button onClick={() => setShowNotifs(false)} aria-label="Close notifications" className="p-2 min-w-11 min-h-11 flex items-center justify-center rounded hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
                         <X size={12} className="text-slate-400 hover:text-white" />
                       </button>
                     </div>
@@ -1574,42 +1556,38 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                         <div key={t.id} className="px-4 py-2.5 border-b border-white/5 last:border-0 flex items-start gap-2.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-[11px] text-white/80 leading-snug truncate">{t.title ?? t.content}</p>
-                            <p className="text-[10px] text-slate-600 mt-0.5">{t.serviceName} · {new Date(t.createdAt).toLocaleTimeString()}</p>
+                            <p className="text-sm text-white/80 leading-snug truncate">{t.title ?? t.content}</p>
+                            <p className="text-xs text-slate-600 mt-0.5">{t.serviceName} · {new Date(t.createdAt).toLocaleTimeString()}</p>
                           </div>
                         </div>
                       ))}
                       {timeline.filter(t => t.severity === "critical").length === 0 && (
-                        <p className="px-4 py-4 text-xs text-slate-600 text-center">No critical alerts</p>
+                        <p className="px-4 py-4 text-sm text-slate-600 text-center">No critical alerts</p>
                       )}
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
-            {/* Slack settings */}
-            <button onClick={() => setShowSlackSettings(true)} disabled={!canManageWorkspace}
-              title={canManageWorkspace ? "Slack notifications" : "An organization admin manages Slack notifications"}
-              className={`p-1.5 rounded-lg transition-colors hidden sm:block ${slackWebhookUrl ? "text-[#4A154B] bg-purple-500/10 hover:bg-purple-500/20" : "text-slate-500 hover:text-white hover:bg-white/5"}`}>
-              <MessageSquare size={13} />
-            </button>
-            <button onClick={handleExportPostmortem} disabled={postmortemLoading} title="Export AI post-mortem"
-              className="hidden sm:flex items-center gap-1.5 text-[11px] font-semibold rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white px-3 py-1.5 transition-all disabled:opacity-50">
-              {postmortemLoading ? <RefreshCw size={11} className="animate-spin" /> : <FileText size={11} />}
-              <span>Post-mortem</span>
-            </button>
-            <button onClick={() => { setShowDemo(d => !d); setIsLive(true); }} disabled={!canManageWorkspace}
-              title={canManageWorkspace ? "Run the demo scenario" : "An organization admin can run a shared demo"}
-              className="flex items-center gap-1.5 text-[11px] font-semibold rounded-lg border border-indigo-500/25 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 px-3 py-1.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-              <Play size={11} />
-              <span className="hidden sm:inline">Run Demo</span>
-            </button>
-            <div className="flex items-center gap-2 pl-2 border-l border-white/8">
-              <div className="w-7 h-7 rounded-full bg-indigo-600/20 border border-indigo-500/20 flex items-center justify-center text-[11px] text-indigo-300 font-semibold">
-                {user?.firstName?.[0] ?? user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() ?? "U"}
-              </div>
-              <button onClick={onBack} className="text-[11px] text-slate-500 hover:text-white transition-colors hidden sm:block">Sign out</button>
-            </div>
+            <WorkspaceActions>
+              <button onClick={toggleDark} className="ctx-action-item">
+                {isDark ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+                {isDark ? "Switch to light mode" : "Switch to dark mode"}
+              </button>
+              <button onClick={() => setShowSlackSettings(true)} disabled={!canManageWorkspace} className="ctx-action-item"
+                title={canManageWorkspace ? "Configure Slack notifications" : "An organization admin manages Slack notifications"}>
+                <MessageSquare size={18} aria-hidden="true" />Slack notifications
+              </button>
+              <button onClick={handleExportPostmortem} disabled={postmortemLoading} className="ctx-action-item">
+                <FileText size={18} aria-hidden="true" />{postmortemLoading ? "Generating report…" : "Export post-mortem"}
+              </button>
+              <button onClick={() => { setShowDemo(value => !value); setIsLive(true); }} disabled={!canManageWorkspace} className="ctx-action-item"
+                title={canManageWorkspace ? "Run the demo scenario" : "An organization admin can run a shared demo"}>
+                <Play size={18} aria-hidden="true" />{showDemo ? "Hide demo controls" : "Run demo"}
+              </button>
+              <div className="ctx-muted px-3 pt-3 mt-1 border-t text-sm" style={{ borderColor: "var(--ctx-border)" }}>Signed in as {user?.firstName || "a Context user"}</div>
+              <button onClick={onBack} className="ctx-action-item"><Users size={18} aria-hidden="true" />Sign out</button>
+            </WorkspaceActions>
           </div>
         </div>
 
@@ -1623,11 +1601,18 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                 aria-selected={tab === id}
                 aria-controls={`panel-${id}`}
                 tabIndex={tab === id ? 0 : -1}
+                onKeyDown={event => {
+                  const index = TABS.findIndex(item => item.id === id);
+                  const next = event.key === "ArrowRight" ? (index + 1) % TABS.length : event.key === "ArrowLeft" ? (index + TABS.length - 1) % TABS.length : event.key === "Home" ? 0 : event.key === "End" ? TABS.length - 1 : null;
+                  if (next === null) return;
+                  event.preventDefault(); setTab(TABS[next].id);
+                  document.getElementById(`tab-${TABS[next].id}`)?.focus();
+                }}
                 onClick={() => setTab(id)}
-                className={`relative flex items-center gap-1.5 px-3 py-2.5 text-[11px] font-medium transition-colors ${tab === id ? "text-white border-b-2 border-indigo-500" : "text-slate-500 hover:text-slate-300 border-b-2 border-transparent"}`}>
+                className={`relative flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors ${tab === id ? "text-white border-b-2 border-indigo-500" : "text-slate-500 hover:text-slate-300 border-b-2 border-transparent"}`}>
                 <Icon size={12} />{label}
                 {count !== undefined && count > 0 && (
-                  <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${id === "overview" ? "bg-red-500/20 text-red-400" : "bg-white/10 text-slate-400"}`}>{count}</span>
+                  <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${id === "overview" ? "bg-red-500/20 text-red-400" : "bg-white/10 text-slate-400"}`}>{count}</span>
                 )}
               </button>
             ))}
@@ -1641,7 +1626,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
             className="border-b border-red-500/10 bg-red-500/4 overflow-hidden">
             <div className="max-w-6xl mx-auto px-4 sm:px-6 py-1.5 flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4 text-[11px]">
+              <div className="flex items-center gap-4 text-sm">
                 <span className="flex items-center gap-1.5 text-red-400 font-semibold">
                   <motion.span className="w-1.5 h-1.5 rounded-full bg-red-500" animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1, repeat: Infinity }} />
                   Active Incident
@@ -1657,14 +1642,15 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                 </span>
               </div>
               {rootCause && (
-                <span className="text-[10px] text-slate-600 hidden sm:block truncate max-w-[220px]">{rootCause.estimatedLoss}</span>
+                <span className="text-xs text-slate-600 hidden sm:block truncate max-w-[220px]">{rootCause.estimatedLoss}</span>
               )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-4">
+      <main id="dashboard-content" tabIndex={-1} className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+        <h1 className="sr-only">Context workspace dashboard</h1>
         {fetchError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
           <p className="text-sm">{fetchError}</p>
           <button onClick={() => void fetchAll()} disabled={refreshing} className="min-h-11 rounded-lg border px-4 text-sm disabled:opacity-50">Retry refresh</button>
@@ -1695,7 +1681,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-base font-semibold text-white">Service Dependency Graph</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">Click any node to inspect. Pulsing edges show active failure propagation.</p>
+                    <p className="text-sm text-slate-500 mt-0.5">Click any node to inspect. Pulsing edges show active failure propagation.</p>
                   </div>
                 </div>
                 <Card className="p-4 overflow-hidden">
@@ -1710,7 +1696,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                       { color: STATUS_COLOR.degraded, label: "Degraded" },
                       { color: "#f97316", label: "Predicted failure" },
                     ].map(({ color, label }) => (
-                      <div key={label} className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                      <div key={label} className="flex items-center gap-1.5 text-sm text-slate-500">
                         <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />{label}
                       </div>
                     ))}
@@ -1723,7 +1709,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-base font-semibold text-white">Incident Timeline</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">Events grouped into incident phases — Trigger → Amplification → Impact → Mitigation</p>
+                    <p className="text-sm text-slate-500 mt-0.5">Events grouped into incident phases — Trigger → Amplification → Impact → Mitigation</p>
                   </div>
                 </div>
                 <TimelineTab feed={timeline} loading={loading} />
@@ -1734,7 +1720,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                 <div className="mb-4 flex items-center justify-between">
                   <div>
                     <h2 className="text-base font-semibold text-white">AI Incident Commander</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="text-sm text-slate-500 mt-0.5">
                       {role === "manager" ? "Business impact, ETAs, and plain-English summaries" : role === "engineer" ? "Detailed diagnostics, fix commands, and root cause tracing" : "Full system picture — blast radius, MTTR, and resolution paths"}
                     </p>
                   </div>
@@ -1749,7 +1735,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h2 className="text-base font-semibold text-white">Incident History</h2>
-                    <p className="text-xs text-slate-500 mt-0.5">Past incident sessions — grouped by time window, expandable for full event detail</p>
+                    <p className="text-sm text-slate-500 mt-0.5">Past incident sessions — grouped by time window, expandable for full event detail</p>
                   </div>
                 </div>
                 <IncidentHistoryTab feed={timeline} loading={loading} />
@@ -1841,7 +1827,7 @@ function HeroGraph() {
         <motion.span className="w-1.5 h-1.5 rounded-full"
           style={{ backgroundColor: phase === 0 || recovering ? "#22c55e" : "#ef4444" }}
           animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.2, repeat: Infinity }} />
-        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
           {recovering ? "Recovering…" : phase === 0 ? "All systems nominal" : phase === 1 ? "Database failing" : phase === 2 ? "Failure propagating" : phase === 3 ? "Checkout impacted" : "Root cause found"}
         </span>
       </div>
@@ -1885,14 +1871,14 @@ function HeroGraph() {
           <motion.div initial={{ opacity: 0, scale: 0.9, y: 4 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9 }}
             className="absolute bottom-4 right-4 rounded-xl border border-red-500/25 bg-red-500/10 backdrop-blur-sm px-4 py-3 text-left"
             style={{ boxShadow: "0 0 24px #ef444420" }}>
-            <p className="text-[9px] font-bold text-red-400 uppercase tracking-widest mb-0.5">🔥 Root cause identified</p>
+            <p className="text-xs font-bold text-red-400 uppercase tracking-widest mb-0.5">🔥 Root cause identified</p>
             <p className="text-sm font-bold text-white">Database</p>
-            <p className="text-[10px] text-slate-400 mt-0.5">Payments → Checkout cascade</p>
+            <p className="text-xs text-slate-400 mt-0.5">Payments → Checkout cascade</p>
             <div className="flex items-center gap-1.5 mt-1.5">
               <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
                 <div className="h-full rounded-full bg-red-500" style={{ width: "94%" }} />
               </div>
-              <span className="text-[10px] text-red-400 font-semibold">94%</span>
+              <span className="text-xs text-red-400 font-semibold">94%</span>
             </div>
           </motion.div>
         )}
@@ -1902,7 +1888,7 @@ function HeroGraph() {
       <AnimatePresence>
         {phase >= 2 && phase <= 3 && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute bottom-4 left-4 text-[10px] text-slate-600">
+            className="absolute bottom-4 left-4 text-xs text-slate-600">
             Failure spreading → {phase >= 3 ? "Checkout affected" : "Payments affected"}
           </motion.div>
         )}
@@ -2120,5 +2106,5 @@ function ClerkProviderWithRoutes() {
 }
 
 export default function App() {
-  return <WouterRouter base={basePath}><ClerkProviderWithRoutes /></WouterRouter>;
+  return <MotionConfig reducedMotion="user"><WouterRouter base={basePath}><ClerkProviderWithRoutes /></WouterRouter></MotionConfig>;
 }

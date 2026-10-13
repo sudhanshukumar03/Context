@@ -193,3 +193,14 @@ Completed steps and verification will be appended below.
   Evidence: tmp/verification/context-qa-key-complete.png and shared-key-lifecycle.json.
   Member removal/restoration and distinct Slack destinations remain unverified;
   Gemini still needs quota/rate recovery for successful live answer generation.
+- User approved temporary removal and one Member restoration invitation. Admin
+  removed only the designated test Member; Clerk showed one member, retaining
+  the creator as Admin. Fresh sign-in as the removed account showed its empty
+  personal workspace and no Context Test option. The Admin sent exactly one
+  approved Member invitation; its recipient signed in, accepted it and selected
+  the team. Member role, five healthy services, Timeline 21 and disabled shared
+  demo/Slack/key-management controls are restored. Final read-only counts remain
+  unchanged, with zero active team keys and cross-workspace links. Proof:
+  tmp/verification/context-member-access-restored.png and shared-member-access.json.
+  Fresh-session access is verified; old-token reuse/crafted requests were not
+  probed. Extended removed/demoted issuer and distinct Slack checks remain.

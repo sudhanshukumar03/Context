@@ -7,7 +7,7 @@ actual access.
 
 ## Current baseline
 
-The signed-in personal workspace contains five healthy demo services, 20 timeline
+The original Admin's personal workspace contains five healthy demo services, 20 timeline
 items and the existing Monitoring key. These records were preserved. The user
 approved creation of Context Test; its creator is shown as Admin in Clerk's
 switcher. It began empty, with no services, timeline or webhook keys.
@@ -32,7 +32,8 @@ switcher. It began empty, with no services, timeline or webhook keys.
 | Shared QA key creation/revocation | Admin can create and revoke the disposable team key | Passed live; first and approved replacement QA keys are revoked, zero active team keys |
 | Shared QA ingestion/replay | One info event is stored; replay adds none | Passed live with approved replacement: HTTP 200, duplicate=false then duplicate=true, same event ID and one persisted event |
 | Revoked QA delivery | A revoked key cannot ingest or change data | Passed live: HTTP 401, no count/health changes |
-| Membership revoked | Removed member loses access after session refresh; keys issued by that member cannot ingest | Requires separate authorization for membership change and a disposable test key |
+| Member removal/restoration | Removed account loses the team after fresh sign-in; approved Member invitation restores access | Passed live; Admin retained, one restoration invitation sent and accepted, Member dashboard/restrictions restored |
+| Removed/demoted key issuer | Shared keys fail if the issuing Admin is removed or demoted | Automated coverage passed; this distinct live role/issuer change was not performed |
 | Slack destinations | Preferences remain account/workspace scoped | Automated coverage passed; distinct live destinations not configured |
 
 Read-only checks of the generated local cluster found separate personal and team
@@ -91,10 +92,10 @@ Direct browser navigation to a protected API was blocked by the client; crafted
 live Member mutation requests were not performed or bypassed. Server enforcement
 is supported by the focused signed-session tests, separately from UI verification.
 
-The original Admin account is signed in to Context Test after the completed
-replacement-key test. Both approved disposable keys are revoked. Membership
-removal needs its own specific authorization before an extended live check;
-distinct Slack destinations remain unconfigured.
+The second test account is signed in as Member of Context Test after the approved
+removal/restoration test. Both approved disposable keys are revoked. Distinct
+Slack destinations remain unconfigured; a removed/demoted key issuer remains a
+separate extended live check.
 
 Follow-up: Gemini HTTP 429 now produces a safe HTTP 503 message explaining
 provider rate/quota exhaustion and recommending a later retry. The real Member
@@ -105,12 +106,13 @@ API typecheck/build and restarted local smoke checks pass. Provider quota has no
 been changed; a successful live answer remains unverified. Screenshot:
 `tmp/verification/context-member-ai-rate-limit.png`.
 
-## Prepared next live checks
+## Approved live test procedures
 
 The user approved steps 1–3 for one disposable key. The first attempt stopped
 after its initial ingestion returned HTTP 401, and that key was revoked. The user
 then specifically approved one replacement key, and all three steps passed live
-after the issuer-filter fix. Step 4 remains unapproved. The plan uses only Context
+after the issuer-filter fix. Step 4 was subsequently approved and completed live.
+The plan uses only Context
 Test and the generated local database; the original personal Monitoring key is
 outside the test scope.
 
@@ -184,5 +186,37 @@ Safe evidence: `tmp/verification/shared-key-lifecycle.json`,
 `tmp/verification/shared-tenant-isolation.json` and
 `tmp/verification/context-qa-key-complete.png`. No further key, role change,
 invitation, membership removal, Slack message or production mutation occurred.
-Remaining live team checks are Member removal/restoration and distinct Slack
-destinations; live AI answer generation still awaits Gemini quota/rate recovery.
+At the end of the key test, Member removal/restoration and distinct Slack
+destinations remained unverified. The following section records the subsequently
+approved and completed Member check. Live AI answer generation still awaits
+Gemini quota/rate recovery.
+
+## Approved Member removal/restoration completed
+
+The user explicitly approved temporary removal of the designated second Member
+and one replacement Member invitation. The Admin removed only that account using
+Context Test's member menu. Clerk then showed Members 1, with the creator still
+Admin. After a fresh sign-in with the removed account, its dashboard showed only
+the empty personal workspace. Context Test was absent from the switcher, and no
+shared services or timeline were shown.
+
+The original Admin sent exactly one approved restoration invitation. Clerk
+reported success and listed the intended recipient with Member role under
+Invitations 1. After sign-in as that recipient, its pending Context Test invitation
+was accepted with Join and the team selected. Clerk confirms Member role; the
+dashboard loads five healthy services and Timeline 21. Shared demo and Slack
+controls remain disabled, and webhook key creation/revocation stays unavailable.
+The account remains signed in to this restored workspace.
+
+Final read-only checks confirm unchanged personal and shared data, zero active
+team keys and zero cross-workspace event/message/dependency links. No additional
+event, credential or role promotion was created during this membership check.
+This verifies fresh-session UI and normal dashboard access; crafted requests and
+reuse of an unexpired pre-removal token were not tested. Live removed/demoted key
+issuer behavior remains separate from this ordinary-Member check.
+
+Private proof is under ignored `tmp/verification/`: `shared-member-access.json`,
+`context-member-removed.png`, `context-member-access-removed.png`,
+`context-member-restoration-invited.png` and `context-member-access-restored.png`.
+Personal email addresses remain excluded from repository notes. No production
+database, migration, deployment or Slack destination was changed.

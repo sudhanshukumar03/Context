@@ -79,8 +79,9 @@ control. Temporary viewport overrides were reset. Screenshot:
 - Clerk test organization creation, admin controls, personal/team switching and
   second-account Member access are verified. Member views and role-lens restrictions
   pass. Shared-key creation, ingestion/replay and revocation now pass live. A live
-  AI answer remains blocked by Gemini HTTP 429; extended membership removal still
-  needs specific authorization. Details are in
+  AI answer remains blocked by Gemini HTTP 429. Approved Member removal/restoration
+  now passes after fresh sign-in. Extended removed/demoted key-issuer and distinct
+  live Slack checks remain. Details are in
   `SHARED_TEAM_TEST.md`.
 - Install the reusable workflow in the deployment repository and configure its
   Actions secrets; perform a live deployment-delivery check there.
@@ -463,3 +464,27 @@ The remaining live team checks are Member removal/restoration, which still needs
 specific authorization, and distinct Slack destinations. Successful live AI answers remain
 blocked by Gemini rate/quota limits. No additional invitation, role change,
 membership removal, Slack message or production database change was performed.
+
+## Follow-up: approved Member removal/restoration — 2026-10-13
+
+The user approved temporary removal of the second test Member and one restoration
+invitation. The original Admin removed only that Member. Clerk showed Members 1,
+retaining the creator's Admin role. Fresh sign-in as the removed account loaded
+only its empty personal workspace; Context Test was absent from its switcher and
+no shared incident data appeared.
+
+The Admin sent exactly one approved replacement invitation with Member role;
+Clerk confirmed success and the intended recipient/role. The recipient signed in,
+accepted the pending invitation and selected Context Test. Clerk confirms Member
+role. The restored dashboard has five healthy services and Timeline 21, with
+shared demo/Slack controls disabled and key management unavailable. Final read-only
+counts confirm preserved personal/team records, zero active team keys and no
+cross-workspace links. No application code changed in these completed live checks.
+
+This verifies access after fresh sign-in and restoration through the normal UI;
+crafted requests and reuse of still-valid pre-removal tokens were not probed.
+The removed/demoted Admin's key-issuer lifecycle remains covered automatically,
+with its live transition unperformed. Distinct live Slack destinations and
+successful AI answers after Gemini quota/rate recovery are still outstanding.
+Private evidence is under tmp/verification/shared-member-access.json and
+context-member-access-restored.png; repository notes omit personal email addresses.

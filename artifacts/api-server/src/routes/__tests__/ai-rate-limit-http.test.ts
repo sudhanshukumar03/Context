@@ -56,7 +56,7 @@ async function post(path: string, body: object) {
 }
 
 const incidentBody = { question: "Is Checkout recovered?" };
-describe("AI provider rate-limit responses", () => {
+describe("AI provider availability responses", () => {
   it.each([
     { path: "/ai/incident-ask", body: incidentBody },
     { path: "/insights/postmortem", body: {} },
@@ -78,9 +78,24 @@ describe("AI provider rate-limit responses", () => {
     expect(JSON.stringify(mocks.error.mock.calls)).not.toContain("private");
   });
 
-  it("allows a later Member incident request to succeed after provider recovery", async () => {
+  it.each([
+    { path: "/ai/incident-ask", body: incidentBody, status: 503 },
+    { path: "/insights/postmortem", body: {}, status: 502 },
+    { path: "/ai/simplify", body: { concept: "Telemetry" }, status: 500 },
+  ])("explains provider HTTP $status safely for $path", async ({ path, body, status }) => {
+    mocks.create.mockRejectedValue(Object.assign(new Error("private provider details and credentials"), {
+      status, headers: new Headers({ "x-should-retry": "false" }),
+    }));
+    expect(await post(path, body)).toEqual({ status: 503, body: {
+      success: false, data: null, error: "AI provider is temporarily unavailable. Try again later.",
+    } });
+    expect(mocks.create).toHaveBeenCalledOnce();
+    expect(JSON.stringify(mocks.error.mock.calls)).not.toContain("private");
+  });
+
+  it.each([429, 503])("allows a later Member incident request to succeed after provider HTTP %s recovery", async status => {
     mocks.create.mockRejectedValueOnce(Object.assign(new Error("private body"), {
-      status: 429, headers: new Headers({ "x-should-retry": "false" }),
+      status, headers: new Headers({ "x-should-retry": "false" }),
     }));
     expect((await post("/ai/incident-ask", incidentBody)).status).toBe(503);
     const answer = { answer: "Checkout is healthy.", confidence: 0.9, reasoning: [], impact: [], actions: [], sources: ["Checkout"] };

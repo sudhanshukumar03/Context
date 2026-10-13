@@ -79,7 +79,8 @@ control. Temporary viewport overrides were reset. Screenshot:
 - Clerk test organization creation, admin controls, personal/team switching and
   second-account Member access are verified. Member views and role-lens restrictions
   pass. Shared-key creation, ingestion/replay and revocation now pass live. A live
-  AI answer remains blocked by Gemini HTTP 429. Approved Member removal/restoration
+  AI answer remains blocked by Gemini availability (latest retest: HTTP 503 after
+  three attempts). Approved Member removal/restoration
   now passes after fresh sign-in. Extended removed/demoted key-issuer and distinct
   live Slack checks remain. Details are in
   `SHARED_TEAM_TEST.md`.
@@ -488,3 +489,25 @@ with its live transition unperformed. Distinct live Slack destinations and
 successful AI answers after Gemini quota/rate recovery are still outstanding.
 Private evidence is under tmp/verification/shared-member-access.json and
 context-member-access-restored.png; repository notes omit personal email addresses.
+
+## Follow-up: provider unavailability feedback — 2026-10-13
+
+The later restored-Member AI request exhausted three attempts with Gemini HTTP
+503. The application now returns a clear temporary-unavailability message with
+HTTP 503 for upstream 5xx errors, while retaining distinct rate/quota feedback
+and existing safe fallbacks for permanent/unknown failures. Private provider
+details and credentials are not exposed; no fabricated answer is shown.
+
+Four additional regressions cover provider HTTP 500/502/503 and a successful later
+Member request after 503 recovery. The focused AI suite passes 88 tests across
+five files; API typecheck/build and restarted isolated-app smoke checks pass.
+The final real Member request visibly shows the improved message. Team data and
+Member restrictions persist after the browser/app restart. Proof:
+tmp/verification/context-member-ai-unavailable.png.
+
+Successful live AI generation still depends on provider availability. No provider
+settings, new keys, invitations or membership changes were made in this follow-up.
+The preceding membership documentation commit completed normally as e9e4fe5 after
+the earlier usage-limit approval review became available; its blocked attempt did
+not execute. Live Slack destinations and removed/demoted key-issuer transitions
+remain separate outstanding checks.

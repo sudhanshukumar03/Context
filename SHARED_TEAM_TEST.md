@@ -25,7 +25,7 @@ switcher. It began empty, with no services, timeline or webhook keys.
 | Reload active team | Selected team and its own data load correctly | Passed live |
 | Member invitation | Clerk sends the approved invitation with Member role | Passed live; listed under Invitations 1 |
 | Second account joins | Membership belongs to the intended test organization | Passed live; invitation accepted, Context Test selected, Member role confirmed |
-| Member investigation | Member can read team overview, graph, timeline, history and AI | Views and automatic AI insights passed; question reached Gemini but exhausted retries with provider HTTP 429 |
+| Member investigation | Member can read team overview, graph, timeline, history and AI | Views/automatic insights passed; latest question reached Gemini but exhausted retries with provider HTTP 503; clear unavailability message verified live |
 | Member controls | Key creation/revocation unavailable; demo and shared Slack controls disabled | Passed live for visible controls; shared upload/reset writes covered by automated permission tests |
 | Clerk member management | Member cannot invite, change roles, edit or delete the organization | Passed live; two members correctly listed, no admin actions exposed |
 | Role lenses | Engineer/SRE/Manager selection does not change member permissions | Passed live in all three lenses; restored SRE |
@@ -220,3 +220,27 @@ Private proof is under ignored `tmp/verification/`: `shared-member-access.json`,
 `context-member-restoration-invited.png` and `context-member-access-restored.png`.
 Personal email addresses remain excluded from repository notes. No production
 database, migration, deployment or Slack destination was changed.
+
+## Member AI retest and provider-unavailability feedback
+
+The completed membership documentation was committed as `e9e4fe5` after the
+automatic approval review's reported retry time passed. The earlier usage-limit
+review failure did not execute its Git action; the successful retry used the
+normal approval review.
+
+The later restored-Member question reached Gemini but exhausted three attempts
+with upstream HTTP 503. AI error responses now also map provider HTTP 5xx to a
+safe HTTP 503 message: `AI provider is temporarily unavailable. Try again later.`
+Rate/quota errors retain their distinct message, while permanent/unknown errors
+keep their safe fallback. Provider messages and credentials remain private.
+
+Four additional regressions cover 500/502/503 provider failures and successful
+Member recovery after a 503. The focused AI suite passes 88 tests across five
+files; API typecheck/build and restarted local smoke checks pass. A final real
+Member request confirms the new unavailability message in Brave. Context Test
+still has five healthy services, Timeline 21 and restricted Member controls.
+Proof: `tmp/verification/context-member-ai-unavailable.png`.
+
+Successful live AI answer generation remains blocked by Gemini availability;
+no provider settings or credentials were changed. Distinct live Slack destinations
+and removed/demoted key-issuer transitions remain unverified.

@@ -204,3 +204,15 @@ Completed steps and verification will be appended below.
   tmp/verification/context-member-access-restored.png and shared-member-access.json.
   Fresh-session access is verified; old-token reuse/crafted requests were not
   probed. Extended removed/demoted issuer and distinct Slack checks remain.
+- The Member removal/restoration documentation is committed as e9e4fe5. The prior
+  usage-limit approval review did not execute the commit; retry through normal
+  review succeeded after its reported retry time passed.
+- Later Member AI retest reached Gemini but received provider HTTP 503 after three
+  attempts. Provider 5xx errors now return a safe temporary-unavailability message
+  with HTTP 503; rate/quota and permanent-failure messages remain distinct. Four
+  additional regressions cover 500/502/503 and Member recovery after 503. All 88
+  focused AI tests, API typecheck/build and restarted local smoke checks pass.
+  Live Member UI confirms the improved message. Screenshot:
+  tmp/verification/context-member-ai-unavailable.png. Successful live answers still
+  await provider recovery; five healthy services, Timeline 21 and Member controls
+  remain intact. No provider, membership or credential settings changed.

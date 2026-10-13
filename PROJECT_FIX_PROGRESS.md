@@ -228,3 +228,33 @@ Completed steps and verification will be appended below.
   Receiver stopped; proof: tmp/verification/context-slack-isolation.png. Real
   Slack channel delivery, live issuer transitions and successful provider answers
   remain outstanding.
+- Continuous follow-through: native Gemini transport added with bounded retries,
+  thinking exclusion and safe timeout feedback. Existing local key preserved;
+  gemini-3.5-flash-lite/native passes all four synthetic services. Full-context
+  Member chat returned HTTP 200 in 45.5 seconds after allowing native attempts up
+  to 50 seconds inside one 55-second operation deadline. Proof:
+  tmp/verification/context-native-ai-working.png. Provider uptime and calibration
+  remain ongoing concerns, not claimed completed guarantees.
+- Real HTTP/disposable PostgreSQL checks now cover issuer demotion/removal/
+  restoration, wrong issuer, outage and revocation, plus GitHub replay/rerun/matrix
+  behavior and unchanged service health: 13 integration tests pass. No real Clerk
+  role or membership changed. Actual Slack delivery remains unconfigured; existing
+  29 routing/authorization checks are included in the full suite.
+- Local backup/restore verifies row counts and content digests in a new UTF8
+  database while preserving the original. The local 100-request/concurrency-4
+  public load check passes: p50 13ms, p95 26ms, max 127ms, zero failures. Added
+  operational runbook and package commands for repeating both checks.
+- Prepared HTTPS Compose/Caddy templates, production configuration preflight,
+  concrete GitHub caller instructions and a secret-free configuration-bundle
+  generator. Online deployment is deferred by explicit user instruction; no stack
+  was published or repository pushed. Compose syntax validation passes. Docker
+  rerun lost the engine connection during dependency installation and remains
+  unverified for this revision; its earlier successful run is historical.
+- Memory pressure affected parallel checks; default unit tests now use one worker
+  and workspace typechecks run sequentially. Final unit/HTTP suite passes 273 tests
+  across 30 files, Node configuration/checksum checks pass 11 tests, and API/dashboard
+  builds plus restarted local smoke checks pass. Latest status: REMAINING_WORK.md.
+- Final sequential full workspace typecheck passes. API entry bundle is 3,929,275
+  bytes. The reviewable configuration bundle was generated successfully with 19
+  allowlisted files and SHA-256 checksums; it contains no private environment file
+  or backup. Online deployment remains deferred.

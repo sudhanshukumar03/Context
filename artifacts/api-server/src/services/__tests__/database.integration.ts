@@ -111,6 +111,70 @@ describe("disposable PostgreSQL verification", () => {
       expect((await pool.query("SELECT count(*)::int AS count FROM documents WHERE organization_id=$1 AND title='Team Structure'", [otherOrg.id])).rows[0].count).toBe(0);
     } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
   });
+  it("persists GitHub delivery/replay/rerun through HTTP without asserting healthy service status", async () => {
+    const [workspace] = await db.insert(organizations).values({ name: "GitHub delivery", slug: "github-delivery-test" }).returning();
+    const [owner] = await db.insert(users).values({ organizationId: workspace.id, name: "CI owner", email: "ci-owner@example.test" }).returning();
+    const key = createWebhookKey();
+    const [savedKey] = await db.insert(webhookKeys).values({ organizationId: workspace.id, userId: owner.id, name: "Disposable CI", tokenHash: key.tokenHash, prefix: key.prefix }).returning();
+    await ingestServiceEvent(workspace.id, { service: "API", title: "Synthetic degradation", type: "info", severity: "info", status: "degraded" });
+    const { default: github } = await import("../../routes/github-actions.js");
+    const app = express(); app.use(express.json()); app.use(github);
+    const server = await new Promise<Server>(resolve => { const listener = app.listen(0, "127.0.0.1", () => resolve(listener)); });
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/ingest/github-actions`;
+    const payload = { repository: "synthetic/context", service: "API", environment: "staging", sha: "a".repeat(40), runId: "123", runAttempt: 1, status: "success" };
+    const send = async (body = payload) => { const response = await fetch(url, { method: "POST", headers: { "x-api-key": key.token, "content-type": "application/json" }, body: JSON.stringify(body) }); return { status: response.status, body: await response.json() as { data: { duplicate: boolean; eventId: number } } }; };
+    try {
+      const first = await send(); const replay = await send();
+      expect(first.status).toBe(200); expect(first.body.data.duplicate).toBe(false);
+      expect(replay.body.data).toMatchObject({ duplicate: true, eventId: first.body.data.eventId });
+      const rerun = await send({ ...payload, runAttempt: 2 }); expect(rerun.body.data.duplicate).toBe(false);
+      const matrix = await send({ ...payload, service: "Worker" }); expect(matrix.body.data.duplicate).toBe(false);
+      expect((await pool.query("SELECT status FROM services WHERE organization_id=$1 AND name='API'", [workspace.id])).rows[0].status).toBe("degraded");
+      expect((await pool.query("SELECT count(*)::int AS count FROM service_events WHERE organization_id=$1 AND type='deployment'", [workspace.id])).rows[0].count).toBe(3);
+      await db.update(webhookKeys).set({ revokedAt: new Date() }).where(eq(webhookKeys.id, savedKey.id));
+      expect((await send({ ...payload, runAttempt: 3 })).status).toBe(401);
+      expect((await pool.query("SELECT count(*)::int AS count FROM service_events WHERE organization_id=$1 AND type='deployment'", [workspace.id])).rows[0].count).toBe(3);
+    } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+  });
+  it("rejects shared ingestion immediately after issuer demotion/removal and preserves personal data", async () => {
+    const [shared] = await db.insert(organizations).values({ name: "Issuer transitions", slug: "clerk-org-org_issuer_test" }).returning();
+    const [issuer] = await db.insert(users).values({ organizationId: orgId, clerkUserId: "user_issuer_test", name: "Issuer", email: "issuer@example.test" }).returning();
+    const key = createWebhookKey();
+    const [savedKey] = await db.insert(webhookKeys).values({ organizationId: shared.id, userId: issuer.id, name: "Disposable issuer", tokenHash: key.tokenHash, prefix: key.prefix }).returning();
+    const personalBefore = (await pool.query("SELECT count(*)::int AS count FROM service_events WHERE organization_id=$1", [orgId])).rows[0].count;
+    let membership: { role: string; public_user_data: { user_id: string } }[] = [{ role: "org:admin", public_user_data: { user_id: issuer.clerkUserId! } }];
+    let providerDown = false;
+    const originalFetch = globalThis.fetch;
+    vi.stubEnv("CLERK_SECRET_KEY", "synthetic-clerk-key");
+    const interception = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.hostname === "api.clerk.com") {
+        expect(url.searchParams.getAll("user_id")).toEqual([issuer.clerkUserId]);
+        return providerDown ? new Response("synthetic failure", { status: 503 }) : Response.json({ data: membership });
+      }
+      if (url.hostname !== "127.0.0.1") throw new Error("No external requests permitted");
+      return originalFetch(input, init);
+    });
+    const { default: webhook } = await import("../../routes/webhook.js");
+    const app = express(); app.use(express.json()); app.use(webhook);
+    app.use((_error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => res.status(503).json({ error: "Verification unavailable" }));
+    const server = await new Promise<Server>(resolve => { const listener = app.listen(0, "127.0.0.1", () => resolve(listener)); });
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/ingest/webhook`;
+    const send = async (eventId: string) => { const response = await fetch(url, { method: "POST", headers: { "x-api-key": key.token, "content-type": "application/json" }, body: JSON.stringify({ service: "Issuer QA", title: "Synthetic info", type: "info", severity: "info", eventId }) }); await response.text(); return response.status; };
+    try {
+      expect(await send("before-change")).toBe(200);
+      membership[0].role = "org:member"; expect(await send("after-demotion")).toBe(401);
+      membership = []; expect(await send("after-removal")).toBe(401);
+      membership = [{ role: "org:admin", public_user_data: { user_id: "different-admin" } }]; expect(await send("wrong-issuer")).toBe(401);
+      providerDown = true; expect(await send("outage")).toBe(503);
+      providerDown = false; membership = [{ role: "org:admin", public_user_data: { user_id: issuer.clerkUserId! } }];
+      expect(await send("after-restoration")).toBe(200);
+      await db.update(webhookKeys).set({ revokedAt: new Date() }).where(eq(webhookKeys.id, savedKey.id));
+      expect(await send("after-revoke")).toBe(401);
+      expect((await pool.query("SELECT count(*)::int AS count FROM service_events WHERE organization_id=$1", [shared.id])).rows[0].count).toBe(2);
+      expect((await pool.query("SELECT count(*)::int AS count FROM service_events WHERE organization_id=$1", [orgId])).rows[0].count).toBe(personalBefore);
+    } finally { interception.mockRestore(); vi.unstubAllEnvs(); await new Promise<void>(resolve => server.close(() => resolve())); }
+  });
   it("reverses the additive migration on this disposable database", async () => {
     await pool.query(await readFile("lib/db/migrations/001_webhook_credentials.down.sql", "utf8"));
     expect((await pool.query("SELECT to_regclass('webhook_keys') AS name")).rows[0].name).toBeNull();

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { resolveAiConfiguration } from "../config.js";
 describe("provider/model selection", () => {
+  it("enables native transport only for an explicitly configured Gemini provider", () => {
+    expect(resolveAiConfiguration({ GEMINI_API_KEY: "key", GEMINI_TRANSPORT: "native" }).transport).toBe("native");
+    expect(resolveAiConfiguration({ GEMINI_API_KEY: "key" }).transport).toBe("openai");
+    expect(resolveAiConfiguration({ OPENAI_API_KEY: "key", GEMINI_TRANSPORT: "native" }).transport).toBe("openai");
+  });
   it("selects the OpenAI model for OpenAI-only configuration", () => {
     expect(resolveAiConfiguration({ OPENAI_API_KEY: "openai-key", GEMINI_MODEL: "wrong-model" }))
       .toMatchObject({ provider: "openai", apiKey: "openai-key", model: "gpt-4o-mini", baseURL: undefined });

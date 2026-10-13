@@ -12,15 +12,15 @@ Gemini provider checks were subsequently run with synthetic prompts as documente
 
 | Metric | Before | After |
 | --- | --- | --- |
-| Unit/mocked HTTP suite | 86 tests / 9 files passing | 232 tests / 26 files passing |
-| Disposable PostgreSQL verification | None | 11 passing tests |
+| Unit/mocked HTTP suite | 86 tests / 9 files passing | 273 tests / 30 files passing |
+| Disposable PostgreSQL verification | None | 13 passing tests |
 | Migration checksum portability | None | 2 passing Node tests |
 | Full workspace types | Passing | Passing |
 | API build | Passing | Passing |
 | Dashboard build | Not measured in initial review | Passing |
-| API entry bundle | 3,974,663 bytes in preceding audit | 3,926,040 bytes on final code build |
+| API entry bundle | 3,974,663 bytes in preceding audit | 3,929,275 bytes on final code build |
 | Numeric coverage / lint | Not configured | Not configured |
-| Production Docker execution | No image verification | Local build, runtime, guards and shutdown pass |
+| Production Docker execution | No image verification | Earlier local runtime verification passed; latest rerun lost engine connection and is unverified |
 | Hosted CI | No workflow setup | Workflow prepared; hosted execution unverified |
 
 Commands: `pnpm test`, `pnpm run typecheck`, API/dashboard `run build`,
@@ -74,15 +74,19 @@ control. Temporary viewport overrides were reset. Screenshot:
 
 ## Remaining work and operational limits
 
-- Apply reviewed migrations/initialization to the intended database and configure
-  deployment secrets/domain/origins. Prepared instructions are in `DEPLOYMENT.md`.
+- Online deployment is explicitly deferred by the user. HTTPS templates and safe
+  configuration preflight are prepared in `deployment/` and `OPERATIONS.md`;
+  hosting/domain, production credentials/database/migrations and hosted CI await
+  a later deployment task.
 - Clerk test organization creation, admin controls, personal/team switching and
   second-account Member access are verified. Member views and role-lens restrictions
   pass. Shared-key creation, ingestion/replay and revocation now pass live. A live
-  AI answer remains blocked by Gemini availability (latest retest: HTTP 503 after
-  three attempts). Approved Member removal/restoration
+  AI answer now passes with explicit native Gemini and a generation deadline
+  suitable for the full context; provider quota/availability still need monitoring.
+  Approved Member removal/restoration
   now passes after fresh sign-in. Extended removed/demoted key-issuer and distinct
-  live Slack checks remain. Details are in
+  live Slack checks remain; HTTP/disposable-database issuer transitions passed.
+  Details are in
   `SHARED_TEAM_TEST.md`.
 - Install the reusable workflow in the deployment repository and configure its
   Actions secrets; perform a live deployment-delivery check there.
@@ -534,3 +538,42 @@ build pass. Proof: tmp/verification/context-slack-isolation.png and
 slack-ui-captured.json. The temporary receiver was stopped after the checks.
 Actual Slack channel delivery remains unverified, alongside live issuer role
 transitions and successful AI generation after provider recovery.
+
+## Follow-up: continuous local completion and deferred deployment — 2026-10-13
+
+The user requested progressing through all readiness items without stopping after
+the first, then explicitly deferred online deployment. Native Gemini transport
+was implemented as an explicit option, retaining compatibility/OpenAI behavior.
+Existing local credentials are preserved; the selected local model is the
+catalog-listed gemini-3.5-flash-lite. All four actual synthetic AI services passed.
+Full-context Member chat needed more time than the short probes: native attempts
+can use 50 seconds and retries share a 55-second deadline. The final browser
+request returned HTTP 200 in 45.5 seconds and displayed a valid answer. Safe
+timeout/outage/quota messages remain; no permanent-availability or accuracy claim
+is made. Screenshot: tmp/verification/context-native-ai-working.png.
+
+Real HTTP plus disposable PostgreSQL now verify shared-key issuer demotion,
+removal, unrelated issuer, provider outage, restoration and revocation. Membership
+responses are simulated; no real Clerk role was changed. GitHub delivery checks
+verify replay/rerun/matrix identities, revoked-key rejection and unchanged service
+health. Thirteen disposable database tests pass. Actual Slack delivery and the
+distinct real Clerk issuer-role change remain external checks.
+
+The local backup drill restores the existing database into a new UTF8 database,
+verifies row counts/content digests and event isolation, then removes only the
+disposable target. The original stays intact. A public dashboard/health load
+check completed 100 requests at concurrency four with no failures, p50 13ms/p95
+26ms; it is a smoke load measurement, not production-capacity evidence.
+
+Prepared HTTPS proxy/Compose, private environment template, safe production
+configuration checker, concrete GitHub caller instructions and checksum-based
+configuration bundle. Compose syntax and 11 Node configuration/checksum checks
+pass. No hosting, DNS, production credentials/migrations, hosted CI or push was
+performed. The latest Docker rerun lost its engine connection during installation;
+the new revision's container runtime remains unverified.
+
+Parallel checks initially exhausted local memory. Default unit verification now
+uses one worker, and workspace typechecks run sequentially. Final unit/HTTP tests
+pass 273 across 30 files; full workspace types, API/dashboard builds and restarted local smoke checks
+pass. Operational commands are in OPERATIONS.md and current item-by-item status
+is in REMAINING_WORK.md. Additional native provider connectors remain planned.

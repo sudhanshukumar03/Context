@@ -25,7 +25,7 @@ switcher. It began empty, with no services, timeline or webhook keys.
 | Reload active team | Selected team and its own data load correctly | Passed live |
 | Member invitation | Clerk sends the approved invitation with Member role | Passed live; listed under Invitations 1 |
 | Second account joins | Membership belongs to the intended test organization | Passed live; invitation accepted, Context Test selected, Member role confirmed |
-| Member investigation | Member can read team overview, graph, timeline, history and AI | Views/automatic insights passed; latest question reached Gemini but exhausted retries with provider HTTP 503; clear unavailability message verified live |
+| Member investigation | Member can read team overview, graph, timeline, history and AI | Passed live; native Gemini full-context chat returned HTTP 200 and a valid answer after recovery work |
 | Member controls | Key creation/revocation unavailable; demo and shared Slack controls disabled | Passed live for visible controls; shared upload/reset writes covered by automated permission tests |
 | Clerk member management | Member cannot invite, change roles, edit or delete the organization | Passed live; two members correctly listed, no admin actions exposed |
 | Role lenses | Engineer/SRE/Manager selection does not change member permissions | Passed live in all three lenses; restored SRE |
@@ -33,7 +33,7 @@ switcher. It began empty, with no services, timeline or webhook keys.
 | Shared QA ingestion/replay | One info event is stored; replay adds none | Passed live with approved replacement: HTTP 200, duplicate=false then duplicate=true, same event ID and one persisted event |
 | Revoked QA delivery | A revoked key cannot ingest or change data | Passed live: HTTP 401, no count/health changes |
 | Member removal/restoration | Removed account loses the team after fresh sign-in; approved Member invitation restores access | Passed live; Admin retained, one restoration invitation sent and accepted, Member dashboard/restrictions restored |
-| Removed/demoted key issuer | Shared keys fail if the issuing Admin is removed or demoted | Automated coverage passed; this distinct live role/issuer change was not performed |
+| Removed/demoted key issuer | Shared keys fail if the issuing Admin is removed or demoted | Mocked membership plus real HTTP/PostgreSQL transitions passed; actual Clerk issuer-role change remains unperformed |
 | Slack destinations | Preferences remain account/workspace scoped; abandoned token lookups cannot send | Automated and offline production-component checks passed; real Slack channel delivery not configured |
 
 Read-only checks of the generated local cluster found separate personal and team
@@ -273,3 +273,35 @@ Private offline evidence: `tmp/verification/slack-ui-captured.json` and
 after verification. Server URL restrictions and authorization remain unchanged.
 Real Slack delivery and live removed/demoted issuer transitions remain separate
 outstanding checks; successful live AI answers still await provider recovery.
+
+## Continuous local follow-through
+
+Native Gemini is an explicit backend transport option; no key enters the client,
+URL or error text. The existing local key is retained, with local model changed
+to the catalog-listed `gemini-3.5-flash-lite`. Synthetic root cause, incident
+answer, postmortem and brief services passed. Full-context browser generation
+needed more time than short probes: native attempts now allow up to 50 seconds,
+while all retries share a 55-second budget. The final real Member chat returned
+HTTP 200 after 45,506 ms and displayed a schema-valid answer. Team still shows
+Timeline 21 and disabled Member administration controls. Proof:
+`tmp/verification/context-native-ai-working.png`.
+
+Timeouts (408/504), outages (5xx) and quota/rate limits have distinct safe messages.
+Connection/timeouts use stable statuses for retries rather than relying on
+bundled class names. Native thinking text is excluded from returned content;
+empty/truncated/schema-invalid output cannot be reported as an answer. Successful
+generation is not a calibration or permanent provider-availability guarantee.
+
+An added disposable PostgreSQL/HTTP test exercises issuer Admin, demoted Member,
+removed, unrelated Admin, provider outage, restored Admin and revoked states.
+Only the two authorized-state synthetic events persist; personal records are
+unchanged. Membership responses are simulated without touching the real Clerk
+organization. The separate GitHub HTTP/database check proves replay suppression,
+distinct rerun/matrix events and revoked-key rejection without declaring healthy
+service status. The complete disposable suite now passes 13 tests.
+
+The existing local database was backed up and restored into a new UTF8 database.
+Row counts and content digests match, event tenant boundaries remain intact and
+only the disposable restored database was dropped. Real Slack delivery and real
+Clerk issuer-role changes remain unperformed. Online deployment was explicitly
+deferred by the user; no hosted secrets, production database or GitHub push changed.

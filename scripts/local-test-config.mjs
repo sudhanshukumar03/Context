@@ -34,6 +34,7 @@ export function localEnvironment(config, mode, accounts, ai) {
     ALLOW_DEV_AUTH_BYPASS: clerk ? "false" : "true", VITE_ALLOW_DEV_AUTH_BYPASS: clerk ? "false" : "true",
     ALLOWED_ORIGINS: `http://127.0.0.1:${config.dashboardPort}`,
     GEMINI_API_KEY: gemini ? ai.apiKey : "", GEMINI_MODEL: gemini ? ai.model : "gemini-3.8-flash",
+    GEMINI_TRANSPORT: gemini ? ai.transport || "openai" : "openai",
     OPENAI_API_KEY: "", AI_INTEGRATIONS_OPENAI_API_KEY: "",
     GEMINI_BASE_URL: gemini ? "https://generativelanguage.googleapis.com/v1beta/openai/" : "", OPENAI_BASE_URL: "", AI_INTEGRATIONS_OPENAI_BASE_URL: "",
     CLERK_TELEMETRY_DISABLED: "1",

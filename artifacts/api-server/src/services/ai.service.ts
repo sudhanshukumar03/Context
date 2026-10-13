@@ -4,11 +4,15 @@ import { z } from "zod";
 import type { Request } from "express";
 import { resolveAiConfiguration } from "@workspace/integrations-openai-ai-server/config";
 import { briefOutputSchema } from "./onboarding-data.js";
+import { requestNativeGemini } from "./native-gemini.js";
+import { AsyncLocalStorage } from "node:async_hooks";
 
-const MODEL = resolveAiConfiguration().model;
+const AI_CONFIG = resolveAiConfiguration();
+const MODEL = AI_CONFIG.model;
 const TEMPERATURE = 0.3;
 const MAX_TOKENS = 1024;
 const ATTEMPT_TIMEOUT_MS = 15_000;
+const operationDeadline = new AsyncLocalStorage<number>();
 
 class InvalidAiResponseError extends Error {
   constructor() { super("Model response does not match the expected output"); }
@@ -81,9 +85,10 @@ class AiOperationError extends Error {
 }
 
 export async function withRetry<T>(tool: string, fn: () => Promise<T>, maxAttempts = 3, deadline?: number): Promise<T> {
+  deadline ??= performance.now() + 55_000;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      return await fn();
+      return await operationDeadline.run(deadline, fn);
     } catch (err) {
       if (attempt === maxAttempts - 1 || !isRetryable(err)) throw new AiOperationError(tool, attempt + 1, err);
       const delay = retryDelay(err, attempt);
@@ -95,6 +100,13 @@ export async function withRetry<T>(tool: string, fn: () => Promise<T>, maxAttemp
 }
 
 export async function callAi(systemPrompt: string, userMessage: string, maxTokens = MAX_TOKENS, timeoutMs = ATTEMPT_TIMEOUT_MS): Promise<string> {
+  const remaining = Math.max(1, Math.floor((operationDeadline.getStore() ?? performance.now() + timeoutMs) - performance.now()));
+  if (AI_CONFIG.transport === "native") {
+    const nativeTimeout = timeoutMs === ATTEMPT_TIMEOUT_MS ? 50_000 : timeoutMs;
+    const result = await requestNativeGemini(AI_CONFIG.apiKey, MODEL, systemPrompt, userMessage, maxTokens, Math.min(nativeTimeout, remaining));
+    if (!result.content.trim() || result.truncated) throw new InvalidAiResponseError();
+    return result.content;
+  }
   const response = await openai.chat.completions.create({
     model: MODEL,
     temperature: TEMPERATURE,
@@ -103,7 +115,7 @@ export async function callAi(systemPrompt: string, userMessage: string, maxToken
       { role: "system", content: systemPrompt },
       { role: "user", content: userMessage },
     ],
-  }, { timeout: timeoutMs, maxRetries: 0 });
+  }, { timeout: Math.min(timeoutMs, remaining), maxRetries: 0 });
   const content = response.choices[0]?.message?.content;
   if (!content?.trim() || response.choices[0]?.finish_reason === "length") throw new InvalidAiResponseError();
   return content;
@@ -404,6 +416,7 @@ export function logAiError(toolName: string, err: unknown, req?: Request): void 
     organizationId: req?.auth?.organizationId,
     attempts: err instanceof AiOperationError ? err.attempts : undefined,
     status: providerStatus(err),
+    ...(err instanceof AiOperationError && err.cause instanceof Error ? { failureType: err.cause.constructor.name } : {}),
     errorType: err instanceof AiOperationError
       ? err.cause instanceof InvalidAiResponseError ? "invalid_model_response" : "provider_error"
       : "operation_error",

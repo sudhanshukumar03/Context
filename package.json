@@ -5,7 +5,7 @@
   "scripts": {
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --workspace-concurrency=1 --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
     "test": "vitest run",
     "test:container": "node scripts/test-container.mjs",
     "local:start": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start",
@@ -21,7 +21,10 @@
     "local:ai-check": "node scripts/verify-local-ai.mjs",
     "local:ai-verify": "node scripts/verify-local-ai.mjs --generate",
     "local:ai-on": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start -AiMode gemini",
-    "local:ai-off": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start -AiMode off"
+    "local:ai-off": "powershell -NoProfile -File scripts/local-test.ps1 -Action Start -AiMode off",
+    "local:backup-check": "node scripts/local-backup-check.mjs",
+    "local:load-check": "node scripts/local-load-check.mjs",
+    "release:prepare": "node scripts/prepare-release.mjs"
   },
   "private": true,
   "devDependencies": {

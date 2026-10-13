@@ -193,6 +193,31 @@ context to the configured Gemini service.
 
 Deliveries from an actual GitHub repository remain unverified.
 
+### Native Gemini and local operations
+
+Set `GEMINI_TRANSPORT=native` in the private `tmp/local-test/ai.env` file to use
+Google's native generation endpoint. The default remains `openai` compatibility.
+Model selection is explicit via `GEMINI_MODEL`; changing transport does not grant
+quota or guarantee provider uptime. During the latest recovery work, synthetic
+root-cause, chat, report and brief checks passed with `gemini-3.5-flash-lite/native`.
+The current browser result and remaining work are recorded in `REMAINING_WORK.md`.
+
+To test an alternative without changing the saved file:
+
+```powershell
+node scripts/verify-local-ai.mjs --generate --transport=native --model=gemini-3.5-flash-lite
+```
+
+After a saved model/transport change, stop and restart the local app to reload
+it. Native attempts may use up to 50 seconds; retries share a 55-second deadline.
+Provider timeouts, temporary outages and rate/quota limits have distinct safe
+feedback. No raw provider response, thinking content or key is shown.
+
+`pnpm local:backup-check` verifies a private backup in a new disposable UTF8
+database; `pnpm local:load-check` measures 100 read-only public requests. Details
+and the deferred deployment templates are in `OPERATIONS.md`. Online deployment
+is currently deferred by the user.
+
 For hosted testing, use the normal authenticated setup in [DEPLOYMENT.md](DEPLOYMENT.md)
 with a separate test database. An online test deployment needs
 the hosting account and HTTPS domain before the GitHub workflow can deliver to it.

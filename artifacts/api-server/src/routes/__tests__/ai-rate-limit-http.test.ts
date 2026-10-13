@@ -57,6 +57,13 @@ async function post(path: string, body: object) {
 
 const incidentBody = { question: "Is Checkout recovered?" };
 describe("AI provider availability responses", () => {
+  it.each([408, 504])("explains provider timeout %s without leaking details", async status => {
+    mocks.create.mockRejectedValue(Object.assign(new Error("private request text"), { status, headers: new Headers({ "x-should-retry": "false" }) }));
+    expect(await post("/ai/incident-ask", incidentBody)).toEqual({ status: 503, body: {
+      success: false, data: null, error: "AI provider timed out. Try again later.",
+    } });
+    expect(JSON.stringify(mocks.error.mock.calls)).not.toContain("private");
+  });
   it.each([
     { path: "/ai/incident-ask", body: incidentBody },
     { path: "/insights/postmortem", body: {} },
@@ -93,7 +100,7 @@ describe("AI provider availability responses", () => {
     expect(JSON.stringify(mocks.error.mock.calls)).not.toContain("private");
   });
 
-  it.each([429, 503])("allows a later Member incident request to succeed after provider HTTP %s recovery", async status => {
+  it.each([408, 429, 503, 504])("allows a later Member incident request to succeed after provider HTTP %s recovery", async status => {
     mocks.create.mockRejectedValueOnce(Object.assign(new Error("private body"), {
       status, headers: new Headers({ "x-should-retry": "false" }),
     }));

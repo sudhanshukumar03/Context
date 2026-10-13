@@ -1,0 +1,24 @@
+services:
+  app:
+    image: ${CONTEXT_IMAGE:?Set a verified Context image tag}
+    env_file:
+      - ${CONTEXT_ENV_FILE:?Set the absolute private production environment file path}
+    restart: unless-stopped
+    expose: ["8080"]
+    stop_grace_period: 65s
+  proxy:
+    image: caddy:2
+    environment:
+      CONTEXT_DOMAIN: ${CONTEXT_DOMAIN:?Set the HTTPS domain}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  caddy_data:
+  caddy_config:

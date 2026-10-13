@@ -60,7 +60,7 @@ describe("AI route characterization", () => {
     expect(result.status).toBe(500);
     expect(mocks.requestError).toHaveBeenCalledWith({
       tool, model: expect.any(String), requestId: "test-request", organizationId: 10,
-      attempts: 1, status: 401, errorType: "provider_error",
+      attempts: 1, status: 401, errorType: "provider_error", failureType: "Error",
     }, "AI tool error");
     expect(mocks.error).not.toHaveBeenCalled();
     expect(JSON.stringify(mocks.requestError.mock.calls)).not.toContain("private");

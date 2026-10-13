@@ -76,6 +76,9 @@ test("optional Gemini stays backend-only and keeps database/auth isolation", () 
   assert.equal(dashboard.GEMINI_API_KEY, "");
   assert.ok(!Object.values(dashboard).includes(ai.apiKey));
   assert.equal(localEnvironment({ ...config, aiMode: "off" }, "api", undefined, ai).GEMINI_API_KEY, "");
+  const native = validateLocalAiCredentials({ GEMINI_API_KEY: ai.apiKey, GEMINI_TRANSPORT: "native" });
+  assert.equal(localEnvironment(aiConfig, "api", accounts, native).GEMINI_TRANSPORT, "native");
+  assert.equal(localEnvironment(aiConfig, "dashboard", accounts, native).GEMINI_TRANSPORT, "openai");
 });
 test("local AI configuration rejects missing/public credentials and retired or malformed model IDs", () => {
   const values = { GEMINI_API_KEY: "synthetic-test-key-1234567890" };

@@ -125,8 +125,10 @@ Workers scan the oldest 64 pending/processing rows at startup and every ten
 seconds, with four active jobs per process and two per tenant per process.
 Session advisory locks prevent two replicas from working the same job.
 Use a direct PostgreSQL connection or session pooler; **transaction pooling is
-incompatible with these worker locks**. Provider attempts have 15-second deadlines,
-at most three classified attempts, and no nested SDK retries. Invalid output
+incompatible with these worker locks**. Compatibility-provider attempts have
+15-second deadlines; explicit native Gemini attempts can use up to 50 seconds.
+Retries share a 55-second operation budget, with at most three classified attempts
+and no nested SDK retries. Invalid output
 cannot be persisted as done; failure-state writes and dispatch errors are contained.
 Completed data is returned as persisted, including additional valid fields.
 
@@ -186,3 +188,10 @@ Hosted CI, real Clerk invitations, live GitHub delivery and online deployment
 remain unverified. Personal Clerk sign-in and Gemini incident answers/postmortem
 export were verified against the separate local test app; no production database
 was accessed or migrated.
+
+The later shared-team checks verified the approved development organization,
+invitations, Member removal/restoration and disposable shared-key lifecycle. The
+latest state is in `REMAINING_WORK.md`; older pending statements above are
+historical. Online deployment is explicitly deferred by the user. Prepared
+`deployment/` templates and the safe configuration preflight are documented in
+`OPERATIONS.md`, alongside verified local backup/restore and load checks.

@@ -6,13 +6,15 @@ export const DEFAULT_LOCAL_AI_MODEL = "gemini-3.8-flash";
 export function validateLocalAiCredentials(values) {
   const apiKey = values.GEMINI_API_KEY?.trim();
   const model = values.GEMINI_MODEL?.trim() || DEFAULT_LOCAL_AI_MODEL;
+  const transport = values.GEMINI_TRANSPORT?.trim() || "openai";
+  if (!["openai", "native"].includes(transport)) throw new Error("Choose native or openai for GEMINI_TRANSPORT.");
   if (!apiKey || apiKey.length < 20 || /your[-_ ]|placeholder|example/i.test(apiKey))
     throw new Error("Set a valid GEMINI_API_KEY in tmp/local-test/ai.env.");
   if (!/^gemini-[a-z0-9.-]+$/.test(model) || model.startsWith("gemini-2.0-"))
     throw new Error("Choose an available Gemini model in tmp/local-test/ai.env; Gemini 2.0 is retired.");
   if (Object.keys(values).some(name => name.startsWith("VITE_") || name.startsWith("NEXT_PUBLIC_")))
     throw new Error("The AI key must not be stored in frontend environment variables.");
-  return { apiKey, model };
+  return { apiKey, model, transport };
 }
 export async function readLocalAiCredentials(root) {
   let contents;

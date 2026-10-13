@@ -133,3 +133,16 @@ Completed steps and verification will be appended below.
   Live browser checks confirm the enabled Create organization button is readable
   after reload, about 6.2:1 text contrast and 69px high. Dashboard types/build pass.
   The organization menu still contains only the personal account and Create organization.
+- Approved Context Test organization created in the Clerk development instance.
+  It began empty; Admin role and controls verified. Its nine-step synthetic demo
+  completed with five healthy services. Personal/team round-trip preserved the
+  original services, 20-item timeline and Monitoring key; team has no personal key.
+  Read-only isolated-cluster counts confirm separate records and zero cross-team
+  event/message/dependency links. Two-account membership checks are being prepared.
+- Active team and its data persist after reload. The user approved one ordinary
+  Member invitation for the designated second test account; Clerk confirms it was
+  sent and lists it as pending with Member role. No additional invitations sent.
+  Acceptance and second-account sign-in remain necessary for live member checks.
+  Detailed checklist/evidence: SHARED_TEAM_TEST.md.
+- Admin signed out after live checks; Context sign-in opened for the invited
+  account. Waiting for the user to accept the invitation and sign in as Member.

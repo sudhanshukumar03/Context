@@ -3,7 +3,8 @@
 Implemented on branch `fix/project-readiness`, in separate verified commits.
 User approved schema/migration files, selected GitHub Actions first, and selected
 Clerk Organizations for team membership. No production migration/deployment,
-GitHub installation, invitation or notification was performed.
+GitHub installation or Slack notification was performed. Approved Clerk test
+organization creation and its Member invitation are documented in later checks.
 Clerk development-instance configuration was activated in the subsequent sign-in setup below.
 Gemini provider checks were subsequently run with synthetic prompts as documented below.
 
@@ -75,9 +76,9 @@ control. Temporary viewport overrides were reset. Screenshot:
 
 - Apply reviewed migrations/initialization to the intended database and configure
   deployment secrets/domain/origins. Prepared instructions are in `DEPLOYMENT.md`.
-- Clerk Organizations and personal sign-in are configured and verified. Verify
-  team switching, invitations and member permissions using a test organization
-  and a second account; no live membership was changed.
+- Clerk test organization creation, creator/admin controls and personal/team
+  switching are verified. The approved Member invitation is sent; its acceptance
+  and live member permissions still need the second account's sign-in.
 - Install the reusable workflow in the deployment repository and configure its
   Actions secrets; perform a live deployment-delivery check there.
 - Production Docker build/run, authentication guards, asset serving, database
@@ -349,3 +350,26 @@ dark Clerk surface; browser computed styles confirm roughly 6.2:1 text contrast
 and a 69px action height. Dashboard types/build pass. The switcher still showed
 only the personal account and Create organization, so live team verification is
 not complete. Screenshot: tmp/verification/context-team-setup-needed.png.
+
+## Follow-up: shared-team live checks — 2026-10-13
+
+The user approved creating Context Test in the Clerk development instance. The
+organization began empty and its creator is displayed as Admin. Enabled admin
+controls and an actual nine-step demo write/recovery were verified. The team
+ended with five healthy services and 20 timeline entries. Personal/team switching
+and reload preserve the selected tenant: the original personal workspace retains
+its five services, 20 timeline entries and Monitoring key; the team has no keys.
+
+A read-only inspection of the exact generated local cluster found separate
+personal/team records with 14 events and six messages each, and zero cross-tenant
+event, message or dependency references. Counts, not contents or credentials,
+were reported. Evidence: tmp/verification/shared-tenant-isolation.json and the
+team/personal screenshots. The live checklist is in SHARED_TEAM_TEST.md.
+
+The 27 focused signed-session, tenant-selection, organization-permission and
+webhook-key tests passed. These do not replace second-account browser checks.
+An ordinary Member invitation for the user-designated second test account was
+prepared, approved and sent. Clerk confirms success and lists one pending Member
+invitation; inbox receipt, acceptance and live member permission checks remain
+in progress. No membership removal, new webhook key, Slack message or production
+database change was performed during this check.

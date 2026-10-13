@@ -393,3 +393,24 @@ Disabled Run Demo is now visibly dimmed. Dashboard typecheck and production buil
 pass. No membership removal, new webhook key, Slack message or production database
 change was performed. Extended revocation/key checks and distinct Slack destinations
 remain outside the completed live checks.
+
+## Follow-up: AI provider rate-limit feedback — 2026-10-13
+
+Gemini's actual HTTP 429 was previously rendered as a generic AI request failure.
+Incident questions, postmortems and all seven AI tool routes now return HTTP 503
+with a safe message explaining rate/quota exhaustion and recommending a later
+retry. Provider messages and credentials are never returned. Other failures keep
+their existing fallback/status, and no artificial answer is generated.
+
+Twelve new HTTP tests cover the nine routes, private-error redaction, permanent
+errors and successful Member retry after provider recovery. The focused AI suite
+passes 84 tests across five files. API typecheck/build and the restarted isolated
+app's smoke checks pass; existing team data and Member restrictions still load.
+The real Member request visibly shows the improved message. A successful live
+answer is still blocked by the provider limit. Proof is under ignored
+`tmp/verification/context-member-ai-rate-limit.png`.
+
+The next disposable-key/replay/revocation check and a separate Member-removal/
+restoration check have concrete procedures in SHARED_TEAM_TEST.md. They require
+specific authorization before external access or credentials change. No live key,
+role, invitation or membership was changed during this follow-up.

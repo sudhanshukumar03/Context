@@ -161,3 +161,13 @@ Completed steps and verification will be appended below.
   disposable-key checks and distinct live Slack destinations remain unverified.
   Browser API navigation was client-blocked; crafted live mutation requests were
   not bypassed. Focused server authorization evidence remains 27 passing tests.
+- AI provider HTTP 429 now returns a safe HTTP 503 response explaining rate/quota
+  exhaustion and asking the user to try later, across incident questions, reports
+  and the seven AI tools. Permanent errors keep their existing safe fallback.
+  Twelve new HTTP regressions cover all nine endpoints, private-error redaction
+  and a successful Member retry after recovery. The focused AI suite passes
+  84 tests across five files; API typecheck/build and restarted local smoke checks
+  pass. The real Member browser shows the new message; Gemini remains limited.
+  Screenshot: tmp/verification/context-member-ai-rate-limit.png. A concrete
+  disposable-key/replay/revocation plan is prepared in SHARED_TEAM_TEST.md;
+  no live key or membership change has been performed in this follow-up.

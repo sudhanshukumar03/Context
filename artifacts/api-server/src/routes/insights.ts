@@ -4,6 +4,7 @@ import { db, services, serviceDependencies, serviceEvents, serviceMessages } fro
 import { requireAuth } from "../middleware/auth.js";
 import { requireOrganizationAdmin } from "../middleware/organization-permissions.js";
 import { ok, fail } from "../lib/response.js";
+import { failAi } from "../lib/ai-response.js";
 import { requestIncidentAnswer } from "../services/incident-ai.js";
 import { logAiError } from "../services/ai.service.js";
 import { runAiTool } from "./ai-tools-execution.js";
@@ -355,7 +356,7 @@ Rules:
     ok(res, parsed);
   } catch (err) {
     logAiError("incident-ask", err, req);
-    fail(res, "AI request failed", 500);
+    failAi(res, err, "AI request failed");
   }
 });
 

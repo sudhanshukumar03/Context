@@ -91,3 +91,39 @@ is supported by the focused signed-session tests, separately from UI verificatio
 The Member dashboard remains signed in to Context Test. Membership removal and
 the disposable credential lifecycle need their own specific authorization before
 those extended live checks; distinct Slack destinations remain unconfigured.
+
+Follow-up: Gemini HTTP 429 now produces a safe HTTP 503 message explaining
+provider rate/quota exhaustion and recommending a later retry. The real Member
+browser shows this message. Twelve new HTTP regressions cover all nine AI routes,
+private-error redaction, permanent failures and successful Member retry after
+provider recovery; the focused AI suite passes 84 tests across five files.
+API typecheck/build and restarted local smoke checks pass. Provider quota has not
+been changed; a successful live answer remains unverified. Screenshot:
+`tmp/verification/context-member-ai-rate-limit.png`.
+
+## Prepared next live checks
+
+The following plan has not been executed or approved. It uses only Context Test
+and the generated local database; the original personal Monitoring key is outside
+the test scope.
+
+1. Using the original Admin account, create one key named `Context Test QA`.
+   Keep its one-time secret private, use it only against the local ingestion route
+   and retain no secret in screenshots, repository files or chat.
+2. Submit one synthetic `info` event for the existing Payments API, with a unique
+   `eventId` and no `status` change. Replay the same event and verify one persisted
+   record plus a duplicate response. This adds one team timeline entry.
+3. Revoke only `Context Test QA`. A subsequent delivery with a different event ID
+   must fail with HTTP 401 and add no data. Verify personal data/key counts remain
+   unchanged and the QA key has no active access.
+4. Separately, after specific approval, temporarily remove the second test Member.
+   Refresh that account's session and verify it cannot select/read Context Test.
+   Restore access by sending one new Member invitation to the same user-designated
+   account; the user accepts it and signs in. Do not promote either account or
+   remove the creator. This does not test a removed admin's issued-key lifecycle;
+   current issuer-membership checks remain covered by automated tests.
+
+If an authorized check fails, stop before further writes, preserve safe failure
+metadata and revoke the QA key if it was created. Restore the Member invitation
+only if that restoration was explicitly authorized. Synthetic evidence is retained;
+no deletion/reset is needed.

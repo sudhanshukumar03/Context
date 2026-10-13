@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db, documents } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
+import { failAi } from "../lib/ai-response.js";
 import { runAiTool } from "./ai-tools-execution.js";
 import {
   generateContextBrief,
@@ -91,7 +92,7 @@ router.post("/ai/brief", requireAuth, async (req: Request, res: Response) => {
     ok(res, result);
   } catch (err) {
     logAiError("brief", err, req);
-    fail(res, "Brief generation failed", 500);
+    failAi(res, err, "Brief generation failed");
   }
 });
 
@@ -113,7 +114,7 @@ router.post("/ai/ask", requireAuth, async (req: Request, res: Response) => {
     ok(res, result);
   } catch (err) {
     logAiError("ask", err, req);
-    fail(res, "Q&A failed", 500);
+    failAi(res, err, "Q&A failed");
   }
 });
 
@@ -143,7 +144,7 @@ router.post("/ai/explain-doc", requireAuth, async (req: Request, res: Response) 
     ok(res, result);
   } catch (err) {
     logAiError("explain-doc", err, req);
-    fail(res, "Document explanation failed", 500);
+    failAi(res, err, "Document explanation failed");
   }
 });
 
@@ -162,7 +163,7 @@ router.post("/ai/breakdown-task", requireAuth, async (req: Request, res: Respons
     ok(res, result);
   } catch (err) {
     logAiError("breakdown-task", err, req);
-    fail(res, "Task breakdown failed", 500);
+    failAi(res, err, "Task breakdown failed");
   }
 });
 
@@ -177,7 +178,7 @@ router.post("/ai/explain-relationship", requireAuth, async (req: Request, res: R
     ok(res, result);
   } catch (err) {
     logAiError("explain-relationship", err, req);
-    fail(res, "Relationship explanation failed", 500);
+    failAi(res, err, "Relationship explanation failed");
   }
 });
 
@@ -206,7 +207,7 @@ router.post("/ai/daily-focus", requireAuth, async (req: Request, res: Response) 
     ok(res, result);
   } catch (err) {
     logAiError("daily-focus", err, req);
-    fail(res, "Daily focus generation failed", 500);
+    failAi(res, err, "Daily focus generation failed");
   }
 });
 
@@ -221,7 +222,7 @@ router.post("/ai/simplify", requireAuth, async (req: Request, res: Response) => 
     ok(res, result);
   } catch (err) {
     logAiError("simplify", err, req);
-    fail(res, "Simplification failed", 500);
+    failAi(res, err, "Simplification failed");
   }
 });
 

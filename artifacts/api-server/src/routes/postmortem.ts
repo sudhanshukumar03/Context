@@ -3,6 +3,7 @@ import { eq, desc, gte, and, inArray } from "drizzle-orm";
 import { db, services, serviceDependencies, serviceEvents, serviceMessages } from "@workspace/db";
 import { requireAuth } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
+import { failAi } from "../lib/ai-response.js";
 import { requestPostmortem } from "../services/incident-ai.js";
 import { logAiError } from "../services/ai.service.js";
 import { runAiTool } from "./ai-tools-execution.js";
@@ -138,7 +139,7 @@ Write the post-mortem in this EXACT Markdown structure (do not deviate):
     ok(res, { markdown, generatedAt: new Date().toISOString() });
   } catch (err) {
     logAiError("postmortem", err, req);
-    fail(res, "Post-mortem generation failed", 500);
+    failAi(res, err, "Post-mortem generation failed");
   }
 });
 

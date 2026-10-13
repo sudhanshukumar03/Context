@@ -61,7 +61,7 @@ if (!clerkPubKey && !isDevAuthBypass) throw new Error("Missing VITE_CLERK_PUBLIS
 const clerkAppearance = {
   baseTheme: dark, cssLayerName: "clerk",
   options: { logoPlacement: "inside" as const, logoLinkUrl: basePath || "/", logoImageUrl: `${window.location.origin}${basePath}/logo.svg`, socialButtonsPlacement: "top" as const, socialButtonsVariant: "blockButton" as const },
-  variables: { colorPrimary: "#6366f1", colorForeground: "#f8fafc", colorMutedForeground: "#94a3b8", colorDanger: "#f87171", colorBackground: "#0f172a", colorInput: "#1e293b", colorInputForeground: "#f8fafc", colorNeutral: "#e2e8f0", fontFamily: "'Inter', system-ui, sans-serif", borderRadius: "0.75rem" },
+  variables: { colorPrimary: "#6366f1", colorForeground: "#f8fafc", colorMutedForeground: "#94a3b8", colorDanger: "#f87171", colorBackground: "#0f172a", colorInput: "#1e293b", colorInputForeground: "#f8fafc", colorNeutral: "#e2e8f0", fontFamily: "'Manrope', 'Segoe UI', sans-serif", borderRadius: "0.75rem" },
   elements: {
     rootBox: "w-full flex justify-center",
     cardBox: "!bg-slate-900 rounded-2xl w-[420px] max-w-full overflow-hidden border border-white/10 shadow-2xl",
@@ -1110,7 +1110,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-base font-semibold text-white">Service Dependency Graph</h2>
+                    <h2 className="ctx-view-title">Service Dependency Graph</h2>
                     <p className="text-sm text-slate-500 mt-0.5">Trace which services use each other, then select a service to inspect its connections.</p>
                   </div>
                 </div>
@@ -1138,7 +1138,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-base font-semibold text-white">Incident Timeline</h2>
+                    <h2 className="ctx-view-title">Incident Timeline</h2>
                     <p className="text-sm text-slate-500 mt-0.5">Follow recorded changes, alerts, responses and recovery in time order.</p>
                   </div>
                 </div>
@@ -1149,7 +1149,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
               <div>
                 <div className="mb-4 flex items-center justify-between">
                   <div>
-                    <h2 className="text-base font-semibold text-white">AI Incident Commander</h2>
+                    <h2 className="ctx-view-title">AI Incident Commander</h2>
                     <p className="text-sm text-slate-500 mt-0.5">
                       {role === "manager" ? "Business impact, ETAs, and plain-English summaries" : role === "engineer" ? "Detailed diagnostics, fix commands, and root cause tracing" : "Full system picture — blast radius, MTTR, and resolution paths"}
                     </p>
@@ -1162,7 +1162,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-base font-semibold text-white">Incident History</h2>
+                    <h2 className="ctx-view-title">Incident History</h2>
                     <p className="text-sm text-slate-500 mt-0.5">Review past activity windows and the evidence recorded within each one.</p>
                   </div>
                 </div>

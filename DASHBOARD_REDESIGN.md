@@ -10,7 +10,7 @@ Audience: engineers, SREs and managers investigating a service incident. Each vi
 | Graph | What depends on what? | Direction explanation → separated service cards and arrows → selected service's upstream/downstream connections |
 | AI | What should I understand or investigate? | One question composer and conversation → answer → optional reasoning/sources; automated insights remain secondary |
 
-Light palette: canvas `#f4f7fb`, panel `#ffffff`, primary text `#17243b`, secondary `#475569`, accent `#4f46e5`, rules `#d5dfeb`. Dark uses the same hierarchy with deep navy surfaces and pale text. Status color supplements written labels. System sans-serif for readable product text; monospace only for endpoint/code data and time where useful. Headings 20–24px, body 14–16px, metadata at least 12px. Content is left aligned, with a bounded measure for explanations.
+Light palette: canvas `#f6f7fb`, panel `#ffffff`, charcoal headings `#182132`, primary text `#202838`, body text `#465266`, secondary text `#596579`, violet accent `#5146c8`. Dark uses the same hierarchy with deep navy surfaces and pale text. Status color supplements written labels. Locally hosted Manrope provides one consistent family across dashboard, controls and authentication; monospace remains reserved for endpoints and code. Screen titles use 24–28px/750, section headings 17px/700, body 14–15px, and metadata at least 12px. Content is left aligned, with a bounded measure for explanations.
 
 Use an operational briefing rather than repeated tinted cards. One dominant work surface per view, quiet dividers, real chronology, and progressive detail. Avoid a marketing hero, glass decoration, or four equally prominent health tiles. The local skill search returned generic landing-page suggestions and no verified progressive-disclosure match; the information architecture above is a project-specific design decision.
 
@@ -40,3 +40,7 @@ The local API and dashboard were both stopped after the interruption. `pnpm loca
 ### Notification visibility follow-up
 
 Notification titles, metadata, the heading and close control now use explicit theme tokens rather than white utility text. Titles wrap, empty titles fall back to message content or a clear event label, and separators follow the panel's theme. Dashboard build and typecheck passed. Rendered notification verification and a fresh screenshot remain pending because browser inspection is still disconnected.
+
+### Typography follow-up
+
+Replaced the mixed system-font setup with the official Manrope variable font (200–800), hosted locally with its license. Removed the unused external Inter stylesheet, consolidated competing palette definitions, standardized heading weights and spacing, and made light-mode inputs use the current theme tokens. Font delivery was verified against the source file byte-for-byte; the TrueType signature and weight axis were checked. Dashboard build and typecheck passed. Configured heading/body/secondary text colors meet 4.5:1 against the configured canvas, panel, input and subtle surfaces in both themes (minimum 5.40 light, 7.31 dark). These are token checks, not rendered-element measurements. The earlier viewport measurements predate this font change; rendered typography and breakpoint rechecks remain pending while browser inspection is unavailable.

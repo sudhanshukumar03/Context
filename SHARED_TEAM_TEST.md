@@ -34,7 +34,7 @@ switcher. It began empty, with no services, timeline or webhook keys.
 | Revoked QA delivery | A revoked key cannot ingest or change data | Passed live: HTTP 401, no count/health changes |
 | Member removal/restoration | Removed account loses the team after fresh sign-in; approved Member invitation restores access | Passed live; Admin retained, one restoration invitation sent and accepted, Member dashboard/restrictions restored |
 | Removed/demoted key issuer | Shared keys fail if the issuing Admin is removed or demoted | Automated coverage passed; this distinct live role/issuer change was not performed |
-| Slack destinations | Preferences remain account/workspace scoped | Automated coverage passed; distinct live destinations not configured |
+| Slack destinations | Preferences remain account/workspace scoped; abandoned token lookups cannot send | Automated and offline production-component checks passed; real Slack channel delivery not configured |
 
 Read-only checks of the generated local cluster found separate personal and team
 service records, each with 14 events and six messages (20 timeline entries).
@@ -244,3 +244,32 @@ Proof: `tmp/verification/context-member-ai-unavailable.png`.
 Successful live AI answer generation remains blocked by Gemini availability;
 no provider settings or credentials were changed. Distinct live Slack destinations
 and removed/demoted key-issuer transitions remain unverified.
+
+## Offline Slack destination isolation completed
+
+The production Slack settings component was exercised in Brave against a
+loopback-only receiver, using synthetic sessions and fake destinations on a
+separate browser origin. Personal, team A, team B and another Admin's team A
+preferences began empty independently and retained their correct URLs on return.
+Exactly four test messages were captured locally, one for each destination.
+No request was forwarded to Slack, and real saved preferences were untouched.
+
+This check exposed a delayed-token race. Settings test messages and automatic
+incident notifications now verify their session/workspace lifetime after token
+lookup. Workspace/account changes, role changes and unmount invalidate pending
+work; old responses cannot mark the new scope successful. Already dispatched
+requests may finish. The settings modal also guards Member actions itself and
+prevents duplicate pending clicks.
+
+Browser checks held token lookup while switching teams and while changing the
+synthetic Admin role to Member. Releasing those tokens left the capture count at
+four; Member Send/Save controls were disabled. Eight new regression tests cover
+routing, abandoned token lookups, stale responses and invalid destinations. The
+focused routing/preferences/notify/signed-session suite passes 29 tests across
+four files. Dashboard typecheck and production build pass.
+
+Private offline evidence: `tmp/verification/slack-ui-captured.json` and
+`tmp/verification/context-slack-isolation.png`. The temporary receiver was stopped
+after verification. Server URL restrictions and authorization remain unchanged.
+Real Slack delivery and live removed/demoted issuer transitions remain separate
+outstanding checks; successful live AI answers still await provider recovery.

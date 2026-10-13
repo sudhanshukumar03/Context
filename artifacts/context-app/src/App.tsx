@@ -18,9 +18,11 @@ import { Switch, Route, Redirect, useLocation, Router as WouterRouter } from "wo
 import DemoVideoInline from "./components/DemoVideoInline";
 import ContextLogo, { ContextMark } from "./components/ContextLogo";
 import WebhookKeySettings from "./components/WebhookKeySettings";
+import SlackSettingsModal from "./components/SlackSettingsModal";
 import { ApplicationStatus, AuthenticationLoading } from "./components/ApplicationStartup";
 import { ClerkSession, DevSession, isDevAuthBypass, useAuth, useUser } from "./lib/auth-session";
-import { isSlackWebhookUrl, readSlackWebhook, saveSlackWebhook } from "./lib/workspace-preferences";
+import { readSlackWebhook, saveSlackWebhook } from "./lib/workspace-preferences";
+import { sendWorkspaceSlack } from "./lib/slack-notifications";
 
 const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL as string | undefined;
@@ -1272,69 +1274,6 @@ function IncidentHistoryTab({ feed, loading }: { feed: TimelineItem[]; loading: 
   );
 }
 
-// ── Slack Settings Modal ──────────────────────────────────────────────────────
-
-function SlackSettingsModal({ onClose, onSave, current }: { onClose: () => void; onSave: (url: string) => void; current: string }) {
-  const [url, setUrl] = useState(current);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<"ok" | "err" | null>(null);
-  const { getToken } = useAuth();
-
-  const testWebhook = async () => {
-    if (!isSlackWebhookUrl(url)) { setTestResult("err"); return; }
-    setTesting(true); setTestResult(null);
-    try {
-      const token = await getToken();
-      await apiFetch("/notify/slack", token, { method: "POST", body: JSON.stringify({ webhookUrl: url, text: "✅ Context is connected! You'll receive incident alerts here." }) });
-      setTestResult("ok");
-    } catch { setTestResult("err"); }
-    setTesting(false);
-  };
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <motion.div initial={{ scale: 0.95, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 16 }}
-        className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0f1629] p-6 shadow-2xl">
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-[#4A154B] flex items-center justify-center">
-              <MessageSquare size={13} className="text-white" />
-            </div>
-            <h2 className="text-sm font-semibold text-white">Slack Notifications</h2>
-          </div>
-          <button onClick={onClose} aria-label="Close Slack settings" className="min-h-11 min-w-11 flex items-center justify-center text-slate-600 hover:text-white"><X size={16} /></button>
-        </div>
-        <p className="text-xs text-slate-500 mb-4 leading-relaxed">
-          Paste your Slack Incoming Webhook URL. Context will send a message whenever a new incident is detected.
-        </p>
-        <div className="space-y-3">
-          <label htmlFor="slack-webhook-url" className="block text-xs text-slate-300">Webhook URL</label>
-          <input
-            id="slack-webhook-url"
-            value={url} onChange={e => { setUrl(e.target.value); setTestResult(null); }}
-            placeholder="https://hooks.slack.com/services/..."
-            className="w-full rounded-xl bg-slate-800/80 border border-white/10 text-xs text-white placeholder:text-slate-600 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 font-mono"
-          />
-          {testResult === "ok" && <p className="text-xs text-emerald-400">✓ Test message sent — check your Slack channel</p>}
-          {testResult === "err" && <p className="text-xs text-red-400">✗ Could not reach Slack — check the URL</p>}
-          <div className="flex gap-2 pt-1">
-            <button onClick={testWebhook} disabled={testing || !isSlackWebhookUrl(url)}
-              className="min-h-11 flex-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-slate-300 py-2.5 transition-all disabled:opacity-40">
-              {testing ? "Testing…" : "Send test message"}
-            </button>
-            <button onClick={() => { if (isSlackWebhookUrl(url)) { onSave(url); onClose(); } }} disabled={testing || !isSlackWebhookUrl(url)}
-              className="min-h-11 flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white py-2.5 transition-all disabled:opacity-40">
-              Save
-            </button>
-          </div>
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-}
-
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 
 type Tab = "overview" | "graph" | "timeline" | "ai" | "history";
@@ -1385,6 +1324,9 @@ function Dashboard({ onBack }: { onBack: () => void }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  const slackGeneration = useRef(0);
+  useEffect(() => () => { slackGeneration.current++; }, [user?.id, orgId, orgRole]);
+
   // ── Slack + in-app notification on new incident ────────────────────────────
   const hasIncidentRef = useRef(false);
   useEffect(() => {
@@ -1395,16 +1337,10 @@ function Dashboard({ onBack }: { onBack: () => void }) {
       // fire Slack if configured
       if (slackWebhookUrl && canManageWorkspace) {
         const affected = services.filter(s => s.status !== "healthy").map(s => s.name).join(", ");
-        getToken().then(token => {
-          if (!mounted.current) return;
-          return apiFetch("/notify/slack", token, {
-            method: "POST",
-            body: JSON.stringify({
-              webhookUrl: slackWebhookUrl,
-              text: `🚨 *Context — New Incident Detected*\n${affected} are failing or degraded. Open the dashboard to investigate.`,
-            }),
-          });
-        }).catch(() => {});
+        const started = slackGeneration.current;
+        void sendWorkspaceSlack(slackWebhookUrl,
+          `🚨 *Context — New Incident Detected*\n${affected} are failing or degraded. Open the dashboard to investigate.`,
+          getToken, () => mounted.current && slackGeneration.current === started, apiFetch).catch(() => {});
       }
     }
     hasIncidentRef.current = nowHas;
@@ -1828,6 +1764,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
         {showSlackSettings && (
           <SlackSettingsModal
             current={slackWebhookUrl}
+            request={apiFetch}
             onClose={() => setShowSlackSettings(false)}
             onSave={url => {
               if (!user || !canManageWorkspace) return;

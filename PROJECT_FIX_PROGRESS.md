@@ -216,3 +216,15 @@ Completed steps and verification will be appended below.
   tmp/verification/context-member-ai-unavailable.png. Successful live answers still
   await provider recovery; five healthy services, Timeline 21 and Member controls
   remain intact. No provider, membership or credential settings changed.
+- Offline Slack isolation completed with the production settings component in
+  Brave and a loopback receiver. Four distinct fake destinations remained scoped
+  to personal/team/account preferences; exactly four local messages were captured.
+  Fixed delayed-token dispatch after a workspace/account/role change or unmount
+  for test messages and automatic incident alerts. Old responses cannot set a
+  later scope's success state, and Member actions are guarded inside the modal.
+  Held-token browser checks for team switching and Admin-to-Member transition
+  added no captures. The 29 focused tests across four files, dashboard typecheck
+  and production build pass. No real Slack request or saved preference changed.
+  Receiver stopped; proof: tmp/verification/context-slack-isolation.png. Real
+  Slack channel delivery, live issuer transitions and successful provider answers
+  remain outstanding.

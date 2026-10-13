@@ -511,3 +511,26 @@ The preceding membership documentation commit completed normally as e9e4fe5 afte
 the earlier usage-limit approval review became available; its blocked attempt did
 not execute. Live Slack destinations and removed/demoted key-issuer transitions
 remain separate outstanding checks.
+
+## Follow-up: offline Slack routing and cancellation — 2026-10-13
+
+Slack test messages could outlive their originating workspace while waiting for
+a sign-in token. The settings component and automatic incident alert path now
+check session/workspace lifetime after that wait. Account, workspace and role
+changes or unmount invalidate pending work. Completed old requests cannot show
+success in a later scope; already dispatched requests may finish. The modal
+guards Member actions and duplicate pending clicks directly.
+
+Brave verification used the production component with synthetic sessions on a
+separate origin and a loopback-only receiver. Four saved destinations stayed
+separate across personal, two teams and another Admin. Exactly four messages
+were captured locally. Delayed-token team switching and Admin-to-Member role
+changes added no messages; Member Send/Save remained disabled. Nothing was
+forwarded to Slack, and real preferences or memberships were untouched.
+
+The focused routing/preferences/notify/signed-session suite passes 29 tests across
+four files, including eight new regressions. Dashboard typecheck and production
+build pass. Proof: tmp/verification/context-slack-isolation.png and
+slack-ui-captured.json. The temporary receiver was stopped after the checks.
+Actual Slack channel delivery remains unverified, alongside live issuer role
+transitions and successful AI generation after provider recovery.

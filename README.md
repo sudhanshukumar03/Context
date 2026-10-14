@@ -24,13 +24,15 @@ Open **Graph** when you need to understand a connection. An arrow runs from a se
 
 Open **Timeline** when order matters. Changes, alerts, investigations, responses, recovery reports, and team updates appear with their sources and timestamps. Highlights give you a shorter reading path; All activity keeps every loaded record available.
 
-Use **AI** to ask a specific question about this workspace. Answers begin with a summary, then separate recorded state, reported events, and possible explanations. Impact, next steps, and open questions follow. Source buttons open the supporting record; the data coverage section shows the time window and record limits. Copy saves the full analysis. Refresh regenerates the latest answer, while New chat clears the conversation and cancels a pending response. New answers follow the selected audience, and moving between tabs keeps the conversation. AI features need a configured provider with available quota.
+Use **AI** to ask a specific question about the selected workspace. An answer starts with a summary, then separates recorded state, reported events, and possible explanations. Impact, suggested next steps, and open questions follow. Source buttons open the supporting records; **Sources & data coverage** shows the time window and record limits.
+
+**Refresh** regenerates the latest answer while keeping earlier turns and your draft. **New chat** clears the conversation and cancels a pending response. **Copy** puts the full analysis on the clipboard. Moving between tabs keeps the conversation, but reloading the page or changing workspace clears it. AI features need a configured provider with available quota.
 
 Use **History** to review the activity windows built from the loaded records. A recovery report remains a report for its recorded scope; it does not establish the closure of every related incident.
 
 ## Run it on your computer
 
-Open the repository root in your editor. You will need Node.js 24 or later, pnpm 11.18.0, and PostgreSQL command-line tools on your PATH. Docker is optional for this local route.
+Open the repository root in your editor. Use Node.js 24 and pnpm 11.18.0, matching Docker and CI. PostgreSQL command-line tools must be on your PATH; [the local guide](LOCAL_TEST.md#prepare-your-computer) lists them. Docker is optional for this setup.
 
 ```powershell
 pnpm install --frozen-lockfile
@@ -39,7 +41,7 @@ pnpm local:start
 
 Open **http://127.0.0.1:31800**. The runner creates a separate local database on its first start. Later starts keep that database and the authentication and AI modes you selected.
 
-Saved settings, data, logs, and backups have their own folders under ignored `runtime/`. Disposable test output stays in `tmp/`. An older `tmp/local-test/` installation is moved on the next start with its saved records and credentials intact; `pnpm local:migrate` can also make that move explicitly. See [the folder guide](LOCAL_TEST.md#come-back-to-the-same-workspace) before removing local files.
+Saved settings, data, logs, and backups live under ignored `runtime/`. Verification commands may create disposable output in `tmp/`; that folder does not need to exist beforehand. See [the folder guide](LOCAL_TEST.md#come-back-to-the-same-workspace) before removing local files. It also explains how to migrate an older `tmp/local-test/` installation without losing its saved data.
 
 A fresh setup starts with development-only demo authentication. To use Clerk sign-in or configure AI, follow [the local guide](LOCAL_TEST.md). To check or stop the running copy:
 
@@ -57,7 +59,7 @@ Context accepts generic webhooks, PagerDuty events, and GitHub Actions deploymen
 
 The [deployment workflow example](examples/github-actions/README.md) shows how to report the result of a real deployment. A successful deployment record does not change a service's health status.
 
-Slack notifications are an optional outbound connection. Datadog, Grafana, OpsGenie, CloudWatch, and New Relic native connectors are planned; they are not connected just by running Context.
+Slack notifications are an optional outbound connection. Native Datadog, Grafana, OpsGenie, CloudWatch, and New Relic connectors are planned; running Context does not connect those services.
 
 ## Work with a team
 
@@ -91,4 +93,4 @@ pnpm --filter @workspace/context-app run build
 
 The stack is TypeScript, React, Vite, Express, PostgreSQL, and Drizzle. Clerk handles sign-in and shared membership. The API supports Gemini and OpenAI providers. The active Inter font is served locally, with its [license and source information](artifacts/context-app/public/fonts/README.md).
 
-The current setup runs locally. Hosting, production credentials, production database changes, and hosted deliveries are still a separate release step.
+The current setup runs locally. [GitHub verification](https://github.com/sudhanshukumar03/Context/actions/runs/38604477740) passed for commit `e5c0dcb` on 14 October 2026. Production hosting, credentials, database changes, and live external deliveries remain a separate release step.

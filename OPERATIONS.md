@@ -36,6 +36,7 @@ That result describes public endpoints on this computer. It does not establish c
 | `/api/healthz` returns 503 | The API cannot complete its database readiness check. | Database availability, connection settings, pool errors. |
 | AI reports a rate or quota limit | The provider cannot accept the generation request now. | Provider quota, account access, retry timing. |
 | AI reports a timeout | The request exceeded its bounded wait. | Provider availability and the request's safe error metadata. |
+| AI reports a failed request | Generation, output validation, or the surrounding operation failed. | The API log's `errorType`, `responseFailure`, and `invalidFields`, when present. |
 | Brief jobs stay pending or processing | The worker is not completing expected work. | Job age, worker startup, database session locks. |
 | Repeated ingestion failures | A sender, payload, key, or membership check needs attention. | Delivery status, current issuing-admin membership, key revocation. |
 
@@ -43,9 +44,17 @@ Health checks verify the database, not the availability of Clerk or the AI provi
 
 API logs record safe request and error metadata. Keep raw credentials, private provider bodies, and workspace content out of shared troubleshooting notes.
 
+For malformed AI output, `responseFailure` distinguishes empty, truncated, invalid JSON, and schema-mismatched responses. `invalidFields` names failed schema fields rather than returning the generated text. A structurally valid answer still needs its interpretations checked against the referenced records.
+
+## Know the current capacity boundaries
+
+The [architecture guide](PROJECT_SPEC.md#request-limits-and-deployment-shape) lists request and concurrency limits. Their counters live in server memory and reset on restart. The prepared Caddy setup forwards to one app instance; it is not a replica load-balancing configuration.
+
+Before adding replicas, define shared request counters, health-based routing, and the intended per-workspace capacity. Database locks prevent two workers from processing the same brief job, while worker concurrency limits remain per process.
+
 ## Keep dependency fixes reproducible
 
-The lockfile includes compatible security updates. `patches/braces@3.0.3.patch` adds a nesting limit to the parser and recursive walkers used by the proxy's glob matcher. The [upstream braces advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) has no published patched release. The package audit still reports its version; the advisory is not suppressed.
+The lockfile includes compatible security updates. `patches/braces@3.0.3.patch` adds a nesting limit to the parser and recursive walkers used by the proxy's glob matcher. As checked on 14 October 2026, the [upstream braces advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) lists no patched release. The package audit still reports its version; the advisory is not suppressed.
 
 The local patch rejects excessive nesting with a controlled error, including direct AST input, while retaining ordinary patterns. Run `node --test scripts/dependency-security.test.mjs` to check it. GitHub CI runs these tests, and Docker copies the patch before its frozen install. Replace the patch with an upstream release when one is published, then repeat the tests and audit.
 
@@ -67,4 +76,4 @@ Use [Setup and deployment](DEPLOYMENT.md) for private configuration, image prepa
 
 Keep the migration's return path alongside its backup. Preserve records created after the release before reversing a schema change. Recheck application reads and workspace boundaries after restoration.
 
-The local container and backup paths have been tested. Hosted alerting, scheduled backups, DNS, production migrations, and hosted CI are still tasks for the selected deployment environment.
+The local container and backup paths have been tested, and repository CI has passed on GitHub. Production deployment automation, alerting, scheduled backups, DNS, and migrations remain tasks for the selected hosting environment. See [Remaining work](REMAINING_WORK.md).

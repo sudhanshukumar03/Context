@@ -28,9 +28,20 @@ Status always has a text label as well as a color. Zoom controls and keyboard fo
 
 ## Keep a question in view
 
-AI has a bounded reading column for the conversation, a composer, and a quieter context rail. Starter questions follow the selected audience. Each analysis uses a summary, findings, impact, next steps, and open questions. Findings distinguish recorded state from reported observations and possible explanations. Supporting record buttons open source details without leaving the answer; the disclosure also shows the data window and record limits. Copy includes the full report. Refresh replaces the latest answer while preserving earlier turns and the draft. New chat clears the transcript and returns focus to the question field, including when a response is pending.
+AI has a bounded reading column, a composer, and a quieter context rail. Starter questions follow the selected audience. A completed long answer opens at its summary so the reader can begin at the top.
 
-Pending, timeout, provider failure, and retry states keep the composer understandable. Navigation preserves the conversation; workspace changes clear it. An older answer keeps its original audience label when the view changes.
+| Part of the answer | Reading purpose |
+| --- | --- |
+| Summary | Answer the question directly. |
+| Findings | Separate recorded state, reported observations, and possible explanations. |
+| Impact | Explain supported consequences for the selected audience. |
+| Next steps | Suggest checks or decisions, without implying that an action ran. |
+| What remains unknown | Keep missing evidence visible. |
+| Sources & data coverage | Open supporting records and explain the snapshot's time window and limits. |
+
+Source buttons open the corresponding record and move focus to it. Copy includes the full report. Refresh replaces the latest answer while preserving earlier turns and the draft. New chat cancels a pending answer, clears the transcript, and returns focus to the question field.
+
+Pending, timeout, provider failure, and retry states keep the composer understandable. Tab navigation preserves the conversation; a page reload or workspace change clears it. An older answer keeps its original audience label when the view changes.
 
 ## Use one visual language
 
@@ -42,6 +53,6 @@ Notifications follow the same text hierarchy, with wrapping titles, visible time
 
 ## Check the experience
 
-Review each audience with healthy, affected, and empty data. Check light and dark modes at phone, tablet, and desktop widths. Follow keyboard focus through the selector, graph, filters, and composer. Confirm that unknown impact and historical evidence stay honest.
+Review each audience with healthy, affected, and empty data. Check light and dark modes at phone, tablet, and desktop widths. Follow keyboard focus through the selector, graph, filters, composer, and source records. Try Refresh after a successful and failed answer, and New chat while a request is pending. Confirm that unknown impact and historical evidence remain clearly labeled.
 
 The [verification record](VERIFICATION_2026-10-14.md) contains the observed checks. The [reference direction](design-system/context/REFERENCE_DIRECTION.md) records the design references and tokens for future work.

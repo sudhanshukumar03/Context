@@ -77,9 +77,40 @@ Both prediction endpoints use the same dependency and alert evidence. They repor
 
 `POST /ai/incident-ask` accepts a question and an optional audience: `engineer`, `sre`, or `manager`. The default is SRE. The server chooses audience instructions and validates the structured response before returning it in the usual `{ success, data, error }` envelope.
 
+The response separates the work into readable sections:
+
+| Section | What it contains |
+| --- | --- |
+| Summary | A direct answer to the question. |
+| Findings | Statements labeled as recorded state, reported evidence, or possible explanations. |
+| Impact | Supported consequences, with historical impact distinguished from current conditions. |
+| Next steps | Proposed checks or decisions appropriate to the audience. |
+| Open questions | Missing measurements, confirmation, or context. |
+| Sources and coverage | Referenced service/event/message records, timestamps, the 48-hour activity window, and query limits. |
+
+The request reads current service records, at most 30 recent events, and at most 20 recent team messages. The server checks generated source IDs against those supplied records and removes unknown references. This checks that a referenced record exists; it does not independently verify every generated interpretation. Stored service status is not continuous live telemetry.
+
 The API supports Gemini and OpenAI configuration. Gemini can use the native transport or the OpenAI-compatible endpoint. Provider attempts are bounded; rate limits, timeouts, and temporary failures produce safe error messages.
 
-An AI conversation mounts on the first visit and stays mounted while another tab is open. Workspace changes abort pending requests and clear the previous workspace's conversation. An earlier answer keeps the audience it was generated for when the user switches views.
+An AI conversation mounts on the first visit and stays mounted while another tab is open. Refresh replaces the latest answer while preserving earlier turns and the draft. New chat cancels the pending request, clears the transcript, and focuses the question input. Long answers open at their summary, and Copy includes the full analysis.
+
+Workspace changes abort pending requests and clear the previous conversation. A browser reload also clears it. An earlier answer keeps the audience it was generated for when the user switches views.
+
+`POST /insights/postmortem` creates a provisional Markdown report from current services and up to 60 events and 40 messages from the last 72 hours. Its template includes an evidence table, a UTC timeline, response verification, proposed actions, and open questions. Missing severity, duration, ownership, financial impact, or closure stays unknown.
+
+## Request limits and deployment shape
+
+| Boundary | Current limit |
+| --- | --- |
+| General application API | 3,000 requests per 15 minutes per IP. |
+| Registration, login, and token refresh | 20 requests per minute per IP. |
+| `/openai` conversation routes | 20 requests per minute per authenticated user. |
+| Webhook key management | 30 requests per minute per authenticated user. |
+| AI tool execution | Four concurrent operations per workspace and 32 per server process. |
+
+These request counters and AI concurrency limits live in each server process. AI tool concurrency is separate from a requests-per-minute limit; the incident assistant uses the general API limiter. Restarts reset the in-memory counters.
+
+The prepared deployment runs one application instance behind Caddy for HTTPS. It does not configure multiple replicas, autoscaling, or a shared rate-limit store. Worker advisory locks coordinate matching jobs across processes, but worker capacity limits also apply per process. See [Deployment](DEPLOYMENT.md#understand-the-prepared-topology) before planning multiple instances.
 
 `POST /insights/simulate-action` returns an illustrative preview. It does not execute a command or write a recovery event. The nine-step demo is a separate synthetic workflow that does write test service and activity records.
 

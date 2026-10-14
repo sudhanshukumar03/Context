@@ -2,11 +2,13 @@
 
 The local runner gives you a place to explore Context without using a hosted database. It starts the API, dashboard, and a separate PostgreSQL cluster together, and keeps the setup for your next session.
 
-## Open the project first
+## Prepare your computer
 
 Open the extracted repository folder in your editor, rather than a ZIP preview. The root should contain `package.json`, `pnpm-workspace.yaml`, `artifacts`, and `lib`.
 
-Install Node.js 24 or later, pnpm 11.18.0, and PostgreSQL. These PostgreSQL tools must be on your PATH: `initdb`, `pg_ctl`, `psql`, `createdb`, `pg_dump`, and `pg_restore`.
+Use Node.js 24 and pnpm 11.18.0, then install PostgreSQL. These tools must be on your PATH: `initdb`, `pg_ctl`, `psql`, `createdb`, `pg_dump`, and `pg_restore`.
+
+## Start the local app
 
 From a PowerShell terminal at the repository root:
 
@@ -15,7 +17,7 @@ pnpm install --frozen-lockfile
 pnpm local:start
 ```
 
-The dashboard opens at **http://127.0.0.1:31800** and the API listens at **http://127.0.0.1:31801**. PostgreSQL uses a generated port. Docker is not required.
+Open **http://127.0.0.1:31800** after startup completes. The API listens at **http://127.0.0.1:31801**, and PostgreSQL uses a generated port. Docker is not required.
 
 The first start creates an isolated database and selects demo authentication. Later starts retain the saved modes and records. The runner refuses to start a second copy on top of one that is already running.
 
@@ -27,7 +29,11 @@ pnpm local:smoke
 pnpm local:stop
 ```
 
-Status reports the saved modes and processes. Smoke checks exercise startup and access boundaries. Stop verifies the saved process identities before shutting down the local app and database. Stopping keeps the data for the next start.
+| Command | What it does |
+| --- | --- |
+| `pnpm local:status` | Reports the saved authentication/AI modes and whether the owned processes are running. |
+| `pnpm local:smoke` | Checks startup, the API proxy, private-file blocking, and access boundaries. |
+| `pnpm local:stop` | Verifies process identities before stopping the local app and database. Saved records remain available for the next start. |
 
 The installation lives in `runtime/`, separate from disposable test output:
 
@@ -38,11 +44,11 @@ The installation lives in `runtime/`, separate from disposable test output:
 | `runtime/state/` | `processes.json`, used to verify which processes the runner owns. |
 | `runtime/logs/` | API, dashboard, and PostgreSQL diagnostics. |
 | `runtime/backups/` | Restore drills and encoding recovery archives and records. |
-| `tmp/` | Disposable verification output and release review bundles. |
+| `tmp/` | Disposable verification output and release review bundles, created when needed. |
 
 Keep `runtime/` to retain the installation. It is excluded from Git and Docker build contexts, and the development server blocks direct access to its files. Backups can contain account and workspace records; they belong with your private recovery files.
 
-Some logs remain open while the app or PostgreSQL runs. Closed logs can be removed after stopping and will be recreated when needed. AI verification uses a temporary probe and removes it when the check finishes, including on failure.
+Some logs remain open while the app or PostgreSQL runs. Closed logs can be removed after stopping and will be recreated when needed. Temporary verification output can also be removed after its command finishes. Keep the database, credential files, and recovery backups. AI verification removes its own temporary probe even when a check fails.
 
 If you have an older installation in `tmp/local-test/`, run `pnpm local:migrate`. Starting with `pnpm local:start` also migrates it automatically. The migration checks paths and conflicts, stops only the owned processes, moves the existing cluster and credentials, and updates recovery paths. It keeps the same ports, session secret, and saved modes. It refuses to overwrite an existing `runtime/` installation. After migration, start the app normally; repeating the migration makes no changes.
 
@@ -100,7 +106,9 @@ The availability check makes a read-only provider request. The generation check 
 
 The API receives the provider key. Normal authenticated AI requests can send the selected workspace's incident or document context to that provider. The browser receives no provider secret.
 
-After changing a saved model or transport, stop and restart to reload it. To disable AI, stop the app and run `pnpm local:ai-off`. Starting again retains both the authentication and AI choices.
+After changing a saved key, model, or transport, stop and restart to reload it. To disable AI, stop the app and run `pnpm local:ai-off`. Starting again retains both the authentication and AI choices.
+
+AI conversations remain available while switching dashboard tabs. Refresh regenerates the latest answer; New chat clears it. A page reload or workspace change also clears the conversation because dashboard chat is not saved to the database.
 
 ## Know what a smoke check does
 

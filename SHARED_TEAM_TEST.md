@@ -2,7 +2,7 @@
 
 A shared workspace is useful only if its members can see the right records and its controls respect their access. This guide follows a team from creation to investigation, then checks what happens when membership or an ingestion key changes.
 
-Use a Clerk Development instance, the isolated local app, and synthetic data. Directory contacts uploaded for onboarding are separate from Clerk membership; adding a directory entry does not grant access.
+Use a Clerk Development instance, the isolated local app, synthetic data, and two intended test accounts. Follow [Local testing](LOCAL_TEST.md#sign-in-with-a-clerk-test-account) if the app or Clerk keys are not ready. Directory contacts uploaded for onboarding are separate from Clerk membership; adding a directory entry does not grant access.
 
 ## Begin with two accounts
 
@@ -12,6 +12,8 @@ Invite a designated second test account as a Member. This sends a Clerk email an
 
 Sign in to Context with that second account, select the team, and check its overview, graph, timeline, history, and AI. Changing Engineer/SRE/Manager views should change the investigation surface while leaving Member permissions in place.
 
+Both accounts must sign in to Context itself. A ChatGPT login does not establish a Context session. Keep one Admin available throughout the tests so membership can be restored.
+
 ## Check both the useful paths and the boundaries
 
 | Check | Expected behavior |
@@ -19,6 +21,8 @@ Sign in to Context with that second account, select the team, and check its over
 | Personal → team → personal | Each workspace shows its own saved records. |
 | Reload the team | Selected team and its data load correctly. |
 | Member reads | Incident evidence and AI questions are available. |
+| Member AI controls | Refresh regenerates the latest answer; New chat clears the transcript and cancels a pending answer. |
+| Member AI evidence | Source buttons open the cited records, and Copy includes the complete analysis. |
 | Member admin controls | Shared uploads, demo mutations, notification settings, and key management are unavailable. |
 | Audience changes | Overview and new AI answers follow the audience; admin access is unchanged. |
 | Crafted Member write | The API rejects it even if the request body claims an admin role. |
@@ -44,6 +48,10 @@ The local Context Test organization was created with an Admin and a second Membe
 
 An approved disposable-key test saved one informational event, recognized its replay, and rejected delivery after revocation. Temporary Member removal and restoration also passed. Both disposable team keys were revoked afterward.
 
-Native AI generation later succeeded for the Member. Account/workspace notification isolation and issuing-admin membership transitions are covered by automated tests. Actual Slack delivery and an actual Clerk role transition for a key issuer remain separate live checks.
+Native AI generation later succeeded for the Member. The structured answer, source navigation, full-report copying, Refresh, and New chat have also been exercised in the signed-in local workspace. Account/workspace notification isolation and issuing-admin membership transitions are covered by automated tests. Actual Slack delivery and an actual Clerk role transition for a key issuer remain separate live checks.
+
+## Keep a useful test record
+
+Record the account role, selected workspace, action, and observed result. For ingestion, include status codes and the timeline count before and after replay. For removal, note when the account refreshed its sign-in state and whether access was lost and restored. Keep credentials and private account details out of the shared record.
 
 These results are local development evidence. The [verification record](VERIFICATION_2026-10-14.md) separates browser checks from HTTP and database tests; [remaining work](REMAINING_WORK.md) lists the external connections still needed.

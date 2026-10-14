@@ -11,6 +11,13 @@ import { runAiTool } from "./ai-tools-execution.js";
 import { z } from "zod";
 
 const router = Router();
+const summaryQuery = z.object({ limit: z.preprocess(value => typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value,
+  z.number().int().min(1).max(100).default(50)) });
+const incidentAudience = {
+  engineer: "Audience: Engineer. Prioritize technical evidence, recent deployments/configuration, dependency causality, and concrete diagnostic checks. Separate hypotheses from confirmed causes. Do not invent logs, metrics, commands or infrastructure identifiers. Describe remediation as proposed checks or actions; never imply it ran.",
+  sre: "Audience: SRE. Prioritize current service health, dependency exposure, failure propagation, response priorities and recovery verification. Distinguish historical alerts from current status. Do not invent SLOs, MTTR, incident timing or recovery estimates when the context does not establish them.",
+  manager: "Audience: Manager. Use plain language and prioritize observed status, confirmed customer/business impact, coordination and follow-up decisions. Explain what is unknown. Do not infer financial loss, affected customer counts, an ETA or global incident closure from service health alone. Avoid command-level instructions; actions should be communication, ownership or verification steps.",
+};
 
 // ── GET /insights/risks ───────────────────────────────────────────────────────
 // Services that depend on a failing/degraded service within the last 24h
@@ -275,9 +282,9 @@ router.post("/ai/incident-ask", requireAuth, async (req: Request, res: Response)
   const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
   try {
-    const input = z.object({ question: z.string().trim().min(1).max(4000) }).safeParse(req.body);
-    if (!input.success) { fail(res, "question must contain 1–4000 characters"); return; }
-    const { question } = input.data;
+    const input = z.object({ question: z.string().trim().min(1).max(4000), role: z.enum(["engineer", "sre", "manager"]).default("sre") }).safeParse(req.body);
+    if (!input.success) { fail(res, "question must contain 1–4000 characters and role must be engineer, sre or manager"); return; }
+    const { question, role } = input.data;
     const [allServices, recentEvents, recentMessages] = await Promise.all([
       db.select().from(services).where(eq(services.organizationId, orgId)),
       db.select().from(serviceEvents).where(and(eq(serviceEvents.organizationId, orgId), gte(serviceEvents.createdAt, since))).orderBy(desc(serviceEvents.createdAt)).limit(30),
@@ -307,6 +314,7 @@ router.post("/ai/incident-ask", requireAuth, async (req: Request, res: Response)
     ).join("\n");
 
     const systemPrompt = `You are an expert site reliability engineer and incident analyst (AI Incident Commander).
+${incidentAudience[role]}
 You have access to the following real-time system context:
 
 SERVICES:
@@ -347,7 +355,8 @@ You MUST respond with a valid JSON object in this EXACT shape (no markdown, no e
 Rules:
 - reasoning must be an array of 2-4 concrete steps, each grounded in an event or dependency
 - impact must be an array of 1-3 user-facing consequences
-- actions must be an array of 1-3 specific, executable remediation steps
+- actions must be an array of 1-3 specific next steps appropriate to the selected audience
+- State missing evidence explicitly; do not infer customer impact, a recovery ETA or root cause from a status badge alone
 - No hallucination — every claim must map to the provided context
 - confidence must be 0.0-1.0 based on evidence density`;
 
@@ -365,11 +374,13 @@ Rules:
 // Risk/graph/timeline + rootCause + predictions all in one round-trip.
 
 router.get("/insights/summary", requireAuth, async (req: Request, res: Response) => {
+  const query = summaryQuery.safeParse(req.query);
+  if (!query.success) return fail(res, "limit must be an integer between 1 and 100", 400);
   const orgId = req.auth!.organizationId ?? 0;
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const since48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
   const since6h  = new Date(Date.now() - 6  * 60 * 60 * 1000);
-  const limit    = Math.min(Number(req.query.limit ?? 50), 100);
+  const limit = query.data.limit;
 
   try {
     // Run all DB queries in parallel
@@ -377,10 +388,10 @@ router.get("/insights/summary", requireAuth, async (req: Request, res: Response)
       db.select().from(services).where(eq(services.organizationId, orgId)),
       db.select().from(serviceEvents)
         .where(and(eq(serviceEvents.organizationId, orgId), gte(serviceEvents.createdAt, since48h)))
-        .orderBy(desc(serviceEvents.createdAt)).limit(60),
+        .orderBy(desc(serviceEvents.createdAt)).limit(Math.max(60, limit)),
       db.select().from(serviceMessages)
         .where(and(eq(serviceMessages.organizationId, orgId), gte(serviceMessages.createdAt, since48h)))
-        .orderBy(desc(serviceMessages.createdAt)).limit(40),
+        .orderBy(desc(serviceMessages.createdAt)).limit(Math.max(40, limit)),
       db.select().from(serviceEvents)
         .where(and(eq(serviceEvents.organizationId, orgId), gte(serviceEvents.createdAt, since6h))),
     ]);

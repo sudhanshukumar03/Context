@@ -1,9 +1,9 @@
 # Context typeface
 
-Manrope variable (weight axis 200–800), distributed locally so the UI does not require a runtime font CDN request.
+Inter variable (weight axis 100–900, optical size 14–32), distributed locally so the UI does not require a runtime font CDN request.
 
-Official font source: https://github.com/google/fonts/tree/main/ofl/manrope
+Official font source: https://github.com/google/fonts/tree/main/ofl/inter
 
-Original binary: https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/Manrope%5Bwght%5D.ttf
+Original binary: https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf
 
-Downloaded on 14 October 2026. The unchanged font is accompanied by `OFL-Manrope.txt`, including its copyright notice and SIL Open Font License.
+The UI uses the official compressed Inter 4.1 WOFF2, downloaded from https://rsms.me/inter/font-files/InterVariable.woff2?v=4.1 and accompanied by the project's `OFL-Inter-Web.txt` license. The Google Fonts TTF and `OFL-Inter.txt` are retained as source material. Downloaded on 14 October 2026. Both fonts are unchanged. The previous Manrope asset and its license remain available but are no longer preloaded or used by the app.

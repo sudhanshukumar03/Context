@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Activity, CheckCircle2, GitBranch, Search, MessageSquare, Wrench, FileSearch, ChevronDown, X, Clock } from "lucide-react";
 import type { TimelineItem } from "../../types";
-import { buildActivityWindows, categoryOf, CATEGORY_META, chronological, matchesSearch, recordTime, recordTitle, timeLabel, type ActivityCategory } from "./timeline-model";
+import { buildActivityWindows, categoryOf, CATEGORY_META, chronological, highlightActivity, matchesSearch, recordTime, recordTitle, timeLabel, type ActivityCategory } from "./timeline-model";
 
 const ICONS = { change: GitBranch, detection: Activity, investigation: FileSearch, response: Wrench, recovery: CheckCircle2, update: MessageSquare };
 
@@ -11,13 +11,14 @@ export function ActivityStory({ items }: { items: TimelineItem[] }) {
       const category = categoryOf(item), Icon = ICONS[category];
       const title = recordTitle(item);
       return <li key={`${item.kind}:${item.id}`} className="ctx-story-row">
-        <time className="ctx-story-time" dateTime={recordTime(item) === null ? undefined : item.createdAt} title={timeLabel(item.createdAt, true)}>{timeLabel(item.createdAt, true)}</time>
+        <time className="ctx-story-time" dateTime={recordTime(item) === null ? undefined : item.createdAt} title={timeLabel(item.createdAt, true)}>{recordTime(item) === null ? "Time unavailable" : <><span>{new Date(item.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span><strong>{timeLabel(item.createdAt)}</strong></>}</time>
         <div className={`ctx-story-marker ctx-tone-${category}`}><Icon size={16} aria-hidden="true" /></div>
         <article className="ctx-story-content">
           <div className="ctx-record-meta"><span className={`ctx-category ctx-tone-${category}`}>{CATEGORY_META[category].label}</span><span>{item.serviceName || (item.kind === "message" ? "Team communication" : "Workspace activity")}</span>{item.severity && item.severity !== "info" && <span className={`ctx-badge ctx-status-${item.severity}`}>{item.severity}</span>}</div>
           <h3 className="ctx-record-title">{title}</h3>
           {item.description && item.description !== title && <p className="ctx-record-description">{item.description}</p>}
-          <details className="ctx-record-details"><summary>Record details <ChevronDown size={14} aria-hidden="true" /></summary><dl className="ctx-detail-grid">
+          <div className="ctx-record-source">{item.kind === "message" ? `${item.author || "Team"}${item.channel ? ` in #${item.channel}` : ""}` : "Service event"}</div>
+          <details className="ctx-record-details"><summary>View evidence <ChevronDown size={14} aria-hidden="true" /></summary><dl className="ctx-detail-grid">
             <div><dt>Source</dt><dd>{item.kind === "message" ? `${item.author || "Team"}${item.channel ? ` in #${item.channel}` : ""}` : "Service event"}</dd></div>
             <div><dt>Recorded at</dt><dd>{recordTime(item) === null ? "Time unavailable" : new Date(item.createdAt).toLocaleString()}</dd></div>
             <div><dt>Event type</dt><dd>{item.type || (item.kind === "message" ? "Message" : "Not provided")}</dd></div>
@@ -33,9 +34,12 @@ export function TimelineTab({ feed, loading }: { feed: TimelineItem[]; loading: 
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<ActivityCategory | "all">("all");
   const [service, setService] = useState("all");
+  const [view, setView] = useState<"highlights" | "all">("highlights");
   const sorted = useMemo(() => chronological(feed), [feed]);
+  const highlights = useMemo(() => highlightActivity(feed), [feed]);
   const services = [...new Set(feed.map(item => item.serviceName).filter((name): name is string => !!name))];
-  const filtered = sorted.filter(item => matchesSearch(item, search) && (category === "all" || categoryOf(item) === category) && (service === "all" || item.serviceName === service));
+  const records = view === "highlights" ? highlights : sorted;
+  const filtered = records.filter(item => matchesSearch(item, search) && (category === "all" || categoryOf(item) === category) && (service === "all" || item.serviceName === service));
   const counts = sorted.reduce((result, item) => { result[categoryOf(item)]++; return result; }, { change: 0, detection: 0, investigation: 0, response: 0, recovery: 0, update: 0 });
   const latestFirst = [...sorted].reverse();
   const checkpoints = [
@@ -48,18 +52,19 @@ export function TimelineTab({ feed, loading }: { feed: TimelineItem[]; loading: 
   if (!feed.length) return <div className="ctx-empty"><Clock size={28} aria-hidden="true" /><h3>No activity recorded yet</h3><p>Connect an alert source or ask an admin to run a demo. Events and team messages will appear here in time order.</p></div>;
   return <div className="ctx-timeline-layout">
     <section className="ctx-panel ctx-timeline-brief" aria-label="Timeline summary">
-      <div><h3>The recorded story</h3><p>{feed.length} records across {services.length} named service{services.length === 1 ? "" : "s"}. Read from earliest to latest.</p><p className="ctx-window-range">{timeLabel(sorted[0].createdAt, true)} to {timeLabel(sorted[sorted.length - 1].createdAt, true)}</p></div>
+      <div><h3>Activity briefing</h3><p>{feed.length} records across {services.length} service{services.length === 1 ? "" : "s"}.</p><p className="ctx-window-range">{timeLabel(sorted[0].createdAt, true)} to {timeLabel(sorted[sorted.length - 1].createdAt, true)}</p></div>
       <dl className="ctx-evidence-counts"><div><dt>Changes</dt><dd>{counts.change}</dd></div><div><dt>Alerts</dt><dd>{counts.detection}</dd></div><div><dt>Responses</dt><dd>{counts.response}</dd></div><div><dt>Recoveries</dt><dd>{counts.recovery}</dd></div></dl>
       <dl className="ctx-story-checkpoints">{checkpoints.map(checkpoint => <div key={checkpoint.label}><dt>{checkpoint.label}</dt><dd>{checkpoint.item ? recordTitle(checkpoint.item) : "Not recorded"}</dd>{checkpoint.item && <time dateTime={checkpoint.item.createdAt}>{timeLabel(checkpoint.item.createdAt, true)}</time>}</div>)}</dl>
     </section>
     <section className="ctx-panel ctx-timeline-surface">
+      <div className="ctx-activity-view"><div className="ctx-segmented" role="group" aria-label="Activity detail level"><button aria-pressed={view === "highlights"} onClick={() => setView("highlights")}>Highlights <span>{highlights.length}</span></button><button aria-pressed={view === "all"} onClick={() => setView("all")}>All activity <span>{feed.length}</span></button></div><p>{view === "highlights" ? "First and latest records per service and type. Critical alerts and team messages stay visible." : "Every recorded event and team message."}</p></div>
       <div className="ctx-timeline-tools">
         <div className="ctx-search-field"><label htmlFor="activity-search">Find a record</label><div><Search size={17} aria-hidden="true" /><input id="activity-search" type="search" className="ctx-input" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search events, people or messages" autoComplete="off" />{search && <button aria-label="Clear timeline search" onClick={() => setSearch("")}><X size={16} /></button>}</div></div>
         <label className="ctx-filter-label">Service<select value={service} onChange={event => setService(event.target.value)} className="ctx-input"><option value="all">All services</option>{services.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
         <label className="ctx-filter-label">Record type<select value={category} onChange={event => setCategory(event.target.value as ActivityCategory | "all")} className="ctx-input"><option value="all">All records</option>{Object.entries(CATEGORY_META).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}</select></label>
       </div>
-      <div className="ctx-timeline-order"><span>{filtered.length} of {feed.length} records</span><span>Oldest first · times shown in your timezone</span></div>
-      {filtered.length ? <ActivityStory items={filtered} /> : <div className="ctx-empty"><h3>No matching records</h3><p>Try another service, record type or search term.</p><button className="ctx-secondary-button" onClick={reset}>Clear filters</button></div>}
+      <div className="ctx-timeline-order"><span>{filtered.length} of {records.length} {view === "highlights" ? "highlights" : "records"}</span><span>Earliest to latest · your timezone</span></div>
+      {filtered.length ? <ActivityStory items={filtered} /> : <div className="ctx-empty"><h3>No matching records</h3><p>{view === "highlights" ? "Search all activity to include records omitted from Highlights, or adjust your filters." : "Try another service, record type or search term."}</p>{view === "highlights" && <button className="ctx-primary-button" onClick={() => setView("all")}>Search all activity</button>}<button className="ctx-secondary-button" onClick={reset}>Clear filters</button></div>}
     </section>
     <p className="ctx-footnote">Categories describe the evidence in each record. A change is not automatically a root cause, and a recovery event is not proof that the whole system recovered.</p>
   </div>;

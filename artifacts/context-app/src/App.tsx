@@ -20,6 +20,10 @@ import ContextLogo, { ContextMark } from "./components/ContextLogo";
 import WebhookKeySettings from "./components/WebhookKeySettings";
 import SlackSettingsModal from "./components/SlackSettingsModal";
 import AIAssistant from "./features/ai/IncidentAssistant";
+import PersistedTabPanel from "./components/PersistedTabPanel";
+import AudienceOverview from "./features/overview/AudienceOverview";
+import { AUDIENCES, readAudience, saveAudience } from "./features/overview/audience";
+import { abortable } from "./lib/abortable";
 import { TimelineTab, IncidentHistoryTab } from "./features/timeline/IncidentTimeline";
 import { chronological, categoryOf, CATEGORY_META, recordTitle, timeLabel } from "./features/timeline/timeline-model";
 import WorkspaceActions from "./components/WorkspaceActions";
@@ -61,7 +65,7 @@ if (!clerkPubKey && !isDevAuthBypass) throw new Error("Missing VITE_CLERK_PUBLIS
 const clerkAppearance = {
   baseTheme: dark, cssLayerName: "clerk",
   options: { logoPlacement: "inside" as const, logoLinkUrl: basePath || "/", logoImageUrl: `${window.location.origin}${basePath}/logo.svg`, socialButtonsPlacement: "top" as const, socialButtonsVariant: "blockButton" as const },
-  variables: { colorPrimary: "#6366f1", colorForeground: "#f8fafc", colorMutedForeground: "#94a3b8", colorDanger: "#f87171", colorBackground: "#0f172a", colorInput: "#1e293b", colorInputForeground: "#f8fafc", colorNeutral: "#e2e8f0", fontFamily: "'Manrope', 'Segoe UI', sans-serif", borderRadius: "0.75rem" },
+  variables: { colorPrimary: "#6366f1", colorForeground: "#f8fafc", colorMutedForeground: "#94a3b8", colorDanger: "#f87171", colorBackground: "#0f172a", colorInput: "#1e293b", colorInputForeground: "#f8fafc", colorNeutral: "#e2e8f0", fontFamily: "'Inter', 'Segoe UI', sans-serif", borderRadius: "0.75rem" },
   elements: {
     rootBox: "w-full flex justify-center",
     cardBox: "!bg-slate-900 rounded-2xl w-[420px] max-w-full overflow-hidden border border-white/10 shadow-2xl",
@@ -530,10 +534,10 @@ function CopyButton({ text, className = "" }: { text: string; className?: string
   );
 }
 
-function OverviewTab({ risks, services, rootCause, predictions, loading, role, onAction, userId, feed, onNavigate }: {
+function OverviewTab({ risks, services, rootCause, predictions, loading, role, onAction, userId, feed, edges, onNavigate }: {
   risks: RiskEntry[]; services: Service[]; rootCause: RootCause | null; predictions: Prediction[];
   loading: boolean; role: Role; onAction: (a: string, s: string) => void; userId?: string;
-  feed: TimelineItem[]; onNavigate: (tab: "timeline" | "graph" | "ai") => void;
+  feed: TimelineItem[]; edges: GraphEdge[]; onNavigate: (tab: "timeline" | "graph" | "ai") => void;
 }) {
   const [onlyAffected, setOnlyAffected] = useState(false);
   const affected = services.filter(service => service.status !== "healthy");
@@ -542,11 +546,13 @@ function OverviewTab({ risks, services, rootCause, predictions, loading, role, o
   const recent = chronological(feed).slice(-3).reverse();
   if (loading) return <p className="ctx-empty" role="status">Loading workspace health…</p>;
   return <div className="ctx-overview">
-    <div className="ctx-page-heading"><h2>Workspace overview</h2><p>Current health, services that need attention, and the latest recorded activity.</p></div>
+    <div className="ctx-page-heading"><h2>{AUDIENCES[role].title}</h2><p>{AUDIENCES[role].description}</p></div>
     <section className={`ctx-panel ctx-health-brief ${affected.length ? "has-alerts" : ""}`}>
       <div className="ctx-health-message"><span className={`ctx-health-icon ctx-status-${affected.length ? "warning" : "healthy"}`}>{affected.length ? <AlertTriangle size={25} aria-hidden="true" /> : <CheckCircle2 size={25} aria-hidden="true" />}</span><div><h3>{!services.length ? "Waiting for service data" : affected.length ? `${affected.length} service${affected.length === 1 ? " needs" : "s need"} attention` : "All recorded services are healthy"}</h3><p>{services.length ? `${services.length - affected.length} of ${services.length} services healthy` : "Connect an alert source or ask an admin to run a demo."}{affected.length ? ` · ${affected.map(service => service.name).join(", ")}` : ""}</p>{rootCause && affected.length > 0 && <p className="ctx-health-analysis"><strong>Latest analysis:</strong> {rootCause.cause}</p>}</div></div>
-      <button className="ctx-primary-button" onClick={() => onNavigate(affected.length ? "ai" : "timeline")}>{affected.length ? "Investigate with AI" : "Review activity"}<ArrowRight size={17} aria-hidden="true" /></button>
+      <button className="ctx-primary-button" onClick={() => onNavigate(role === "manager" ? "ai" : role === "engineer" ? "graph" : affected.length ? "ai" : "timeline")}>{role === "manager" ? "Prepare a briefing" : role === "engineer" ? "Trace dependencies" : affected.length ? "Investigate with AI" : "Review activity"}<ArrowRight size={17} aria-hidden="true" /></button>
     </section>
+    <AudienceOverview role={role} services={services} feed={feed} edges={edges} rootCause={rootCause} onNavigate={onNavigate} />
+    {role === "sre" && <>
     <div className="ctx-overview-grid">
       <section className="ctx-panel ctx-service-inventory"><div className="ctx-section-heading"><div><h3>Service health</h3><p>Recorded status and ownership, ordered by attention needed.</p></div><button className="ctx-secondary-button" onClick={() => onNavigate("graph")}>Explore dependencies</button></div>
         <div className="ctx-inventory-filter"><button className={!onlyAffected ? "is-selected" : ""} aria-pressed={!onlyAffected} onClick={() => setOnlyAffected(false)}>All services <span>{services.length}</span></button><button className={onlyAffected ? "is-selected" : ""} aria-pressed={onlyAffected} onClick={() => setOnlyAffected(true)}>Needs attention <span>{affected.length}</span></button></div>
@@ -555,9 +561,10 @@ function OverviewTab({ risks, services, rootCause, predictions, loading, role, o
         </div>{!visibleServices.length && <div className="ctx-empty"><p>{onlyAffected ? "No services currently need attention." : "No services recorded yet."}</p></div>}
       </section>
       <aside className="ctx-overview-aside"><section className="ctx-panel ctx-recent-activity"><div className="ctx-section-heading"><h3>Latest activity</h3><Clock size={18} className="ctx-muted" aria-hidden="true" /></div>{recent.length ? <ol>{recent.map(item => <li key={`${item.kind}:${item.id}`}><span className={`ctx-category ctx-tone-${categoryOf(item)}`}>{CATEGORY_META[categoryOf(item)].label}</span><p>{recordTitle(item)}</p><span className="ctx-muted">{item.serviceName || "Team update"}</span><time dateTime={item.createdAt}>{timeLabel(item.createdAt, true)}</time></li>)}</ol> : <p className="ctx-muted">No activity recorded yet.</p>}<button className="ctx-secondary-button" onClick={() => onNavigate("timeline")}>Open full timeline<ArrowRight size={16} aria-hidden="true" /></button></section>
-      <section className="ctx-panel ctx-investigation-guide"><h3>A path through an incident</h3><ol><li><strong>Check the sequence</strong><p>Find the earliest alert and nearby changes in Timeline.</p></li><li><strong>Trace dependencies</strong><p>Use Graph to see which services rely on the affected service.</p></li><li><strong>Review the evidence</strong><p>Ask AI to explain the records and possible next steps.</p></li></ol></section></aside>
+      <section className="ctx-investigation-guide ctx-quiet-section"><h3>Continue investigating</h3><nav className="ctx-context-links" aria-label="Investigation shortcuts"><button onClick={() => onNavigate("timeline")}><span>Follow the event sequence<small>Changes, alerts and responses</small></span><Clock size={16} aria-hidden="true" /></button><button onClick={() => onNavigate("graph")}><span>Explore service connections<small>Callers and dependencies</small></span><Network size={16} aria-hidden="true" /></button><button onClick={() => onNavigate("ai")}><span>Ask Context AI<small>Explain the recorded evidence</small></span><Bot size={16} aria-hidden="true" /></button></nav></section></aside>
     </div>
-    {(risks.length > 0 || predictions.length > 0 || (rootCause && affected.length > 0)) && <details className="ctx-panel ctx-overview-diagnostics"><summary><div><strong>Investigation details</strong><span>{risks.length} active risk records · {predictions.length} predictions</span></div><ChevronDown size={18} aria-hidden="true" /></summary><div>{rootCause && <RootCausePanel rootCause={rootCause} role={role} onAction={onAction} services={services} />}{predictions.length > 0 && <PredictionsPanel predictions={predictions} />}{risks.map(risk => <RiskCard key={risk.service.id} risk={risk} role={role} onAction={onAction} />)}</div></details>}
+    </>}
+    {role !== "manager" && (risks.length > 0 || predictions.length > 0 || (rootCause && affected.length > 0)) && <details className="ctx-panel ctx-overview-diagnostics"><summary><div><strong>Investigation details</strong><span>{risks.length} active risk records · {predictions.length} predictions</span></div><ChevronDown size={18} aria-hidden="true" /></summary><div>{rootCause && <RootCausePanel rootCause={rootCause} role={role} onAction={onAction} services={services} />}{predictions.length > 0 && <PredictionsPanel predictions={predictions} />}{risks.map(risk => <RiskCard key={risk.service.id} risk={risk} role={role} onAction={onAction} />)}</div></details>}
     <details className="ctx-panel ctx-connections-setup"><summary><div><strong>Connections & ingestion</strong><span>Supported sources, webhook keys and setup instructions</span></div><ChevronDown size={18} aria-hidden="true" /></summary><div><IntegrationsPanel userId={userId} /></div></details>
   </div>;
 }
@@ -670,9 +677,9 @@ function IntegrationsPanel({ userId }: { userId?: string }) {
 // ── Role Selector ─────────────────────────────────────────────────────────────
 
 const ROLES: { id: Role; label: string; icon: React.ElementType; desc: string }[] = [
-  { id: "engineer", label: "Engineer", icon: Terminal, desc: "Logs, fixes, technical detail" },
-  { id: "sre", label: "SRE", icon: Activity, desc: "Full picture, blast radius, MTTR" },
-  { id: "manager", label: "Manager", icon: BarChart3, desc: "Revenue impact, ETA, summary" },
+  { id: "engineer", label: "Engineer", icon: Terminal, desc: AUDIENCES.engineer.menu },
+  { id: "sre", label: "SRE", icon: Activity, desc: AUDIENCES.sre.menu },
+  { id: "manager", label: "Manager", icon: BarChart3, desc: AUDIENCES.manager.menu },
 ];
 
 function RoleSelector({ role, onChange }: { role: Role; onChange: (r: Role) => void }) {
@@ -684,7 +691,7 @@ function RoleSelector({ role, onChange }: { role: Role; onChange: (r: Role) => v
       onKeyDown={event => { if (event.key === "Escape") { setOpen(false); trigger.current?.focus(); } }}>
       <button ref={trigger} onClick={() => setOpen(!open)} aria-label={`${current.label} view`} aria-expanded={open}
         className="ctx-header-button flex items-center gap-2 rounded-xl border px-3 text-sm transition-colors">
-        <current.icon size={11} />
+        <current.icon size={16} aria-hidden="true" />
         <span className="hidden sm:inline">{current.label}</span>
         <ChevronDown size={11} className={`text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -719,7 +726,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
   const canManageWorkspace = !orgId || orgRole === "org:admin";
   const [isDark, toggleDark] = useDarkMode();
   const [tab, setTab] = useState<Tab>("overview");
-  const [role, setRole] = useState<Role>("sre");
+  useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: "instant" }); }, [tab]);
+  const [role, setRole] = useState<Role>(() => user ? readAudience(() => window.localStorage, user.id, orgId) : "sre");
   const [isLive, setIsLive] = useState(false);
   const [showDemo, setShowDemo] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(0);
@@ -796,11 +804,14 @@ function Dashboard({ onBack }: { onBack: () => void }) {
     fetching.current = true;
     setRefreshing(true);
     try {
-      const token = await getToken();
+      const signal = AbortSignal.timeout(60_000);
+      const token = await abortable(getToken(), signal);
+      if (!mounted.current) return;
       const [summary, rc] = await Promise.allSettled([
-        apiFetch("/insights/summary?limit=50", token),
-        apiFetch("/insights/root-cause", token),
+        apiFetch("/insights/summary?limit=50", token, { signal }),
+        apiFetch("/insights/root-cause", token, { signal }),
       ]);
+      if (!mounted.current) return;
       if (summary.status === "fulfilled") {
         const d = summary.value as { risks?: RiskEntry[]; services?: Service[]; predictions?: Prediction[]; graph?: { nodes?: GraphNode[]; edges?: GraphEdge[] }; timeline?: TimelineItem[] };
         setRisks(d.risks ?? []);
@@ -814,11 +825,11 @@ function Dashboard({ onBack }: { onBack: () => void }) {
       const failed = [summary, rc].find((result) => result.status === "rejected");
       setFetchError(failed?.status === "rejected" ? "Live data could not be refreshed. Previously loaded data may be stale." : null);
     } catch {
-      setFetchError("Live data could not be refreshed. Please retry.");
+      if (mounted.current) setFetchError("Live data could not be refreshed. Please retry.");
+    } finally {
+      fetching.current = false;
+      if (mounted.current) { setLoading(false); setRefreshing(false); }
     }
-    fetching.current = false;
-    setLoading(false);
-    setRefreshing(false);
   }, [getToken]);
 
   useEffect(() => { fetchAll(); }, [fetchAll, lastRefresh]);
@@ -934,15 +945,15 @@ function Dashboard({ onBack }: { onBack: () => void }) {
         )}
       </AnimatePresence>
 
-      <header className="sticky top-0 z-30 backdrop-blur-md" style={{ borderBottom: "1px solid var(--ctx-border)", background: "var(--ctx-bg-alpha)" }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
+      <header className="ctx-workspace-header sticky top-0 z-30" style={{ borderBottom: "1px solid var(--ctx-border)", background: "var(--ctx-panel)" }}>
+        <div className="ctx-shell-wrap ctx-header-bar flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
           <div className="flex items-center justify-between md:justify-start gap-3 min-w-0 w-full md:w-auto">
             <ContextLogo compact />
             {!isDevAuthBypass ? <OrganizationSwitcher appearance={{ variables: { colorForeground: isDark ? "#f8fafc" : "#17243b", colorMutedForeground: isDark ? "#b6c2d4" : "#475569", colorBackground: isDark ? "#101a2f" : "#ffffff", colorInput: isDark ? "#1e293b" : "#eef2f7", colorInputForeground: isDark ? "#f8fafc" : "#17243b", colorNeutral: isDark ? "#e2e8f0" : "#17243b" }, elements: { organizationSwitcherTrigger: "ctx-organization-trigger min-h-11 min-w-11 max-w-[220px] rounded-xl text-sm", organizationSwitcherTriggerIcon: "text-indigo-400" } }}
               organizationProfileProps={{ appearance: { ...organizationProfileAppearance, baseTheme: isDark ? dark : undefined, variables: { colorForeground: isDark ? "#f8fafc" : "#17243b", colorBackground: isDark ? "#101a2f" : "#ffffff", colorInputForeground: isDark ? "#f8fafc" : "#17243b" }, elements: { cardBox: "ctx-organization-profile !w-[min(960px,calc(100vw-2rem))] !max-w-full rounded-2xl overflow-hidden border shadow-2xl" } } }} /> : <span className="ctx-muted text-sm">Personal workspace</span>}
           </div>
           <div className="flex items-center justify-between md:justify-start gap-2 w-full md:w-auto" aria-label="Workspace controls">
-            <RoleSelector role={role} onChange={setRole} />
+            <RoleSelector role={role} onChange={next => { setRole(next); if (user) saveAudience(() => window.localStorage, user.id, orgId, next); }} />
             <button onClick={() => setIsLive(value => !value)} aria-pressed={isLive}
               aria-label={isLive ? "Disable live telemetry streaming" : "Enable live telemetry streaming"}
               title={isLive ? "Pause live updates" : "Enable live updates"}
@@ -963,7 +974,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
               >
                 <Siren size={18} aria-hidden="true" />
                 {notifCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-5 h-5 px-1 rounded-full bg-red-500 text-xs font-bold text-white flex items-center justify-center leading-none">
+                  <span className="ctx-notification-count absolute -top-0.5 -right-0.5 min-w-5 h-5 px-1 rounded-full text-xs font-bold flex items-center justify-center leading-none">
                     {notifCount}
                   </span>
                 )}
@@ -980,12 +991,12 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                         <X size={16} aria-hidden="true" />
                       </button>
                     </div>
-                    <div className="max-h-64 overflow-y-auto">
+                    <div className="ctx-notification-list max-h-80 overflow-y-auto">
                       {timeline.filter(t => t.severity === "critical").slice(0, 10).map(t => (
-                        <div key={`${t.kind}:${t.id}`} className="px-4 py-3 border-b last:border-0 flex items-start gap-2.5" style={{ borderColor: "var(--ctx-border)" }}>
+                        <div key={`${t.kind}:${t.id}`} className="ctx-notification-record">
                           <span className="w-1.5 h-1.5 rounded-full bg-red-500 mt-1.5 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium leading-relaxed break-words" style={{ color: "var(--ctx-text)" }}>{t.title?.trim() || t.content?.trim() || "Critical event reported"}</p>
+                            <h3>{t.title?.trim() || t.content?.trim() || "Critical event reported"}</h3>
                             <p className="text-xs mt-1" style={{ color: "var(--ctx-muted)" }}>{t.serviceName || "Workspace"} · {timeLabel(t.createdAt)}</p>
                           </div>
                         </div>
@@ -1020,8 +1031,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
-        <nav aria-label="Dashboard views" style={{ borderTop: "1px solid var(--ctx-border)" }}>
-          <div role="tablist" aria-label="Dashboard sections" className="max-w-6xl mx-auto px-4 sm:px-6 flex gap-0.5 overflow-x-auto">
+        <nav className="ctx-workspace-nav" aria-label="Dashboard views" style={{ borderTop: "1px solid var(--ctx-border)" }}>
+          <div role="tablist" aria-label="Dashboard sections" className="ctx-shell-wrap ctx-view-nav">
             {TABS.map(({ id, label, icon: Icon, count }) => (
               <button
                 key={id}
@@ -1039,10 +1050,10 @@ function Dashboard({ onBack }: { onBack: () => void }) {
                   document.getElementById(`tab-${TABS[next].id}`)?.focus();
                 }}
                 onClick={() => setTab(id)}
-                className={`relative flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors ${tab === id ? "text-white border-b-2 border-indigo-500" : "text-slate-500 hover:text-slate-300 border-b-2 border-transparent"}`}>
-                <Icon size={12} />{label}
+                className="ctx-view-tab">
+                <Icon size={16} aria-hidden="true" />{label}
                 {count !== undefined && count > 0 && (
-                  <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${id === "overview" ? "bg-red-500/20 text-red-400" : "bg-white/10 text-slate-400"}`}>{count}</span>
+                  <span className={`ctx-tab-count ${id === "overview" ? "has-alerts" : ""}`}>{count}</span>
                 )}
               </button>
             ))}
@@ -1079,7 +1090,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
         )}
       </AnimatePresence>
 
-      <main id="dashboard-content" tabIndex={-1} className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+      <main id="dashboard-content" tabIndex={-1} className="ctx-shell-wrap ctx-main space-y-5">
         <h1 className="sr-only">Context workspace dashboard</h1>
         {fetchError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
           <p className="text-sm">{fetchError}</p>
@@ -1092,31 +1103,26 @@ function Dashboard({ onBack }: { onBack: () => void }) {
           )}
         </AnimatePresence>
 
-        <AnimatePresence mode="wait">
-          <motion.div
+          {tab !== "ai" && <div
             key={tab}
             role="tabpanel"
             id={`panel-${tab}`}
             aria-labelledby={`tab-${tab}`}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.18 }}
           >
             {tab === "overview" && (
-              <OverviewTab risks={risks} services={services} rootCause={rootCause} predictions={predictions} loading={loading} role={role} onAction={handleAction} userId={user?.id} feed={timeline} onNavigate={setTab} />
+              <OverviewTab risks={risks} services={services} rootCause={rootCause} predictions={predictions} loading={loading} role={role} onAction={handleAction} userId={user?.id} feed={timeline} edges={graphEdges} onNavigate={setTab} />
             )}
             {tab === "graph" && (
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="ctx-view-title">Service Dependency Graph</h2>
-                    <p className="text-sm text-slate-500 mt-0.5">Trace which services use each other, then select a service to inspect its connections.</p>
+                    <h2 className="ctx-view-title">{AUDIENCES[role].graph}</h2>
+                    <p className="text-sm text-slate-500 mt-0.5">{AUDIENCES[role].graphDescription}</p>
                   </div>
                 </div>
-                <Card className="p-4 overflow-hidden">
+                <section className="ctx-panel p-4 overflow-hidden">
                   <GraphView nodes={graphNodes} edges={graphEdges} predictions={predictions} />
-                </Card>
+                </section>
                 {graphNodes.length > 0 && (
                   <div className="mt-4 flex flex-wrap gap-4">
                     {[
@@ -1138,39 +1144,38 @@ function Dashboard({ onBack }: { onBack: () => void }) {
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="ctx-view-title">Incident Timeline</h2>
-                    <p className="text-sm text-slate-500 mt-0.5">Follow recorded changes, alerts, responses and recovery in time order.</p>
+                    <h2 className="ctx-view-title">{AUDIENCES[role].timeline}</h2>
+                    <p className="text-sm text-slate-500 mt-0.5">{AUDIENCES[role].timelineDescription}</p>
                   </div>
                 </div>
                 <TimelineTab feed={timeline} loading={loading} />
-              </div>
-            )}
-            {tab === "ai" && (
-              <div>
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <h2 className="ctx-view-title">AI Incident Commander</h2>
-                    <p className="text-sm text-slate-500 mt-0.5">
-                      {role === "manager" ? "Business impact, ETAs, and plain-English summaries" : role === "engineer" ? "Detailed diagnostics, fix commands, and root cause tracing" : "Full system picture — blast radius, MTTR, and resolution paths"}
-                    </p>
-                  </div>
-                </div>
-                <AIAssistant role={role} request={apiFetch} />
               </div>
             )}
             {tab === "history" && (
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="ctx-view-title">Incident History</h2>
+                    <h2 className="ctx-view-title">Incident history</h2>
                     <p className="text-sm text-slate-500 mt-0.5">Review past activity windows and the evidence recorded within each one.</p>
                   </div>
                 </div>
                 <IncidentHistoryTab feed={timeline} loading={loading} />
               </div>
             )}
-          </motion.div>
-        </AnimatePresence>
+          </div>}
+        <PersistedTabPanel active={tab === "ai"} id="panel-ai" labelledBy="tab-ai">
+              <div>
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <h2 className="ctx-view-title">{AUDIENCES[role].aiTitle}</h2>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                      {AUDIENCES[role].aiDescription}
+                    </p>
+                  </div>
+                </div>
+                <AIAssistant active={tab === "ai"} role={role} request={apiFetch} context={{ services: services.length, affected: services.filter(service => service.status !== "healthy").length, records: timeline.length }} onNavigate={setTab} />
+              </div>
+        </PersistedTabPanel>
       </main>
 
       {/* Slack settings modal */}

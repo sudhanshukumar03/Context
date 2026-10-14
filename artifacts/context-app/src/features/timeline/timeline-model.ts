@@ -20,11 +20,16 @@ export function chronological(feed: TimelineItem[]) {
 export function categoryOf(item: TimelineItem): ActivityCategory {
   const type = item.type?.toLowerCase() ?? "";
   const text = `${item.title ?? ""} ${item.content ?? ""}`.toLowerCase();
-  if (/\b(fully recovered|incident resolved|all services healthy|service restored)\b/.test(text)) return "recovery";
+  const recoveryPhrase = /\b(fully recovered|incident resolved|all services healthy|service restored)\b/;
+  const uncertain = /\b(not|no|never|without|unconfirmed|if|when|until|once|should|may|might|will|would|can't|cannot|isn't|aren't|wasn't|weren't|hasn't|haven't)\b/;
+  const clauses: string[] = text.match(/[^.!?;\n]+[.!?;\n]?/g) ?? [];
+  const affirmedRecovery = clauses.some(clause => recoveryPhrase.test(clause) && !uncertain.test(clause) && !clause.endsWith("?"));
+  const unconfirmedRecovery = clauses.some(clause => recoveryPhrase.test(clause) && (uncertain.test(clause) || clause.endsWith("?")));
+  if (affirmedRecovery) return "recovery";
   // A recommendation is evidence of investigation, not proof that an action ran.
   if (/\b(recommended|recommendation|suggested|root cause identified|root cause found|investigating)\b/.test(text)) return "investigation";
   if (["rollback", "restart", "throttle", "mitigation"].includes(type) || /\b(rollback|restart|throttling)(?:\s+to\s+[\w.-]+)?\s+(applied|triggered|initiated|started|completed)\b/.test(text)) return "response";
-  if (type === "recovery") return "recovery";
+  if (type === "recovery" && !unconfirmedRecovery) return "recovery";
   if (["deployment", "configuration", "config_change"].includes(type)) return "change";
   if (item.kind === "event" && (["failure", "alert", "error", "latency", "error_rate"].includes(type) || item.severity === "critical" || item.severity === "warning")) return "detection";
   return "update";
@@ -84,4 +89,23 @@ export function buildActivityWindows(feed: TimelineItem[]): ActivityWindow[] {
   }
   if (current.length) windows.push(summarizeWindow(current));
   return windows.reverse();
+}
+
+/** Keep the beginning and latest evidence, without hiding team decisions or unknown times. */
+export function highlightActivity(feed: TimelineItem[]): TimelineItem[] {
+  const selected: TimelineItem[] = [];
+  for (const window of buildActivityWindows(feed)) {
+    const groups = new Map<string, TimelineItem[]>();
+    for (const item of window.items) {
+      if (item.kind === "message" || item.severity === "critical" || recordTime(item) === null) { selected.push(item); continue; }
+      const key = JSON.stringify([item.serviceName, categoryOf(item)]);
+      const group = groups.get(key);
+      if (group) group.push(item); else groups.set(key, [item]);
+    }
+    for (const group of groups.values()) {
+      selected.push(group[0]);
+      if (group.length > 1) selected.push(group[group.length - 1]);
+    }
+  }
+  return chronological(selected);
 }

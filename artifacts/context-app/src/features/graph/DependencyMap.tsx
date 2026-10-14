@@ -59,12 +59,13 @@ export function GraphView({ nodes, edges, predictions }: { nodes: GraphNode[]; e
   const validEdges = edges.filter(edge => nodeById.has(edge.from) && nodeById.has(edge.to));
   const layout = useMemo(() => {
     const columns = dependencyColumns(nodes, edges);
-    const width = Math.max(740, columns.length * 250), height = Math.max(390, Math.max(0, ...columns.map(column => column.length)) * 150 + 100);
+    const width = Math.max(740, columns.length * 320), height = Math.max(390, Math.max(0, ...columns.map(column => column.length)) * 150 + 100);
     return { width, height, positions: computeLayout(nodes, edges, width, height) };
   }, [nodes, edges]);
   const prediction = selected ? predictions.find(item => item.service === selected.label && item.riskLevel !== "low") : undefined;
   const dependencies = selected ? validEdges.filter(edge => edge.from === selected.id) : [];
   const dependents = selected ? validEdges.filter(edge => edge.to === selected.id) : [];
+  const connectedIds = new Set([selectedId, ...dependencies.map(edge => edge.to), ...dependents.map(edge => edge.from)]);
   if (!nodes.length) return <div className="ctx-empty"><Network size={30} aria-hidden="true" /><h3>No dependency map yet</h3><p>Services and their recorded relationships will appear here when data arrives.</p></div>;
   const close = () => { setSelectedId(null); document.getElementById(`${marker}-${selectedId}`)?.focus(); };
   return <div className="ctx-graph" onKeyDown={event => { if (event.key === "Escape") close(); }}>
@@ -81,11 +82,11 @@ export function GraphView({ nodes, edges, predictions }: { nodes: GraphNode[]; e
             const highlighted = selected && (edge.from === selected.id || edge.to === selected.id), affected = nodeById.get(edge.to)?.status !== "healthy";
             const x1 = from.x + 112, x2 = to.x - 118, mid = (x1 + x2) / 2;
             const path = from.x === to.x ? `M${from.x + 112},${from.y} C${from.x + 145},${from.y - 70} ${to.x + 145},${to.y + 70} ${to.x + 112},${to.y}` : `M${x1},${from.y} H${mid} V${to.y} H${x2}`;
-            return <g key={`${edge.from}:${edge.to}:${i}`}><path d={path} fill="none" stroke={highlighted ? "var(--ctx-focus)" : affected ? "var(--ctx-danger)" : "var(--ctx-graph-line)"} strokeWidth={highlighted ? 2.5 : 1.8} strokeDasharray={affected ? "6 4" : undefined} markerEnd={`url(#${marker})`} /><title>{nodeById.get(edge.from)?.label} {edge.label} {nodeById.get(edge.to)?.label}</title></g>;
+            return <g key={`${edge.from}:${edge.to}:${i}`}><path d={path} fill="none" stroke={highlighted ? "var(--ctx-focus)" : affected ? "var(--ctx-danger)" : "var(--ctx-graph-line)"} strokeWidth={highlighted ? 2.5 : 1.8} strokeDasharray={affected ? "6 4" : undefined} markerEnd={`url(#${marker})`} />{highlighted && from.x !== to.x && <text x={mid} y={(from.y + to.y) / 2 - 10} textAnchor="middle" className="ctx-graph-edge-label">{edge.label}</text>}<title>{nodeById.get(edge.from)?.label} {edge.label} {nodeById.get(edge.to)?.label}</title></g>;
           })}
         </svg>
         {nodes.map(node => { const pos = layout.positions.get(node.id)!, Icon = serviceIcon(node.label), predicted = predictions.some(item => item.service === node.label && item.riskLevel !== "low");
-          return <button key={node.id} id={`${marker}-${node.id}`} className={`ctx-graph-node ${selectedId === node.id ? "is-selected" : ""}`} style={{ left: pos.x - 112, top: pos.y - 44 }} aria-label={`${node.label} service, status ${node.status}`} aria-pressed={selectedId === node.id} onClick={() => setSelectedId(previous => previous === node.id ? null : node.id)}><span className="ctx-graph-node-title"><Icon size={18} aria-hidden="true" /><strong>{node.label}</strong></span><span className="ctx-graph-node-status"><span className={`ctx-status-dot ctx-status-${node.status}`} /><span>{node.status.replace(/_/g, " ")}</span>{predicted && <span className="ctx-prediction-label">Risk flagged</span>}</span></button>;
+          return <button key={node.id} id={`${marker}-${node.id}`} className={`ctx-graph-node ${selectedId === node.id ? "is-selected" : selected && connectedIds.has(node.id) ? "is-connected" : ""}`} style={{ left: pos.x - 112, top: pos.y - 48 }} aria-label={`${node.label} service, status ${node.status}`} aria-pressed={selectedId === node.id} onClick={() => setSelectedId(previous => previous === node.id ? null : node.id)}><span className="ctx-graph-node-title"><Icon size={18} aria-hidden="true" /><strong title={node.label}>{node.label}</strong></span><span className="ctx-graph-node-status"><span className={`ctx-status-dot ctx-status-${node.status}`} /><span>{node.status.replace(/_/g, " ")}</span>{predicted && <span className="ctx-prediction-label">Risk flagged</span>}</span></button>;
         })}
       </div></div></div>
       <p className="ctx-footnote ctx-graph-scroll-hint">Scroll the diagram to explore. Dashed red links indicate an affected dependency; they do not prove causation.</p>

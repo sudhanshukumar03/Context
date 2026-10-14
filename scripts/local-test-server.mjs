@@ -1,15 +1,15 @@
-import { readFile } from "node:fs/promises";
+import { readLocalConfig, isPrivateLocalRequest } from "./local-runtime.mjs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
-import { localEnvironment, validateLocalConfig } from "./local-test-config.mjs";
+import { localEnvironment } from "./local-test-config.mjs";
 import { readClerkTestCredentials } from "./local-clerk-credentials.mjs";
 import { readLocalAiCredentials } from "./local-ai-credentials.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const mode = process.argv[2];
 if (!["api", "dashboard", "initialize", "check", "check-auth", "check-ai"].includes(mode)) throw new Error("Invalid local runner command");
-const config = validateLocalConfig(JSON.parse(await readFile(resolve(root, "tmp/local-test/config.json"), "utf8")), root);
+const config = await readLocalConfig(root, { allowLegacy: mode === "check" });
 if (mode === "check") process.exit(0);
 if (mode === "check-ai") {
   const selected = process.argv[3] || config.aiMode || "off";
@@ -43,9 +43,17 @@ if (mode === "initialize") {
   process.chdir(appRoot);
   const require = createRequire(resolve(appRoot, "package.json"));
   const { createServer } = await import(pathToFileURL(require.resolve("vite")));
-  const server = await createServer({ envDir: resolve(root, "tmp/local-test"),
+  const server = await createServer({ envDir: resolve(root, "runtime/config"),
+    plugins: [{ name: "local-private-files", configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        if (!isPrivateLocalRequest(request.url, root, appRoot)) return next();
+        response.statusCode = 403;
+        response.setHeader("Content-Type", "text/plain; charset=utf-8");
+        response.end("Private local files are not available through the dashboard.");
+      });
+    } }],
     server: { host: "127.0.0.1", port: config.dashboardPort, strictPort: true,
-      fs: { deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "**/tmp/local-test/**"] } } });
+      fs: { deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "**/tmp/**", "**/runtime/**"] } } });
   await server.listen();
   server.printUrls();
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => void server.close().then(() => process.exit(0)));

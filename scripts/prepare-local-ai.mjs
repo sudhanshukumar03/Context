@@ -1,10 +1,12 @@
+import { requireCurrentLayout } from "./local-runtime.mjs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { parseEnv } from "node:util";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_LOCAL_AI_MODEL } from "./local-ai-credentials.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const target = resolve(root, "tmp/local-test/ai.env");
+await requireCurrentLayout(root);
+const target = resolve(root, "runtime/config/ai.env");
 let apiKey = "";
 for (const source of [".env", "artifacts/api-server/.env"]) {
   try {
@@ -18,8 +20,8 @@ try {
 GEMINI_API_KEY=${apiKey}
 GEMINI_MODEL=${DEFAULT_LOCAL_AI_MODEL}
 `, { flag: "wx", mode: 0o600 });
-  console.log("Prepared tmp/local-test/ai.env using the existing Gemini key when available. Keys were not printed.");
+  console.log("Prepared runtime/config/ai.env using the existing Gemini key when available. Keys were not printed.");
 } catch (error) {
   if (error.code !== "EEXIST") throw error;
-  console.log("Existing tmp/local-test/ai.env preserved.");
+  console.log("Existing runtime/config/ai.env preserved.");
 }

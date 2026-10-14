@@ -38,7 +38,12 @@ function extractTextContent(buffer: Buffer, mimetype: string): string {
   return buffer.toString("utf-8").slice(0, 50000);
 }
 
-router.post("/upload/docs", requireAuth, requireOrganizationAdmin, upload.array("files", 5), async (req: Request, res: Response) => {
+router.post("/upload/docs", requireAuth, requireOrganizationAdmin, (req, res, next) => {
+  upload.array("files", 5)(req, res, error => {
+    if (error) { fail(res, error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE" ? "Each file must be 5 MB or smaller" : "Upload up to five plaintext, Markdown, CSV, or JSON files", 400); return; }
+    next();
+  });
+}, async (req: Request, res: Response) => {
   const files = req.files as Express.Multer.File[] | undefined;
   if (!files || files.length === 0) { fail(res, "No files uploaded"); return; }
 
@@ -46,11 +51,11 @@ router.post("/upload/docs", requireAuth, requireOrganizationAdmin, upload.array(
   const userId = req.auth!.userId;
 
   try {
-    const inserted = await Promise.all(
+    const inserted = await db.transaction(async tx => Promise.all(
       files.map((f) => {
         const content = extractTextContent(f.buffer, f.mimetype);
         const title = f.originalname.replace(/\.[^.]+$/, "");
-        return db.insert(documents).values({
+        return tx.insert(documents).values({
           organizationId: orgId,
           userId,
           title,
@@ -59,7 +64,7 @@ router.post("/upload/docs", requireAuth, requireOrganizationAdmin, upload.array(
           fileSize: f.size,
         }).returning();
       })
-    );
+    ));
 
     ok(res, {
       uploaded: inserted.flat().map((d) => ({ id: d.id, title: d.title, fileType: d.fileType, fileSize: d.fileSize })),
@@ -100,7 +105,7 @@ router.post("/upload/team", requireAuth, requireOrganizationAdmin, async (req: R
 });
 
 router.post("/upload/tasks", requireAuth, requireOrganizationAdmin, async (req: Request, res: Response) => {
-  const { tasks } = req.body as { tasks?: unknown[] };
+  const tasks = req.body?.tasks;
   if (!Array.isArray(tasks) || tasks.length === 0) {
     fail(res, "tasks array required"); return;
   }

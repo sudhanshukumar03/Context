@@ -12,6 +12,9 @@
   },
   "devDependencies": {
     "@types/react": "catalog:",
-    "react": "catalog:"
+    "react": "catalog:",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/dom": "^10.4.2",
+    "react-dom": "catalog:"
   }
 }

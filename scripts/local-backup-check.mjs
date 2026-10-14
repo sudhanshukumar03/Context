@@ -1,19 +1,19 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
-import { validateLocalConfig } from './local-test-config.mjs';
+import { readLocalConfig } from "./local-runtime.mjs";
 const root = process.cwd();
-const config = validateLocalConfig(JSON.parse(await readFile(resolve(root, 'tmp/local-test/config.json'), 'utf8')), root);
+const config = await readLocalConfig(root);
 const require = createRequire(resolve(root, 'lib/db/package.json'));
 const { Client } = require('pg');
 const run = promisify(execFile);
 const id = randomBytes(16).toString('hex');
 const restoredName = `context_restore_${id}`;
-const directory = resolve(root, 'tmp/local-test/backups', id);
+const directory = resolve(root, 'runtime/backups', id);
 await mkdir(directory, { recursive: true });
 const archive = resolve(directory, 'context.dump');
 const original = new Client({ connectionString: config.databaseUrl });
@@ -47,7 +47,7 @@ try {
   assert.equal(isolation.rows[0].count, 0);
   await writeFile(resolve(directory, 'restore-result.json'), JSON.stringify({ checkedAt: new Date().toISOString(), passed: true, rows: recovered, crossWorkspaceEvents: 0 }, null, 2));
   console.log('PASS: custom-format local backup restored into a new disposable database; row counts, content digests and event isolation match.');
-  console.log('Backup and safe report retained under ignored tmp/local-test/backups; original database untouched.');
+  console.log('Backup and safe report retained under ignored runtime/backups; original database untouched.');
 } catch (error) {
   const detail = String(error?.stderr ?? '');
   const category = /unsupported version/.test(detail) ? 'archive_version' : /unrecognized configuration/.test(detail) ? 'server_version'

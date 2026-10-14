@@ -1,8 +1,10 @@
-# Operations and release checks
+# Keep Context running
 
-## Existing local app
+A green dashboard tells you about the recorded services. Keeping Context itself reliable also means watching its database connection, generation failures, ingestion errors, and backups. Start with the local checks, then carry the same questions into a hosted environment.
 
-Run from the project root:
+## Check the existing local copy
+
+From the repository root:
 
 ```powershell
 pnpm local:status
@@ -11,63 +13,58 @@ pnpm local:backup-check
 pnpm local:load-check
 ```
 
-The backup drill accepts only the generated local-test configuration. It dumps
-that database in custom format, restores into a new random database in the same
-generated cluster, compares row counts/content digests and checks event workspace boundaries,
-then drops only its own restored database. It retains the private backup and safe
-report under ignored `tmp/local-test/backups/`. Keep that directory private; a
-backup contains account/workspace records. Concurrent source writes cause the
-count check to fail instead of reporting a successful comparison; rerun when idle.
-This verifies the local restore path, not hosted backup scheduling or retention.
+Status tells you which saved processes and modes are in use. Smoke confirms API/database connectivity, the dashboard proxy, and the applicable authentication checks. [Local testing](LOCAL_TEST.md) explains the extra synthetic ingestion check in demo mode.
 
-The load check issues 100 read-only public dashboard/health requests with four
-concurrent workers. It records failures and p50/p95 latency under
-`tmp/verification/local-load-result.json`. It does not contact AI, send alerts,
-write telemetry or measure authenticated production workload capacity.
+## Make a backup useful by restoring it
 
-## Production configuration
+The local backup drill dumps the generated test database and restores it into a new random database in the same isolated cluster. It compares table counts and content digests, checks event workspace boundaries, then removes only the restored database it created.
 
-Copy `deployment/production.env.example` into a private file outside version
-control, fill it using production account settings, then run:
+The private dump and report stay under `runtime/backups/`. Encoding-repair archives and their recovery records live in `runtime/backups/encoding/`. If records change during the comparison, the check fails rather than reporting a matching restore. Run the drill when the source is idle.
 
-```powershell
-node scripts/deployment-preflight.mjs --env-file C:\private\context.env --public-url https://context.your-domain.com
-```
+This is a local restore check. A hosted installation still needs its own encrypted backup schedule, retention period, access controls, and regular restore drills. Restore into a separate environment and verify both the records and application reads before relying on the backup.
 
-This prints only check names and pass/fail results. It checks HTTPS origins,
-production Clerk key formats, matching frontend key, disabled demo authentication,
-session secret, PostgreSQL TLS URL and backend-only AI configuration. These are
-configuration checks; credentials, DNS, migrations and live availability still
-need verification. Use a direct/session pooler for worker advisory locks.
+## Understand the load check
 
-Build a reviewed image with its production Clerk publishable key. Set
-`CONTEXT_IMAGE`, `CONTEXT_ENV_FILE` and `CONTEXT_DOMAIN` for
-`deployment/compose.yaml`. The prepared stack exposes only Caddy on 80/443;
-the app's 8080 port stays inside Compose. Caddy persists certificates in volumes
-and proxies one hop to the app. Point DNS at the host before starting the stack.
-Do not run deployment or initialization until the host/database are identified,
-backup is verified and the concrete release is approved.
+The local load check sends 100 read-only dashboard and health requests with four concurrent workers. It writes failure and latency measurements under `tmp/verification/`.
 
-Prepare reviewable configuration files with `pnpm release:prepare`; the output
-directory includes a checksum manifest, deployment templates, migrations and
-GitHub setup files. It excludes private environment files and local backups.
+That result describes public endpoints on this computer. It does not establish capacity for signed-in users, AI generation, or ingestion. Measure those workloads separately when a hosting environment and expected traffic are known.
 
-## Monitoring and recovery
+## Read a failure at the right layer
 
-- Poll `/api/healthz` every minute; alert after three consecutive failures.
-  This checks the database, not Clerk/Gemini capacity. Record response latency.
-- Monitor safe AI error metadata: tool, model, status, attempts, request ID and
-  error type. HTTP 429 means quota/rate limits; 503 means temporary unavailability.
-  Test generation as well as model listing before calling AI ready.
-- Track brief job age/status counts inside the intended workspace/database.
-  Investigate jobs pending/processing beyond the normal bounded generation time.
-- Alert on repeated ingestion failures. Clerk membership checks fail closed,
-  so providers must retry during Clerk outages.
-- Schedule encrypted, access-restricted backups outside the app container;
-  choose retention and periodically restore into a separate empty environment.
-  Verify row counts, tenant isolation and application reads after restoration.
-- Follow `DEPLOYMENT.md` for additive migration and rollback. Preserve new
-  records before reversal; never test rollback against unreviewed live data.
+| Signal | What it tells you | Where to look next |
+| --- | --- | --- |
+| `/api/healthz` returns 503 | The API cannot complete its database readiness check. | Database availability, connection settings, pool errors. |
+| AI reports a rate or quota limit | The provider cannot accept the generation request now. | Provider quota, account access, retry timing. |
+| AI reports a timeout | The request exceeded its bounded wait. | Provider availability and the request's safe error metadata. |
+| Brief jobs stay pending or processing | The worker is not completing expected work. | Job age, worker startup, database session locks. |
+| Repeated ingestion failures | A sender, payload, key, or membership check needs attention. | Delivery status, current issuing-admin membership, key revocation. |
 
-Hosted alerts, backup schedules, DNS and CI require the chosen hosting/account
-setup; these files do not create or claim those external resources.
+Health checks verify the database, not the availability of Clerk or the AI provider. A successful model-listing request does not prove generation will succeed. Test the generation path when diagnosing a provider problem.
+
+API logs record safe request and error metadata. Keep raw credentials, private provider bodies, and workspace content out of shared troubleshooting notes.
+
+## Keep dependency fixes reproducible
+
+The lockfile includes compatible security updates. `patches/braces@3.0.3.patch` adds a nesting limit to the parser and recursive walkers used by the proxy's glob matcher. The [upstream braces advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) has no published patched release. The package audit still reports its version; the advisory is not suppressed.
+
+The local patch rejects excessive nesting with a controlled error, including direct AST input, while retaining ordinary patterns. Run `node --test scripts/dependency-security.test.mjs` to check it. GitHub CI runs these tests, and Docker copies the patch before its frozen install. Replace the patch with an upstream release when one is published, then repeat the tests and audit.
+
+## Watch the hosted installation
+
+Once hosting is chosen, set up checks appropriate to that environment:
+
+- Poll database readiness regularly and alert on sustained failure.
+- Track failed requests and response latency, including provider exhaustion.
+- Watch pending brief age and completion/failure counts.
+- Monitor ingestion retries and rejected deliveries.
+- Schedule backups and practice restoration away from the live database.
+
+Brief workers require direct PostgreSQL connections or a session pooler. Transaction pooling cannot preserve their advisory-lock sessions.
+
+## Prepare and recover a release
+
+Use [Setup and deployment](DEPLOYMENT.md) for private configuration, image preparation, database initialization, migrations, and rollback. `pnpm release:prepare` creates a review bundle under ignored `tmp/release/`; it does not publish it.
+
+Keep the migration's return path alongside its backup. Preserve records created after the release before reversing a schema change. Recheck application reads and workspace boundaries after restoration.
+
+The local container and backup paths have been tested. Hosted alerting, scheduled backups, DNS, production migrations, and hosted CI are still tasks for the selected deployment environment.

@@ -175,6 +175,103 @@ describe("disposable PostgreSQL verification", () => {
       expect((await pool.query("SELECT count(*)::int AS count FROM service_events WHERE organization_id=$1", [orgId])).rows[0].count).toBe(personalBefore);
     } finally { interception.mockRestore(); vi.unstubAllEnvs(); await new Promise<void>(resolve => server.close(() => resolve())); }
   });
+  async function withApi(routers: express.Router[], work: (base: string) => Promise<void>) {
+    const app = express(); app.use(express.json());
+    app.use((req, _res, next) => { req.log = { error: vi.fn() } as unknown as typeof req.log; next(); });
+    for (const router of routers) app.use(router);
+    const server = await new Promise<Server>(resolve => { const listener = app.listen(0, "127.0.0.1", () => resolve(listener)); });
+    try { await work(`http://127.0.0.1:${(server.address() as AddressInfo).port}`); }
+    finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+  }
+  const sendJson = (base: string, path: string, data: unknown) => fetch(base + path,
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(data) });
+  it("reuses services under concurrent imports and preserves omitted health while updating ownership", async () => {
+    const { default: router } = await import("../../routes/ingestion.js");
+    await withApi([router], async base => {
+      const body = { services: [{ name: "Import API", status: "failing", ownerTeam: "Payments", criticality: "high" }] };
+      const responses = await Promise.all([sendJson(base, "/upload/services", body), sendJson(base, "/upload/services", body)]);
+      expect(responses.map(response => response.status)).toEqual([201, 201]);
+      const rows = (await pool.query("SELECT * FROM services WHERE organization_id=$1 AND name='Import API'", [orgId])).rows;
+      expect(rows).toHaveLength(1); expect(rows[0].status).toBe("failing"); expect(rows[0].owner_team).toBe("Payments");
+      const timestamp = rows[0].updated_at;
+      expect((await sendJson(base, "/upload/services", { services: [{ name: "Import API", description: "Changed definition" }] })).status).toBe(201);
+      const updated = (await pool.query("SELECT * FROM services WHERE id=$1", [rows[0].id])).rows[0];
+      expect(updated.status).toBe("failing"); expect(updated.updated_at).toEqual(timestamp);
+      expect(updated.description).toBe("Changed definition");
+    });
+  });
+  it("connects an imported service to an existing dependency and rolls back invalid cross-workspace references", async () => {
+    const { default: router } = await import("../../routes/ingestion.js");
+    await withApi([router], async base => {
+      expect((await sendJson(base, "/upload/services", { services: [{ name: "Import caller", dependencies: ["Import API"] }] })).status).toBe(201);
+      expect((await pool.query("SELECT count(*)::int AS count FROM service_dependencies d JOIN services s ON s.id=d.service_id WHERE s.name='Import caller'")).rows[0].count).toBe(1);
+      const [other] = await db.insert(organizations).values({ name: "Other import", slug: "other-import" }).returning();
+      await pool.query("INSERT INTO services (organization_id,name) VALUES ($1,'Foreign dependency')", [other.id]);
+      const response = await sendJson(base, "/upload/services", { services: [{ name: "Must roll back", dependencies: ["Foreign dependency"] }] });
+      expect(response.status).toBe(400);
+      expect((await pool.query("SELECT count(*)::int AS count FROM services WHERE name='Must roll back'")).rows[0].count).toBe(0);
+    });
+  });
+  it("applies event batches in supplied order and does not change health for a failed deployment", async () => {
+    const { default: router } = await import("../../routes/ingestion.js");
+    await withApi([router], async base => {
+      const response = await sendJson(base, "/upload/events", { events: [
+        { serviceName: "Import API", type: "failure", title: "Batch failure", severity: "critical" },
+        { serviceName: "Import API", type: "recovery", title: "Batch recovery", severity: "critical" },
+        { serviceName: "Import API", type: "deployment", title: "Deployment failed", severity: "critical" },
+      ] });
+      expect(response.status).toBe(201);
+      expect((await pool.query("SELECT status FROM services WHERE organization_id=$1 AND name='Import API'", [orgId])).rows[0].status).toBe("healthy");
+    });
+  });
+  it("rolls back earlier batch events and health when a later event cannot be stored", async () => {
+    const { default: router } = await import("../../routes/ingestion.js");
+    await withApi([router], async base => {
+      const response = await sendJson(base, "/upload/events", { events: [
+        { serviceName: "Import API", type: "failure", title: "Batch should disappear" }, { title: "reject" },
+      ] });
+      expect(response.status).toBe(500);
+      expect((await pool.query("SELECT count(*)::int AS count FROM service_events WHERE title='Batch should disappear'")).rows[0].count).toBe(0);
+      expect((await pool.query("SELECT status FROM services WHERE name='Import API'")).rows[0].status).toBe("healthy");
+    });
+  });
+  it("creates a private workspace when registration omits an organization name", async () => {
+    const { default: router } = await import("../../routes/auth.js");
+    await withApi([router], async base => {
+      const response = await sendJson(base, "/auth/register", { email: "registration@example.test", password: "synthetic-test-password", name: "New account" });
+      expect(response.status).toBe(201);
+      const result = await response.json() as { data: { user: { organizationId: number } } };
+      expect(result.data.user.organizationId).toBeGreaterThan(0);
+      expect((await pool.query("SELECT name FROM organizations WHERE id=$1", [result.data.user.organizationId])).rows[0].name).toBe("New account's workspace");
+    });
+  });
+  it("rolls back token revocation when storing its replacement fails", async () => {
+    const { default: router } = await import("../../routes/auth.js");
+    await withApi([router], async base => {
+      const registered = await sendJson(base, "/auth/register", { email: "refresh-rollback@example.test", password: "synthetic-test-password", name: "Refresh" });
+      expect(registered.status).toBe(201);
+      const { data } = await registered.json() as { data: { refreshToken: string } };
+      await pool.query("CREATE FUNCTION reject_refresh() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic token failure'; END $$; CREATE TRIGGER reject_refresh BEFORE INSERT ON refresh_tokens FOR EACH ROW EXECUTE FUNCTION reject_refresh()");
+      try {
+        expect((await sendJson(base, "/auth/refresh", { refreshToken: data.refreshToken })).status).toBe(500);
+        const before = (await pool.query("SELECT count(*)::int AS count FROM organizations")).rows[0].count;
+        expect((await sendJson(base, "/auth/register", { email: "registration-rollback@example.test", password: "synthetic-test-password", name: "Must roll back" })).status).toBe(500);
+        expect((await pool.query("SELECT count(*)::int AS count FROM organizations")).rows[0].count).toBe(before);
+        expect((await pool.query("SELECT count(*)::int AS count FROM users WHERE email='registration-rollback@example.test'")).rows[0].count).toBe(0);
+      }
+      finally { await pool.query("DROP TRIGGER reject_refresh ON refresh_tokens; DROP FUNCTION reject_refresh()"); }
+      expect((await sendJson(base, "/auth/refresh", { refreshToken: data.refreshToken })).status).toBe(200);
+      expect((await sendJson(base, "/auth/refresh", { refreshToken: data.refreshToken })).status).toBe(401);
+    });
+  });
+  it("returns a client error for an unsupported document upload", async () => {
+    const { default: router } = await import("../../routes/upload.js");
+    await withApi([router], async base => {
+      const form = new FormData(); form.append("files", new Blob(["synthetic pdf"], { type: "application/pdf" }), "test.pdf");
+      expect((await fetch(base + "/upload/docs", { method: "POST", body: form })).status).toBe(400);
+      expect((await sendJson(base, "/upload/tasks", null)).status).toBe(400);
+    });
+  });
   it("reverses the additive migration on this disposable database", async () => {
     await pool.query(await readFile("lib/db/migrations/001_webhook_credentials.down.sql", "utf8"));
     expect((await pool.query("SELECT to_regclass('webhook_keys') AS name")).rows[0].name).toBeNull();

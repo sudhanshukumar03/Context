@@ -1,21 +1,25 @@
-# Try Context on this computer
+# Run Context locally
 
-From a PowerShell terminal in the project folder:
+The local runner gives you a place to explore Context without using a hosted database. It starts the API, dashboard, and a separate PostgreSQL cluster together, and keeps the setup for your next session.
+
+## Open the project first
+
+Open the extracted repository folder in your editor, rather than a ZIP preview. The root should contain `package.json`, `pnpm-workspace.yaml`, `artifacts`, and `lib`.
+
+Install Node.js 24 or later, pnpm 11.18.0, and PostgreSQL. These PostgreSQL tools must be on your PATH: `initdb`, `pg_ctl`, `psql`, `createdb`, `pg_dump`, and `pg_restore`.
+
+From a PowerShell terminal at the repository root:
 
 ```powershell
+pnpm install --frozen-lockfile
 pnpm local:start
 ```
 
-Open **http://127.0.0.1:31800**. A first start uses the Local Developer demo;
-later starts retain your selected mode. In Clerk mode, sign in to Context itself
-at `/sign-in`; your ChatGPT login does not sign you into Context. PostgreSQL runs
-separately on a generated port; the API runs at http://127.0.0.1:31801.
+The dashboard opens at **http://127.0.0.1:31800** and the API listens at **http://127.0.0.1:31801**. PostgreSQL uses a generated port. Docker is not required.
 
-Requirements: installed project dependencies, Node 24+, pnpm, and PostgreSQL's
-`initdb`, `pg_ctl`, `psql`, `createdb`, `pg_dump`, and `pg_restore` commands on PATH.
-Docker is not needed.
+The first start creates an isolated database and selects demo authentication. Later starts retain the saved modes and records. The runner refuses to start a second copy on top of one that is already running.
 
-## Useful commands
+## Come back to the same workspace
 
 ```powershell
 pnpm local:status
@@ -23,82 +27,44 @@ pnpm local:smoke
 pnpm local:stop
 ```
 
-Stopping preserves the separate test database. Starting again uses that same
-database. It rebuilds the API, waits for the API and dashboard to respond, and
-checks ingestion before reporting success. Start refuses a second running copy.
+Status reports the saved modes and processes. Smoke checks exercise startup and access boundaries. Stop verifies the saved process identities before shutting down the local app and database. Stopping keeps the data for the next start.
 
-The smoke check creates a temporary webhook key, ingests one sample GitHub-format
-deployment, sends it again to verify replay suppression, revokes the key, and
-checks that the revoked key is rejected. Repeated checks reuse the event's
-identity, so the Timeline keeps one sample deployment. No real GitHub workflow
-is contacted. You can create another key in Overview under Webhook keys and
-send your own local sample events.
+The installation lives in `runtime/`, separate from disposable test output:
 
-On the first start you can choose other dashboard/API ports:
+| Folder | What it keeps |
+| --- | --- |
+| `runtime/config/` | `config.json`, Clerk's `accounts.env`, and Gemini's `ai.env`. |
+| `runtime/data/` | The generated `cluster-*` PostgreSQL directory, including saved workspaces. |
+| `runtime/state/` | `processes.json`, used to verify which processes the runner owns. |
+| `runtime/logs/` | API, dashboard, and PostgreSQL diagnostics. |
+| `runtime/backups/` | Restore drills and encoding recovery archives and records. |
+| `tmp/` | Disposable verification output and release review bundles. |
+
+Keep `runtime/` to retain the installation. It is excluded from Git and Docker build contexts, and the development server blocks direct access to its files. Backups can contain account and workspace records; they belong with your private recovery files.
+
+Some logs remain open while the app or PostgreSQL runs. Closed logs can be removed after stopping and will be recreated when needed. AI verification uses a temporary probe and removes it when the check finishes, including on failure.
+
+If you have an older installation in `tmp/local-test/`, run `pnpm local:migrate`. Starting with `pnpm local:start` also migrates it automatically. The migration checks paths and conflicts, stops only the owned processes, moves the existing cluster and credentials, and updates recovery paths. It keeps the same ports, session secret, and saved modes. It refuses to overwrite an existing `runtime/` installation. After migration, start the app normally; repeating the migration makes no changes.
+
+You can choose different dashboard and API ports on the first start:
 
 ```powershell
 powershell -NoProfile -File scripts/local-test.ps1 -Action Start -DashboardPort 31900 -ApiPort 31901
 ```
 
-Later starts retain the saved ports. Generated configuration, cluster, process
-identities and logs stay in the ignored `tmp/local-test/` directory. Logs are
-`api.out`, `api.err`, `dashboard.out`, `dashboard.err`, and `postgres.log`.
-The stop command verifies process identity before stopping a saved process.
+Later starts use the saved ports. The runner accepts only its generated loopback database and expected cluster path. The local database uses trust authentication and is intended for development and synthetic records.
 
-The generated database uses UTF-8 so incident messages, emoji and multilingual
-text can be saved. On start, an older Windows-encoded local database is backed up
-and restored into a UTF-8 copy while app processes are stopped. All public table
-data and ID sequences must match before an atomic name swap. The original
-database is retained as an archive; the dump and recovery metadata remain in
-`tmp/local-test/encoding-backup-*.dump` and `encoding-repair-*.json`. The repair
-validates both the generated database target and the server's cluster directory;
-it cannot operate on your configured production database. No database is dropped.
-Startup also verifies Unicode storage with a temporary table.
+## Sign in with a Clerk test account
 
-Slack notification URLs are saved separately for each signed-in account and
-workspace. Existing unscoped browser values are preserved but never reused
-automatically; enter the destination again in the intended workspace. Shared
-notifications and demo mutations require an organization admin. Demo progress
-advances only after a step saves successfully; a failure pauses the scenario and
-offers retry. Current service health controls active risk, while old failure and
-recovery events remain visible in Timeline and History.
-
-## What this verifies
-
-- The actual API bundle, dashboard and development proxy start together.
-- The application initializes and uses a separate PostgreSQL database.
-- Webhook key creation/listing/revocation and deployment replay protection work
-  through HTTP against that database.
-- The dashboard displays the saved sample deployment.
-- Stop/restart preserves the separate local test data.
-
-The runner uses only its generated `context_local_<id>` database. It rejects
-remote database targets and unexpected cluster paths. It leaves existing `.env`
-files and the configured application database untouched. API, dashboard and
-PostgreSQL bind to loopback. This disposable demo's database uses local trust
-authentication; keep real data and credentials out of it.
-
-## Next: real accounts
-
-The default demo clears Clerk and AI credentials and enables development-only
-demo authentication. You can switch this isolated local copy to real **Clerk
-test-instance sign-in** without changing your existing environment files or database:
+When you want to check personal and shared workspaces, prepare a Clerk Development instance:
 
 ```powershell
 pnpm local:clerk-setup
 ```
 
-Open `tmp/local-test/accounts.env` in your editor. The setup command copies an
-existing valid test Publishable Key, when available, and leaves the Secret Key
-blank. In the [Clerk Dashboard](https://dashboard.clerk.com/), select the same
-application's **Development** instance, open its **API keys** page, and copy its
-`sk_test_...` Secret Key into `CLERK_SECRET_KEY=`. Keep keys in the file, not chat.
-Both keys must belong to the same instance. Setup never overwrites an existing
-account file. Do not put secret keys in variables beginning with `VITE_`.
-If you copied Clerk's Next.js snippet, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is also
-accepted; the runner maps it to this app's frontend/API variables. Conflicting
-Publishable Keys are rejected.
-See [Clerk's environment variable documentation](https://clerk.com/docs/guides/development/clerk-environment-variables).
+Open `runtime/config/accounts.env` in your editor. Add the Publishable Key and Secret Key from the same Clerk Development instance. Keep the Secret Key in that file; browser variables beginning with `VITE_` may contain only public values.
+
+The setup command does not overwrite an existing credentials file. Check the configuration before stopping a working copy:
 
 ```powershell
 pnpm local:clerk-check
@@ -107,141 +73,54 @@ pnpm local:stop
 pnpm local:clerk
 ```
 
-Check keys **before** stopping the demo. Preflight validates key formats, test
-instance prefixes and frontend/API Publishable Key consistency; it does not
-prove live key validity or that the Secret Key belongs to that instance.
-`local:clerk-verify` makes read-only requests to Clerk to verify that the Secret
-Key identifies a development instance and report Organization settings. It never
-prints keys or changes settings. It also matches the Publishable Key's frontend
-domain against that instance's domains. A signed-in API request is still required
-to verify the actual session and dashboard access.
-Clerk mode disables both demo bypass flags and never falls back to demo login.
-Missing/invalid configuration blocks startup. The backend's Secret Key is not
-passed to the dashboard server environment. Unrelated account-file values cannot
-override the generated database connection, ports, session secret or AI configuration.
-The local database/credential directory is blocked from Vite's filesystem routes;
-startup smoke checks verify HTTP 403 for direct configuration-file requests.
+`clerk-check` validates the local configuration. `clerk-verify` also checks the live Clerk connection and key pairing. Then open **http://127.0.0.1:31800/sign-in** and sign in to Context. A ChatGPT session is a separate login.
 
-Open http://127.0.0.1:31800/sign-in and sign in yourself. Use this same origin
-throughout the session; the API verifies Clerk session origins against its
-allowlist. `local:smoke` in Clerk mode verifies readiness, the dashboard proxy,
-and rejection of signed-out requests/demo headers; it does not create keys or
-use a signed-in browser session. Continue with the checks below.
+Enable Organizations in the Clerk application before testing shared teams. [Shared-team testing](SHARED_TEAM_TEST.md) explains the two-account checks.
 
-The selected mode is saved: `pnpm local:start` preserves Clerk mode on restart.
-To return to the isolated demo, stop it and run `pnpm local:demo`.
+To return to development demo authentication, stop the app and run `pnpm local:demo`.
 
-### Real-account checklist
+## Give AI a provider
 
-1. In the Clerk **Development** instance, enable **Organizations** and allow
-   **Personal Accounts**, since this app supports both. Follow
-   [Clerk's Organization settings guide](https://clerk.com/docs/guides/organizations/configure).
-2. Sign in and verify the personal dashboard loads. Sign out and confirm protected
-   data is unavailable; sign back in.
-3. Create/select a test organization using the dashboard switcher. Add a sample
-   service/event and switch back to Personal Account: shared data must not appear
-   there. Switch back to the team and confirm the sample remains.
-4. As a team admin, create a webhook key and verify delivery with a local sample
-   payload. Revoke it and confirm delivery is rejected.
-5. If you choose to test invitations, invite a second test account yourself through
-   Clerk's member manager. Check that an ordinary member can investigate but cannot
-   upload shared data or create/revoke team keys. Engineer/SRE/Manager lenses must
-   not change permissions. Selecting another team must load only its own data.
-6. Demote/remove a key creator in the test organization and confirm their shared
-   webhook key is rejected. Use test memberships only for these checks.
-
-Clerk-mode sign-in and team controls contact the Clerk test instance. This task
-does not send invitations or change live membership automatically. The local
-database uses loopback trust authentication; use synthetic test data, and stop
-the app when finished.
-
-### Connect Gemini locally
-
-AI is disabled by default and controlled separately from sign-in. Root-cause
-heuristics can work without a provider. To enable actual chat, analysis,
-postmortems and briefs:
+The dashboard and recorded activity work without an AI key. Questions, generated reports, and onboarding briefs need a provider that can accept generation requests.
 
 ```powershell
 pnpm local:ai-setup
+```
+
+Open `runtime/config/ai.env`. Add your Gemini key and choose a model available to your account. Set `GEMINI_TRANSPORT=native` to use the native Gemini endpoint; the other supported transport is `openai` compatibility.
+
+```powershell
 pnpm local:ai-check
 pnpm local:ai-verify
 pnpm local:stop
 pnpm local:ai-on
 ```
 
-Setup prepares the ignored `tmp/local-test/ai.env`, copying an existing Gemini
-key from the root/API environment file when available, and selecting
-`gemini-3.8-flash`. Existing AI files are preserved. The old local
-`gemini-2.0-flash` setting is retired; see
-[Google's model reference](https://ai.google.dev/gemini-api/docs/models).
-Original environment files are not changed.
+The availability check makes a read-only provider request. The generation check sends synthetic prompts through the actual root-cause, incident-answer, postmortem, and brief services. It consumes provider quota and reports pass/fail results.
 
-`local:ai-check` makes a read-only key/model availability request. `local:ai-verify`
-also sends synthetic prompts through the actual root-cause, incident-answer,
-postmortem and brief services. These generation checks consume provider quota;
-they do not read your application documents or incident records. They print
-pass/fail summaries, never keys or raw provider responses. Passing demonstrates
-connectivity and output validation, not prediction accuracy on real incidents.
+The API receives the provider key. Normal authenticated AI requests can send the selected workspace's incident or document context to that provider. The browser receives no provider secret.
 
-The API alone receives the Gemini key. The dashboard receives no provider key,
-and the private directory is blocked from HTTP filesystem requests. Enabling AI
-preserves the selected authentication mode and isolated database. Subsequent
-`local:start` commands retain the AI setting. To disable AI, stop the app and run
-`pnpm local:ai-off`. `local:status` reports both selected modes. When AI is on,
-normal authenticated application requests can send their incident/document
-context to the configured Gemini service.
+After changing a saved model or transport, stop and restart to reload it. To disable AI, stop the app and run `pnpm local:ai-off`. Starting again retains both the authentication and AI choices.
 
-Deliveries from an actual GitHub repository remain unverified.
+## Know what a smoke check does
 
-### Native Gemini and local operations
+In Clerk mode, smoke checks confirm database connectivity, the dashboard proxy, private-file blocking, and rejection of signed-out requests. They do not sign in a user or send an invitation.
 
-Set `GEMINI_TRANSPORT=native` in the private `tmp/local-test/ai.env` file to use
-Google's native generation endpoint. The default remains `openai` compatibility.
-Model selection is explicit via `GEMINI_MODEL`; changing transport does not grant
-quota or guarantee provider uptime. During the latest recovery work, synthetic
-root-cause, chat, report and brief checks passed with `gemini-3.5-flash-lite/native`.
-The current browser result and remaining work are recorded in `REMAINING_WORK.md`.
+In demo mode, they also create a temporary ingestion key, send a synthetic deployment record, replay it, revoke the key, and check that a revoked delivery fails. The stable event identity prevents repeated runs from adding copies. This uses the local API and database; it does not run a GitHub deployment.
 
-To test an alternative without changing the saved file:
+## When a page or request gets stuck
 
-```powershell
-node scripts/verify-local-ai.mjs --generate --transport=native --model=gemini-3.5-flash-lite
-```
+| What you see | What to check |
+| --- | --- |
+| The link does not load | Run `pnpm local:status`. If stopped, use `pnpm local:start`. |
+| “Already running” | Check status before starting another copy. Stop the saved copy before changing modes. |
+| Sign-in stays on the loading screen | Use your regular browser, check the paired Clerk keys, and confirm the local server responds. |
+| AI reports a quota or rate limit | Check the provider account's available quota. A model-listing success does not guarantee generation will succeed. |
+| AI reports a timeout | Retry after checking provider availability. The UI bounds a question's authentication and response wait to one minute. |
+| A team admin control is disabled | Check the selected team and Clerk membership role. Audience selection does not grant admin access. |
 
-After a saved model/transport change, stop and restart the local app to reload
-it. Native attempts may use up to 50 seconds; retries share a 55-second deadline.
-Provider timeouts, temporary outages and rate/quota limits have distinct safe
-feedback. No raw provider response, thinking content or key is shown.
+For server details, inspect `api.out`, `api.err`, `dashboard.out`, `dashboard.err`, and `postgres.log` under `runtime/logs/`. Keep credentials and private provider responses out of shared reports.
 
-`pnpm local:backup-check` verifies a private backup in a new disposable UTF8
-database; `pnpm local:load-check` measures 100 read-only public requests. Details
-and the deferred deployment templates are in `OPERATIONS.md`. Online deployment
-is currently deferred by the user.
+The runner checks UTF-8 storage on startup. If it encounters an older local cluster encoding, its repair path preserves the original database and verifies a restored UTF-8 copy before switching names. Its archive and recovery files are part of the local setup, not disposable screenshots.
 
-For hosted testing, use the normal authenticated setup in [DEPLOYMENT.md](DEPLOYMENT.md)
-with a separate test database. An online test deployment needs
-the hosting account and HTTPS domain before the GitHub workflow can deliver to it.
-
-The production Docker image was verified locally with `pnpm test:container`;
-hosted CI execution remains unverified.
-
-### Saved onboarding data
-
-The onboarding API requires Context authentication. `GET /api/context/brief`
-reads your latest saved brief in the selected workspace and role, reporting
-`none`, `pending`, `processing`, `done` or `failed`. An empty job has zero
-confidence and no suggested person. Upload workspace knowledge through
-`POST /api/upload/docs` before submitting `POST /api/generate-brief`. Generated
-briefs must cite exact titles of documents supplied to the model.
-
-`GET /api/context/team` and `/api/team` read the latest uploaded team directory,
-not example people. Shared admins may upload it using `POST /api/upload/team`
-with a JSON `members` array. Each contact needs `name` and `role`; `tags` is
-optional. The limit is 100 contacts. Missing data returns an empty list, while a
-malformed saved directory returns 422 and requires a corrected upload. Directory
-contacts are onboarding information; Clerk controls actual membership and access.
-
-`GET /api/context-graph` shows the active workspace and up to 20 recent uploaded
-documents. Upload-owner links appear only for documents you actually uploaded.
-`GET /api/context/documents` and `/api/documents/recommended` return recent upload
-titles. These routes do not invent assignments, people, tasks or tool access.
+For backup drills and load checks, continue with [Operations](OPERATIONS.md).

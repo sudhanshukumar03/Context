@@ -1,11 +1,12 @@
 FROM node:24-bookworm-slim AS build
 WORKDIR /app
-RUN npm install --global pnpm@10
+RUN npm install --global pnpm@11.18.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
 COPY tsconfig*.json ./
 COPY lib ./lib
 COPY artifacts ./artifacts
 COPY scripts ./scripts
+COPY patches ./patches
 RUN pnpm install --frozen-lockfile
 ARG VITE_CLERK_PUBLISHABLE_KEY
 ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY

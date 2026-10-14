@@ -38,9 +38,11 @@ beforeEach(() => {
 });
 describe("incident recovery dashboard", () => {
   it.each(["abc", "0", "-5", "1.5", "101", "Infinity", ""])("rejects an invalid timeline limit instead of silently returning wrong results: %s", async (limit) => {
-    const response = await fetch(base + `/insights/summary?limit=${encodeURIComponent(limit)}`);
-    expect(response.status).toBe(400);
-    expect((await response.json() as { success: boolean }).success).toBe(false);
+    for (const path of ["/insights/summary", "/insights/timeline"]) {
+      const response = await fetch(base + `${path}?limit=${encodeURIComponent(limit)}`);
+      expect(response.status).toBe(400);
+      expect((await response.json() as { success: boolean }).success).toBe(false);
+    }
   });
   it("returns the requested recent records without the old fixed 60-event ceiling", async () => {
     mocks.events = Array.from({ length: 80 }, (_, index) => ({ id: index + 1, serviceId: 1, type: "webhook", severity: "info", title: "Recorded update", createdAt: new Date(Date.now() - index * 1000) }));
@@ -77,5 +79,30 @@ describe("incident recovery dashboard", () => {
     mocks.services[0] = { id: 1, name: "Database", status: "degraded" }; mocks.events = [];
     const { data } = await (await fetch(base + "/ai/auto-insights")).json() as AutoInsightsResponse;
     expect(data).toEqual([expect.objectContaining({ type: "service_health", severity: "warning", affectedServices: ["Database"] })]);
+  });
+  it("does not invent financial loss from failing service names", async () => {
+    vi.stubEnv("GEMINI_API_KEY", ""); vi.stubEnv("OPENAI_API_KEY", ""); vi.stubEnv("AI_INTEGRATIONS_OPENAI_API_KEY", "");
+    try {
+      mocks.services[0] = { id: 1, name: "Payments API", status: "failing", criticality: "high", updatedAt: new Date() };
+      const response = await fetch(base + "/insights/root-cause");
+      expect(response.status).toBe(200);
+      const { data } = await response.json() as { data: { estimatedLoss: string; cause: string } };
+      expect(data.estimatedLoss).toContain("Unknown");
+      expect(data.cause).toContain("unconfirmed");
+      expect(data.estimatedLoss).not.toContain("$");
+    } finally { vi.unstubAllEnvs(); }
+  });
+  it("uses the same risk evidence on both endpoints without inventing deadlines", async () => {
+    mocks.services[0] = { id: 1, name: "Database", status: "failing", updatedAt: new Date() };
+    const summary = await (await fetch(base + "/insights/summary")).json() as DashboardResponse;
+    const predictions = await (await fetch(base + "/insights/predictions")).json() as { data: unknown[] };
+    expect(summary.data.predictions).toEqual(predictions.data);
+    expect(predictions.data).toContainEqual(expect.objectContaining({ service: "Checkout", riskLevel: "high", timeToFailure: "Not estimated" }));
+  });
+  it("does not count recovered alerts or deployments as fresh predicted failures", async () => {
+    const { data } = await (await fetch(base + "/insights/predictions")).json() as { data: unknown[] };
+    expect(data).toEqual([]);
+    mocks.events = [1, 2, 3].map(id => ({ id, serviceId: 1, type: "deployment", severity: "critical", createdAt: new Date() }));
+    expect((await (await fetch(base + "/insights/predictions")).json() as { data: unknown[] }).data).toEqual([]);
   });
 });

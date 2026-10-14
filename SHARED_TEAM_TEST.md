@@ -1,307 +1,49 @@
-# Shared-team verification
+# Test a shared workspace
 
-Use the isolated Context app at http://127.0.0.1:31800 with the configured Clerk
-development instance. Keep credentials and sign-in codes out of reports/chat.
-Uploaded directory contacts describe onboarding context; Clerk membership controls
-actual access.
+A shared workspace is useful only if its members can see the right records and its controls respect their access. This guide follows a team from creation to investigation, then checks what happens when membership or an ingestion key changes.
 
-## Current baseline
+Use a Clerk Development instance, the isolated local app, and synthetic data. Directory contacts uploaded for onboarding are separate from Clerk membership; adding a directory entry does not grant access.
 
-The original Admin's personal workspace contains five healthy demo services, 20 timeline
-items and the existing Monitoring key. These records were preserved. The user
-approved creation of Context Test; its creator is shown as Admin in Clerk's
-switcher. It began empty, with no services, timeline or webhook keys.
+## Begin with two accounts
 
-## Live checks
+Sign in with the first account and create an empty test organization. Its creator should be an Admin. Record what is already in the personal workspace, then select the new team and confirm that personal services, events, and keys are absent.
 
-| Check | Expected result | Status |
-| --- | --- | --- |
-| Create Context Test | Empty shared tenant; creator has admin access | Passed live |
-| Personal → Context Test | Personal services, timeline and key metadata do not appear in the initially empty team | Passed live |
-| Admin controls | Create-key and demo controls enabled for the team admin | Passed live; no key created |
-| Team demo | Synthetic data persists only in Context Test; all nine steps complete | Passed live: 9/9, five healthy services |
-| Context Test → Personal | Original five services, history and Monitoring key remain intact | Passed live |
-| Return to Context Test | Only its own synthetic data reappears | Passed live; no personal key shown |
-| Reload active team | Selected team and its own data load correctly | Passed live |
-| Member invitation | Clerk sends the approved invitation with Member role | Passed live; listed under Invitations 1 |
-| Second account joins | Membership belongs to the intended test organization | Passed live; invitation accepted, Context Test selected, Member role confirmed |
-| Member investigation | Member can read team overview, graph, timeline, history and AI | Passed live; native Gemini full-context chat returned HTTP 200 and a valid answer after recovery work |
-| Member controls | Key creation/revocation unavailable; demo and shared Slack controls disabled | Passed live for visible controls; shared upload/reset writes covered by automated permission tests |
-| Clerk member management | Member cannot invite, change roles, edit or delete the organization | Passed live; two members correctly listed, no admin actions exposed |
-| Role lenses | Engineer/SRE/Manager selection does not change member permissions | Passed live in all three lenses; restored SRE |
-| Shared QA key creation/revocation | Admin can create and revoke the disposable team key | Passed live; first and approved replacement QA keys are revoked, zero active team keys |
-| Shared QA ingestion/replay | One info event is stored; replay adds none | Passed live with approved replacement: HTTP 200, duplicate=false then duplicate=true, same event ID and one persisted event |
-| Revoked QA delivery | A revoked key cannot ingest or change data | Passed live: HTTP 401, no count/health changes |
-| Member removal/restoration | Removed account loses the team after fresh sign-in; approved Member invitation restores access | Passed live; Admin retained, one restoration invitation sent and accepted, Member dashboard/restrictions restored |
-| Removed/demoted key issuer | Shared keys fail if the issuing Admin is removed or demoted | Mocked membership plus real HTTP/PostgreSQL transitions passed; actual Clerk issuer-role change remains unperformed |
-| Slack destinations | Preferences remain account/workspace scoped; abandoned token lookups cannot send | Automated and offline production-component checks passed; real Slack channel delivery not configured |
+Invite a designated second test account as a Member. This sends a Clerk email and grants team access when accepted, so use an intended recipient and agree on the invitation before sending it.
 
-Read-only checks of the generated local cluster found separate personal and team
-service records, each with 14 events and six messages (20 timeline entries).
-The original personal workspace has one active key; the test team has none.
-After the second account joined, its personal workspace remained empty, with
-zero services, events, messages and keys. Team counts remained unchanged.
-No event, message or dependency crosses workspace boundaries. The inspection
-validated the exact generated cluster directory and ran inside a read-only
-transaction. Evidence stays in ignored `tmp/verification/shared-tenant-isolation.json`.
-Team recovery and preserved personal-workspace screenshots are also under
-`tmp/verification/`. No production database was contacted; no credentials or
-document contents were reported.
+Sign in to Context with that second account, select the team, and check its overview, graph, timeline, history, and AI. Changing Engineer/SRE/Manager views should change the investigation surface while leaving Member permissions in place.
 
-Only use synthetic team data. Do not invite a real colleague, change membership,
-create/revoke persistent credentials, send Slack messages, or delete original
-personal data as part of an unapproved test. Ask for the specific recipient/action
-when those checks are ready. No production migrations or deployment are needed.
+## Check both the useful paths and the boundaries
 
-## Automated coverage
+| Check | Expected behavior |
+| --- | --- |
+| Personal → team → personal | Each workspace shows its own saved records. |
+| Reload the team | Selected team and its data load correctly. |
+| Member reads | Incident evidence and AI questions are available. |
+| Member admin controls | Shared uploads, demo mutations, notification settings, and key management are unavailable. |
+| Audience changes | Overview and new AI answers follow the audience; admin access is unchanged. |
+| Crafted Member write | The API rejects it even if the request body claims an admin role. |
+| Removed Member returns | After refreshing the sign-in state, team access is no longer available. |
 
-Focused verification on 2026-10-13: 27 tests across four files passed:
-signed Clerk HTTP sessions, verified tenant selection, organization permissions,
-and webhook-key authorization/lifecycle. No external membership or invitation
-was changed by these checks.
+Use an empty test team for Run demo because it replaces that team's incident records. Check that all nine synthetic steps complete, then return to the personal workspace and confirm its records remain intact.
 
-Existing signed Clerk SDK HTTP tests reject forged/expired sessions, trust signed
-organization/role claims, reject member writes despite forged admin payloads, and
-restore the original personal tenant when no team is selected. Disposable
-PostgreSQL tests cover concurrent shared-tenant mapping and actual onboarding
-user/workspace isolation. Webhook tests cover current membership rechecks and
-revocation. These support the live checks above; they do not replace two-account
-browser verification.
+## Exercise a disposable ingestion key
 
-The user designated the second test account, explicitly approved its Member
-invitation and completed sign-in in Brave. The approved invitation was accepted
-and Context Test selected. Clerk confirms the signed-in account is Member and
-the creator remains Admin. No additional invitations were sent. Personal email
-addresses are excluded from repository notes.
+With the Admin account, agree on one synthetic event and create a short-lived test key. Send an informational event that does not change service health. Replay the same external event ID and confirm that the response identifies a duplicate and the timeline contains one record.
 
-Live verification found a clipped organization-management dialog: it inherited
-the compact 420px authentication-card width. Its separate Clerk appearance now
-allows 960px, bounded to the viewport. At the tested desktop size the members
-table's client and scroll widths both measured 649px, with no page overflow.
-The disabled shared demo control is also visibly dimmed. Dashboard typecheck and
-production build passed. Smaller viewport rendering was not verified in this pass.
-Screenshots: `tmp/verification/context-member-manager.png`,
-`tmp/verification/context-member-graph.png` and
-`tmp/verification/context-member-dashboard.png`.
+Revoke the key, then send a new delivery with it. The request should fail and add no records. Store secrets in a private local file while testing, and report only status codes, record counts, and the outcome.
 
-The live incident question reached the selected team's backend and the configured
-Gemini model, which returned HTTP 429 after three attempts. Key/model availability
-was confirmed separately, but successful Member answer generation remains
-unverified until provider quota/rate limits permit it. No provider settings changed.
-Direct browser navigation to a protected API was blocked by the client; crafted
-live Member mutation requests were not performed or bypassed. Server enforcement
-is supported by the focused signed-session tests, separately from UI verification.
+A shared key also depends on its issuing user remaining a team Admin. Removing or demoting that issuing account should reject later deliveries. Provider failures must reject delivery rather than bypass the membership check. Plan this as a separate test with a remaining Admin and a clear restoration path.
 
-The second test account is signed in as Member of Context Test after the approved
-removal/restoration test. Both approved disposable keys are revoked. Distinct
-Slack destinations remain unconfigured; a removed/demoted key issuer remains a
-separate extended live check.
+## Remove and restore a test Member
 
-Follow-up: Gemini HTTP 429 now produces a safe HTTP 503 message explaining
-provider rate/quota exhaustion and recommending a later retry. The real Member
-browser shows this message. Twelve new HTTP regressions cover all nine AI routes,
-private-error redaction, permanent failures and successful Member retry after
-provider recovery; the focused AI suite passes 84 tests across five files.
-API typecheck/build and restarted local smoke checks pass. Provider quota has not
-been changed; a successful live answer remains unverified. Screenshot:
-`tmp/verification/context-member-ai-rate-limit.png`.
+Temporary removal changes that account's access, and restoration may send another invitation email. Agree on both actions before starting. Keep the original Admin in place, remove the test Member, verify lost access after refreshing sign-in, then restore the intended Member role and recheck restrictions.
 
-## Approved live test procedures
+## What has already been exercised
 
-The user approved steps 1–3 for one disposable key. The first attempt stopped
-after its initial ingestion returned HTTP 401, and that key was revoked. The user
-then specifically approved one replacement key, and all three steps passed live
-after the issuer-filter fix. Step 4 was subsequently approved and completed live.
-The plan uses only Context
-Test and the generated local database; the original personal Monitoring key is
-outside the test scope.
+The local Context Test organization was created with an Admin and a second Member. Personal/team switching, the synthetic incident, reload behavior, Member investigation, and visible admin restrictions passed live checks.
 
-1. Using the original Admin account, create one key named `Context Test QA`.
-   Keep its one-time secret private, use it only against the local ingestion route
-   and retain no secret in screenshots, repository files or chat.
-2. Submit one synthetic `info` event for the existing Payments API, with a unique
-   `eventId` and no `status` change. Replay the same event and verify one persisted
-   record plus a duplicate response. This adds one team timeline entry.
-3. Revoke only `Context Test QA`. A subsequent delivery with a different event ID
-   must fail with HTTP 401 and add no data. Verify personal data/key counts remain
-   unchanged and the QA key has no active access.
-4. Separately, after specific approval, temporarily remove the second test Member.
-   Refresh that account's session and verify it cannot select/read Context Test.
-   Restore access by sending one new Member invitation to the same user-designated
-   account; the user accepts it and signs in. Do not promote either account or
-   remove the creator. This does not test a removed admin's issued-key lifecycle;
-   current issuer-membership checks remain covered by automated tests.
+An approved disposable-key test saved one informational event, recognized its replay, and rejected delivery after revocation. Temporary Member removal and restoration also passed. Both disposable team keys were revoked afterward.
 
-If an authorized check fails, stop before further writes, preserve safe failure
-metadata and revoke the QA key if it was created. Restore the Member invitation
-only if that restoration was explicitly authorized. Synthetic evidence is retained;
-no deletion/reset is needed.
+Native AI generation later succeeded for the Member. Account/workspace notification isolation and issuing-admin membership transitions are covered by automated tests. Actual Slack delivery and an actual Clerk role transition for a key issuer remain separate live checks.
 
-## First QA-key attempt and issuer-filter correction
-
-The approved `Context Test QA` key was created by the original Admin through the
-real application UI. Its initial info delivery returned HTTP 401 and persisted
-no event; replay was not attempted. The key was immediately revoked through the
-UI. A new delivery with that revoked key also returned 401, with no changes to
-services, events, messages or personal key counts. The shared workspace still
-has five healthy services, 14 events, six messages and zero active keys. The
-one-time secret was kept out of outputs/screenshots and its temporary file was
-removed after the rejected-delivery check.
-
-Read-only Clerk verification reproduced the cause: `user_id[]` was ignored, so
-`limit=1` returned the newer Member rather than the key's Admin issuer. The query
-now uses `user_id`, consistent with the installed SDK's repeated-parameter
-serialization and Clerk's documented issuer filter. Corrected live verification
-returns exactly the matching Admin. The exact issuer ID and admin role are still
-both required; other users, removed/demoted issuers and provider errors cannot
-authorize a shared key. No role or membership change was made.
-
-Two regressions cover a newer Member preceding the issuer and an unrelated Admin
-being rejected. The focused signed-session/key/ingestion suite passes 39 tests
-across six files. API typecheck/build and restarted local smoke checks pass.
-Successful shared ingestion and replay remain pending a specifically approved
-replacement key. Safe evidence: `tmp/verification/shared-key-first-attempt.json`,
-`tmp/verification/qa-membership-inspection.json`,
-`tmp/verification/qa-membership-filter-fixed.json` and
-`tmp/verification/context-qa-key-revoked.png`.
-
-## Approved replacement-key test completed
-
-The user specifically approved one replacement `Context Test QA` key. It was
-created through the signed-in Admin UI after the issuer-filter fix was activated.
-The initial synthetic Payments API info event returned HTTP 200 with
-`duplicate=false`; replay returned HTTP 200 with `duplicate=true` and the same
-event ID. Shared event count increased exactly once, from 14 to 15. The five
-services' statuses and update timestamps were unchanged, as were all personal
-workspace service/event/message/active-key counts.
-
-The replacement key was revoked through the real UI. Delivery with a different
-event ID then returned HTTP 401 and changed no database state. The team has zero
-active keys. Its dashboard refresh shows Timeline 21 (15 events and six messages)
-and the key-revoked status. Read-only final checks confirm five healthy services,
-unchanged personal data and no cross-workspace event/message/dependency links.
-The private secret file was removed and in-memory test references discarded.
-
-Safe evidence: `tmp/verification/shared-key-lifecycle.json`,
-`tmp/verification/shared-tenant-isolation.json` and
-`tmp/verification/context-qa-key-complete.png`. No further key, role change,
-invitation, membership removal, Slack message or production mutation occurred.
-At the end of the key test, Member removal/restoration and distinct Slack
-destinations remained unverified. The following section records the subsequently
-approved and completed Member check. Live AI answer generation still awaits
-Gemini quota/rate recovery.
-
-## Approved Member removal/restoration completed
-
-The user explicitly approved temporary removal of the designated second Member
-and one replacement Member invitation. The Admin removed only that account using
-Context Test's member menu. Clerk then showed Members 1, with the creator still
-Admin. After a fresh sign-in with the removed account, its dashboard showed only
-the empty personal workspace. Context Test was absent from the switcher, and no
-shared services or timeline were shown.
-
-The original Admin sent exactly one approved restoration invitation. Clerk
-reported success and listed the intended recipient with Member role under
-Invitations 1. After sign-in as that recipient, its pending Context Test invitation
-was accepted with Join and the team selected. Clerk confirms Member role; the
-dashboard loads five healthy services and Timeline 21. Shared demo and Slack
-controls remain disabled, and webhook key creation/revocation stays unavailable.
-The account remains signed in to this restored workspace.
-
-Final read-only checks confirm unchanged personal and shared data, zero active
-team keys and zero cross-workspace event/message/dependency links. No additional
-event, credential or role promotion was created during this membership check.
-This verifies fresh-session UI and normal dashboard access; crafted requests and
-reuse of an unexpired pre-removal token were not tested. Live removed/demoted key
-issuer behavior remains separate from this ordinary-Member check.
-
-Private proof is under ignored `tmp/verification/`: `shared-member-access.json`,
-`context-member-removed.png`, `context-member-access-removed.png`,
-`context-member-restoration-invited.png` and `context-member-access-restored.png`.
-Personal email addresses remain excluded from repository notes. No production
-database, migration, deployment or Slack destination was changed.
-
-## Member AI retest and provider-unavailability feedback
-
-The completed membership documentation was committed as `e9e4fe5` after the
-automatic approval review's reported retry time passed. The earlier usage-limit
-review failure did not execute its Git action; the successful retry used the
-normal approval review.
-
-The later restored-Member question reached Gemini but exhausted three attempts
-with upstream HTTP 503. AI error responses now also map provider HTTP 5xx to a
-safe HTTP 503 message: `AI provider is temporarily unavailable. Try again later.`
-Rate/quota errors retain their distinct message, while permanent/unknown errors
-keep their safe fallback. Provider messages and credentials remain private.
-
-Four additional regressions cover 500/502/503 provider failures and successful
-Member recovery after a 503. The focused AI suite passes 88 tests across five
-files; API typecheck/build and restarted local smoke checks pass. A final real
-Member request confirms the new unavailability message in Brave. Context Test
-still has five healthy services, Timeline 21 and restricted Member controls.
-Proof: `tmp/verification/context-member-ai-unavailable.png`.
-
-Successful live AI answer generation remains blocked by Gemini availability;
-no provider settings or credentials were changed. Distinct live Slack destinations
-and removed/demoted key-issuer transitions remain unverified.
-
-## Offline Slack destination isolation completed
-
-The production Slack settings component was exercised in Brave against a
-loopback-only receiver, using synthetic sessions and fake destinations on a
-separate browser origin. Personal, team A, team B and another Admin's team A
-preferences began empty independently and retained their correct URLs on return.
-Exactly four test messages were captured locally, one for each destination.
-No request was forwarded to Slack, and real saved preferences were untouched.
-
-This check exposed a delayed-token race. Settings test messages and automatic
-incident notifications now verify their session/workspace lifetime after token
-lookup. Workspace/account changes, role changes and unmount invalidate pending
-work; old responses cannot mark the new scope successful. Already dispatched
-requests may finish. The settings modal also guards Member actions itself and
-prevents duplicate pending clicks.
-
-Browser checks held token lookup while switching teams and while changing the
-synthetic Admin role to Member. Releasing those tokens left the capture count at
-four; Member Send/Save controls were disabled. Eight new regression tests cover
-routing, abandoned token lookups, stale responses and invalid destinations. The
-focused routing/preferences/notify/signed-session suite passes 29 tests across
-four files. Dashboard typecheck and production build pass.
-
-Private offline evidence: `tmp/verification/slack-ui-captured.json` and
-`tmp/verification/context-slack-isolation.png`. The temporary receiver was stopped
-after verification. Server URL restrictions and authorization remain unchanged.
-Real Slack delivery and live removed/demoted issuer transitions remain separate
-outstanding checks; successful live AI answers still await provider recovery.
-
-## Continuous local follow-through
-
-Native Gemini is an explicit backend transport option; no key enters the client,
-URL or error text. The existing local key is retained, with local model changed
-to the catalog-listed `gemini-3.5-flash-lite`. Synthetic root cause, incident
-answer, postmortem and brief services passed. Full-context browser generation
-needed more time than short probes: native attempts now allow up to 50 seconds,
-while all retries share a 55-second budget. The final real Member chat returned
-HTTP 200 after 45,506 ms and displayed a schema-valid answer. Team still shows
-Timeline 21 and disabled Member administration controls. Proof:
-`tmp/verification/context-native-ai-working.png`.
-
-Timeouts (408/504), outages (5xx) and quota/rate limits have distinct safe messages.
-Connection/timeouts use stable statuses for retries rather than relying on
-bundled class names. Native thinking text is excluded from returned content;
-empty/truncated/schema-invalid output cannot be reported as an answer. Successful
-generation is not a calibration or permanent provider-availability guarantee.
-
-An added disposable PostgreSQL/HTTP test exercises issuer Admin, demoted Member,
-removed, unrelated Admin, provider outage, restored Admin and revoked states.
-Only the two authorized-state synthetic events persist; personal records are
-unchanged. Membership responses are simulated without touching the real Clerk
-organization. The separate GitHub HTTP/database check proves replay suppression,
-distinct rerun/matrix events and revoked-key rejection without declaring healthy
-service status. The complete disposable suite now passes 13 tests.
-
-The existing local database was backed up and restored into a new UTF8 database.
-Row counts and content digests match, event tenant boundaries remain intact and
-only the disposable restored database was dropped. Real Slack delivery and real
-Clerk issuer-role changes remain unperformed. Online deployment was explicitly
-deferred by the user; no hosted secrets, production database or GitHub push changed.
+These results are local development evidence. The [verification record](VERIFICATION_2026-10-14.md) separates browser checks from HTTP and database tests; [remaining work](REMAINING_WORK.md) lists the external connections still needed.

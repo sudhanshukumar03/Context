@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
@@ -28,8 +28,10 @@ async function verify() {
     GEMINI_BASE_URL: "https://generativelanguage.googleapis.com/v1beta/openai/", OPENAI_API_KEY: "", AI_INTEGRATIONS_OPENAI_API_KEY: "" });
   const require = createRequire(resolve(root, "artifacts/api-server/package.json"));
   const { build } = require("esbuild");
-  const directory = resolve(root, "tmp/local-test");
-  await mkdir(directory, { recursive: true });
+  const temporaryRoot = resolve(root, "tmp");
+  await mkdir(temporaryRoot, { recursive: true });
+  const directory = await mkdtemp(resolve(temporaryRoot, "ai-probe-"));
+  try {
   const entry = resolve(directory, "ai-probe.mjs");
   await build({ stdin: { contents: `export { requestRootCause, requestIncidentAnswer, requestPostmortem } from './artifacts/api-server/src/services/incident-ai.ts';
 export { generateContextBrief } from './artifacts/api-server/src/services/ai.service.ts';`, resolveDir: root, loader: "ts" },
@@ -46,6 +48,10 @@ export { generateContextBrief } from './artifacts/api-server/src/services/ai.ser
   await service.generateContextBrief({ role: "backend", documents: [{ title: "Synthetic runbook", content: "Inspect database latency and compare the deployment timeline before recommending a rollback." }], teamData: [], tasks: [] });
   console.log("PASS: Actual brief service returned schema-valid provider output.");
   console.log("Only synthetic test prompts were sent. No application documents or incident records were read.");
+  } finally {
+    // Only this invocation's generated probe is disposable; saved setup lives in runtime/.
+    await rm(directory, { recursive: true });
+  }
 }
 try { await verify(); } catch (error) {
   const status = typeof error?.status === "number" ? ` (HTTP ${error.status})` : "";

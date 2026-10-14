@@ -11,11 +11,11 @@
     "./audio": "./src/audio/index.ts"
   },
   "dependencies": {
-    "openai": "^6.27.0",
-    "p-limit": "^7.3.0",
+    "openai": "^6.49.0",
+    "p-limit": "^7.3.3",
     "p-retry": "^7.1.1"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.20.5"
   }
 }

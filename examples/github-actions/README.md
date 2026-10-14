@@ -1,36 +1,36 @@
-# Connect an actual deployment workflow
+# Report a deployment to Context
 
-Copy `context-deployment.yml` into `.github/workflows/` in the repository that
-deploys your services. Add two Actions secrets there:
+Your existing workflow deploys a service. This example adds a small reporting job afterward so Context can place that deployment beside alerts and response records.
 
-- `CONTEXT_INGEST_URL`: your HTTPS Context URL ending in `/api/ingest/github-actions`.
-- `CONTEXT_WEBHOOK_KEY`: an active Context ingestion key created by the workspace Admin.
+## Connect the reporting job
 
-Add this job to the workflow that already contains your real `deploy` job:
+Copy `context-deployment.yml` into the deployment repository's `.github/workflows/` directory. Add two Actions secrets:
+
+- `CONTEXT_INGEST_URL`: the HTTPS Context endpoint ending in `/api/ingest/github-actions`.
+- `CONTEXT_WEBHOOK_KEY`: an active key created by that workspace's Admin.
+
+Add this job under `jobs` in the workflow that contains your real `deploy` job:
 
 ```yaml
-  context-report:
-    needs: deploy
-    if: ${{ always() && (needs.deploy.result == 'success' || needs.deploy.result == 'failure') }}
-    uses: ./.github/workflows/context-deployment.yml
-    with:
-      service: payments-api
-      environment: staging
-      status: ${{ needs.deploy.result == 'success' && 'success' || 'failure' }}
-    secrets:
-      CONTEXT_INGEST_URL: ${{ secrets.CONTEXT_INGEST_URL }}
-      CONTEXT_WEBHOOK_KEY: ${{ secrets.CONTEXT_WEBHOOK_KEY }}
+context-report:
+  needs: deploy
+  if: ${{ always() && (needs.deploy.result == 'success' || needs.deploy.result == 'failure') }}
+  uses: ./.github/workflows/context-deployment.yml
+  with:
+    service: payments-api
+    environment: staging
+    status: ${{ needs.deploy.result }}
+  secrets:
+    CONTEXT_INGEST_URL: ${{ secrets.CONTEXT_INGEST_URL }}
+    CONTEXT_WEBHOOK_KEY: ${{ secrets.CONTEXT_WEBHOOK_KEY }}
 ```
 
-Replace the service/environment and `deploy` job ID with actual values. Adding
-the reusable workflow alone does not deploy anything or emit an event. Do not
-claim successful deployment from a placeholder `echo` step. Cancelled/skipped
-deployments are not reported as failures by this example.
+Replace the service, environment, and job ID with the values from your deployment. Copying the example does not deploy a service or start a workflow by itself.
 
-Verify one actual staging deployment in Context's timeline. Delivery retries use
-the same repository/run/attempt/service/environment/status identity, so replay
-adds no event. Matrix services and reruns have distinct identities. Deployment
-success is evidence; it never marks a service healthy. Revoke the disposable test
-key after verification. Local tests cover payload validation, replay and key
-authorization; an actual hosted delivery still requires the repository, HTTPS
-destination and secrets. No repository secrets are printed or committed.
+## Follow the record into the timeline
+
+Run an actual staging deployment and find its record in Context. Retrying the same repository/run/attempt/service/environment/status identity should add no duplicate. Reruns and matrix services have separate identities.
+
+The record reports deployment evidence; it does not mark the service healthy. Cancelled or skipped deployment jobs are not reported by this caller.
+
+Use a disposable key for the first check and revoke it afterward. Hosted delivery needs a reachable HTTPS installation. [Setup and deployment](../../DEPLOYMENT.md) covers that installation and the ingestion key lifecycle.

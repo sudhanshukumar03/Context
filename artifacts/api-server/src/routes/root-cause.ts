@@ -1,3 +1,4 @@
+import { serviceRiskSignals } from "../services/incident-risk.js";
 import { z } from "zod";
 import { Router, type Request, type Response } from "express";
 import { eq, desc, gte, and, inArray } from "drizzle-orm";
@@ -90,7 +91,9 @@ Rules:
 - cause must be ONE sentence, laser-precise, grounded in the event data
 - confidence: 0.0–1.0 based on evidence density (high if deployment + failures correlate)
 - suggestedFixes: 3 items, specific and executable, prioritised by blast-radius reduction
-- estimatedLoss: reason about which services are revenue-generating (checkout, payments = ~$200/min each)
+- estimatedLoss: report unknown; service names and elapsed time do not establish financial loss
+- Treat the identified service and dependency reachability as hypotheses; a graph does not establish causal propagation
+- Do not invent infrastructure commands, confirmed causes, business metrics, or recovery estimates
 - reasoning: exactly 3 steps, each citing a concrete event, timestamp, or dependency edge
 - No hallucination — every claim must map to the provided context`;
 
@@ -120,7 +123,7 @@ function deduplicateEvents<T extends { serviceId: number | null; type: string; t
   // events arrive newest-first; we want to keep the most recent per bucket
   for (const e of events) {
     const bucket = Math.floor(new Date(e.createdAt).getTime() / WINDOW_MS);
-    const key = `${e.serviceId ?? "sys"}-${e.type}-${bucket}`;
+    const key = JSON.stringify([e.serviceId, e.type, e.title, bucket]);
     if (!seen.has(key)) seen.set(key, e); // first seen = most recent (list is newest-first)
   }
   return [...seen.values()];
@@ -178,11 +181,11 @@ router.get("/insights/root-cause", requireAuth, async (req: Request, res: Respon
     const [rawEvents, recentMessages] = await Promise.all([
       db.select().from(serviceEvents)
         .where(and(eq(serviceEvents.organizationId, orgId), gte(serviceEvents.createdAt, since)))
-        .orderBy(desc(serviceEvents.createdAt))
+        .orderBy(desc(serviceEvents.createdAt), desc(serviceEvents.id))
         .limit(40),
       db.select().from(serviceMessages)
         .where(and(eq(serviceMessages.organizationId, orgId), gte(serviceMessages.createdAt, since)))
-        .orderBy(desc(serviceMessages.createdAt))
+        .orderBy(desc(serviceMessages.createdAt), desc(serviceMessages.id))
         .limit(20),
     ]);
 
@@ -261,27 +264,20 @@ router.get("/insights/root-cause", requireAuth, async (req: Request, res: Respon
     const triggerEvent = rootEvents.find((e) => e.type === "deployment" || e.type === "failure");
     const heuristicCause = triggerEvent?.title ?? `${rootSvc.name} is in a ${rootSvc.status} state`;
     const heuristicFixes: string[] = [];
-    if (rootEvents.some((e) => e.type === "deployment")) heuristicFixes.push("Roll back last deployment");
+    if (rootEvents.some((e) => e.type === "deployment")) heuristicFixes.push("Compare the latest deployment with failures before considering rollback");
     if (rootEvents.some((e) => e.title.toLowerCase().includes("retry"))) heuristicFixes.push("Throttle retry rate");
-    heuristicFixes.push(`Restart ${rootSvc.name}`);
-    if (cascadePath.length > 1) heuristicFixes.push(`Enable circuit breaker on ${cascadePath[1]}`);
-    const lossMap: Record<string, number> = { checkout: 12000, payments: 8000, "payments api": 8000, database: 5000 };
-    let lossPerHour = 0;
-    for (const s of cascadePath) {
-      const k = s.toLowerCase();
-      for (const [kw, v] of Object.entries(lossMap)) if (k.includes(kw)) lossPerHour += v;
-    }
-    if (!lossPerHour) lossPerHour = 3000;
-    const heuristicLoss = `~$${Math.round((lossPerHour * incidentMinutes) / 60).toLocaleString()} (${incidentMinutes}min × $${(lossPerHour / 60).toFixed(0)}/min)`;
+    heuristicFixes.push(`Inspect ${rootSvc.name} logs and health before choosing a remediation`);
+    if (cascadePath.length > 1) heuristicFixes.push("Review caller dependencies and containment options");
+    const heuristicLoss = "Unknown ? measured financial impact has not been supplied.";
     const signalCount = rootEvents.length + (triggerEvent ? 2 : 0) + (cascadePath.length > 1 ? 1 : 0);
     const heuristicConfidence = Math.min(0.95, 0.5 + signalCount * 0.08);
 
     ok(res, {
-      cause: llm?.cause ?? heuristicCause,
+      cause: llm?.cause ?? `Investigation candidate: ${heuristicCause}. Causality is unconfirmed.`,
       confidence: llm?.confidence ?? heuristicConfidence,
       impactedServices: impacted,
       cascadePath,
-      estimatedLoss: llm?.estimatedLoss ?? heuristicLoss,
+      estimatedLoss: heuristicLoss,
       suggestedFixes: llm?.suggestedFixes ?? heuristicFixes,
       reasoning: llm?.reasoning ?? [],
       incidentStartedAt: firstCritical?.createdAt ?? null,
@@ -316,28 +312,7 @@ router.get("/insights/predictions", requireAuth, async (req: Request, res: Respo
       .where(and(eq(serviceEvents.organizationId, orgId), gte(serviceEvents.createdAt, since)));
 
     const svcMap = new Map(allServices.map((s) => [s.id, s]));
-    const eventCountBySvc = new Map<number, number>();
-    for (const e of recentEvents) {
-      if (e.serviceId) eventCountBySvc.set(e.serviceId, (eventCountBySvc.get(e.serviceId) ?? 0) + 1);
-    }
-
-    const predictions: Array<{ service: string; serviceId: number; riskLevel: string; timeToFailure: string; reason: string }> = [];
-
-    for (const svc of allServices) {
-      if (svc.status === "failing") continue;
-      const deps = allDeps.filter((d) => d.serviceId === svc.id).map((d) => svcMap.get(d.dependsOnId)).filter(Boolean) as typeof allServices;
-      const failingDeps = deps.filter((d) => d.status === "failing");
-      const degradedDeps = deps.filter((d) => d.status === "degraded");
-      const eventCount = eventCountBySvc.get(svc.id) ?? 0;
-
-      if (failingDeps.length > 0 && svc.status !== "at_risk") {
-        predictions.push({ service: svc.name, serviceId: svc.id, riskLevel: "high", timeToFailure: "< 5 min", reason: `Depends on failing ${failingDeps[0].name}` });
-      } else if (svc.status === "at_risk" || degradedDeps.length > 0) {
-        predictions.push({ service: svc.name, serviceId: svc.id, riskLevel: "medium", timeToFailure: "10–30 min", reason: degradedDeps.length ? `Upstream ${degradedDeps[0].name} is degraded` : "Current status trending downward" });
-      } else if (eventCount >= 3) {
-        predictions.push({ service: svc.name, serviceId: svc.id, riskLevel: "low", timeToFailure: "> 1 hour", reason: `${eventCount} alerts in last 6h — elevated noise` });
-      }
-    }
+    const predictions = serviceRiskSignals(allServices, allDeps, recentEvents);
 
     ok(res, predictions.slice(0, 4));
   } catch (err) {
@@ -357,7 +332,7 @@ router.get("/ai/auto-insights", requireAuth, async (req: Request, res: Response)
     const allServices = await db.select().from(services).where(eq(services.organizationId, orgId));
     const recentEvents = await db.select().from(serviceEvents)
       .where(and(eq(serviceEvents.organizationId, orgId), gte(serviceEvents.createdAt, since)))
-      .orderBy(desc(serviceEvents.createdAt));
+      .orderBy(desc(serviceEvents.createdAt), desc(serviceEvents.id));
     const shortEvents = recentEvents.filter((e) => new Date(e.createdAt) >= shortWindow);
 
     const insights: Array<{ type: string; title: string; description: string; severity: string; affectedServices: string[] }> = [];
@@ -372,20 +347,20 @@ router.get("/ai/auto-insights", requireAuth, async (req: Request, res: Response)
     }
     for (const [svcId, evts] of byService) {
       if (evts.length >= 2 && svcMap.get(svcId)?.status !== "healthy" && svcMap.has(svcId)) {
-        insights.push({ type: "retry_storm", title: "Retry storm detected", description: `${svcMap.get(svcId)?.name ?? "Unknown"} has ${evts.length} failure events in the last 20 minutes — likely a retry loop amplifying the incident.`, severity: "critical", affectedServices: [svcMap.get(svcId)?.name ?? "Unknown"] });
+        insights.push({ type: "retry_storm", title: "Repeated failures to review", description: `${svcMap.get(svcId)?.name ?? "Unknown"} has ${evts.length} failure events in the last 20 minutes — likely a retry loop amplifying the incident.`, severity: "critical", affectedServices: [svcMap.get(svcId)?.name ?? "Unknown"] });
       }
     }
 
     const unhealthy = allServices.filter((s) => s.status !== "healthy");
     if (unhealthy.length >= 3) {
-      insights.push({ type: "cascade", title: "Cascading failure in progress", description: `${unhealthy.length} services are currently degraded or failing. Failures are propagating through the dependency graph.`, severity: "critical", affectedServices: unhealthy.map((s) => s.name) });
+      insights.push({ type: "cascade", title: "Multiple services need attention", description: `${unhealthy.length} services are currently degraded or failing. Review the dependency graph to check for related failures.`, severity: "critical", affectedServices: unhealthy.map((s) => s.name) });
     }
 
     const dbSvc = allServices.find((s) => s.name.toLowerCase().includes("database") || s.name.toLowerCase().includes("db"));
     if (dbSvc && dbSvc.status !== "healthy") {
       const dbEvents = recentEvents.filter((e) => e.serviceId === dbSvc.id);
       if (dbEvents.some((e) => e.description?.toLowerCase().includes("pool") || e.description?.toLowerCase().includes("connection"))) {
-        insights.push({ type: "db_saturation", title: "Database connection pool saturation", description: "Connection pool is under pressure. Upstream retry storms are holding connections open.", severity: "warning", affectedServices: [dbSvc.name] });
+        insights.push({ type: "db_saturation", title: "Database connection pool saturation", description: "Database events mention connections or pooling. Check utilization and logs before concluding saturation or its cause.", severity: "warning", affectedServices: [dbSvc.name] });
       }
     }
 
@@ -409,7 +384,7 @@ router.get("/ai/auto-insights", requireAuth, async (req: Request, res: Response)
       insights.push({ type: "service_health", title: "Services need attention", description: `${unhealthy.length} service(s) are currently degraded or failing.`, severity: unhealthy.some((s) => s.status === "failing") ? "critical" : "warning", affectedServices: unhealthy.map((s) => s.name) });
     }
     if (!insights.length) {
-      insights.push({ type: "healthy", title: "No anomalies detected", description: "All services are operating within normal parameters.", severity: "info", affectedServices: [] });
+      insights.push({ type: "healthy", title: "No anomalies detected", description: allServices.length ? "All recorded services currently report healthy status." : "No services are registered; connect telemetry to assess service health.", severity: "info", affectedServices: [] });
     }
 
     ok(res, insights);

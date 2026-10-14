@@ -1,14 +1,14 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { validateLocalConfig } from "./local-test-config.mjs";
+import { readLocalConfig } from "./local-runtime.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const config = validateLocalConfig(JSON.parse(await readFile(resolve(root, "tmp/local-test/config.json"), "utf8")), root);
+const config = await readLocalConfig(root);
 const { Client } = createRequire(resolve(root, "lib/db/package.json"))("pg");
 const source = `context_local_${config.runId}`;
 const clientOptions = { host: "127.0.0.1", port: config.databasePort, user: "context_test", connectionTimeoutMillis: 5000 };
@@ -45,7 +45,8 @@ try {
     const suffix = randomBytes(4).toString("hex");
     const replacement = `${source}_u8_${suffix}`;
     const archive = `${source}_old_${suffix}`;
-    const backup = resolve(root, "tmp/local-test", `encoding-backup-${suffix}.dump`);
+    await mkdir(resolve(root, "runtime/backups/encoding"), { recursive: true });
+    const backup = resolve(root, "runtime/backups/encoding", `encoding-backup-${suffix}.dump`);
     const commandEnv = { ...process.env };
     for (const name of Object.keys(commandEnv)) if (name.startsWith("PG")) delete commandEnv[name];
     const flags = ["--host=127.0.0.1", `--port=${config.databasePort}`, "--username=context_test", "--no-password"];
@@ -64,7 +65,7 @@ try {
     const remaining = await admin.query("SELECT count(*)::int AS count FROM pg_stat_activity WHERE datname=ANY($1::text[])", [[source, replacement]]);
     if (remaining.rows[0].count !== 0) throw new Error("A connection appeared during repair; original database preserved");
     // Persist recovery information before either rename. Never drop the original.
-    await writeFile(resolve(root, "tmp/local-test", `encoding-repair-${suffix}.json`), JSON.stringify({ source, replacement, archive, backup, verifiedTables: before.tables.length }, null, 2), { flag: "wx" });
+    await writeFile(resolve(root, "runtime/backups/encoding", `encoding-repair-${suffix}.json`), JSON.stringify({ source, replacement, archive, backup, verifiedTables: before.tables.length }, null, 2), { flag: "wx" });
     await admin.query("BEGIN");
     try {
       await admin.query(`ALTER DATABASE ${quote(source)} RENAME TO ${quote(archive)}`);

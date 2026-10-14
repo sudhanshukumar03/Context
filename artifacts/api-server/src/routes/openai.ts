@@ -6,8 +6,12 @@ import { resolveAiConfiguration } from "@workspace/integrations-openai-ai-server
 import { requireAuth } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
 import { z } from "zod";
+import rateLimit from "express-rate-limit";
 
 const router = Router();
+router.use("/openai", requireAuth, rateLimit({ windowMs: 60_000, limit: 20,
+  keyGenerator: req => String(req.auth!.userId), standardHeaders: true, legacyHeaders: false,
+  message: { success: false, data: null, error: "Too many conversation requests. Try again shortly." } }));
 
 const CreateConversationSchema = z.object({ title: z.string().min(1) });
 const SendMessageSchema = z.object({
@@ -33,8 +37,8 @@ router.post("/openai/conversations", requireAuth, async (req: Request, res: Resp
 });
 
 router.get("/openai/conversations/:id/messages", requireAuth, async (req: Request, res: Response) => {
-  const id = parseInt(String(req.params.id), 10);
-  if (isNaN(id)) { fail(res, "Invalid conversation id"); return; }
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) { fail(res, "Invalid conversation id"); return; }
 
   try {
     const [conv] = await db.select().from(conversations).where(eq(conversations.id, id)).limit(1);
@@ -49,8 +53,8 @@ router.get("/openai/conversations/:id/messages", requireAuth, async (req: Reques
 });
 
 router.post("/openai/conversations/:id/messages", requireAuth, async (req: Request, res: Response) => {
-  const id = parseInt(String(req.params.id), 10);
-  if (isNaN(id)) { fail(res, "Invalid conversation id"); return; }
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) { fail(res, "Invalid conversation id"); return; }
 
   const parsed = SendMessageSchema.safeParse(req.body);
   if (!parsed.success) { fail(res, "content is required"); return; }
@@ -76,6 +80,9 @@ router.post("/openai/conversations/:id/messages", requireAuth, async (req: Reque
     res.setHeader("Connection", "keep-alive");
 
     let fullResponse = "";
+    const controller = new AbortController();
+    res.on("close", () => controller.abort());
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(60_000)]);
     const stream = await openai.chat.completions.create({
       model: resolveAiConfiguration().model,
       max_completion_tokens: 8192,
@@ -84,7 +91,7 @@ router.post("/openai/conversations/:id/messages", requireAuth, async (req: Reque
         ...chronologicalHistory.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
       ],
       stream: true,
-    });
+    }, { signal, timeout: 60_000, maxRetries: 0 });
 
     for await (const chunk of stream) {
       const delta = chunk.choices[0]?.delta?.content;

@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
+import rateLimit from "express-rate-limit";
 import { Router, type Request, type Response } from "express";
 import bcrypt from "bcryptjs";
-import { eq, and, gte } from "drizzle-orm";
+import { eq, and, gte, sql } from "drizzle-orm";
 import { db, users, organizations, refreshTokens } from "@workspace/db";
 import { z } from "zod";
 import {
@@ -14,17 +16,20 @@ import { requireAuth } from "../middleware/auth.js";
 import { ok, fail } from "../lib/response.js";
 
 const router = Router();
+router.use("/auth", (_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
+router.use(["/auth/register", "/auth/login", "/auth/refresh"], rateLimit({ windowMs: 60_000, limit: 20,
+  standardHeaders: true, legacyHeaders: false, message: { success: false, data: null, error: "Too many authentication attempts. Try again shortly." } }));
 
 const RegisterSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8),
-  name: z.string().min(1),
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(8).refine(value => Buffer.byteLength(value, "utf8") <= 72, "Password must fit within 72 UTF-8 bytes"),
+  name: z.string().trim().min(1).max(200),
   role: z.enum(["backend", "frontend", "pm"]).default("backend"),
-  organizationName: z.string().optional(),
+  organizationName: z.string().trim().min(1).max(200).optional(),
 });
 
 const LoginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
   password: z.string(),
 });
 
@@ -42,28 +47,25 @@ router.post("/auth/register", async (req: Request, res: Response) => {
   const { email, password, name, role, organizationName } = parsed.data;
 
   try {
-    const existing = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const existing = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
     if (existing.length > 0) { fail(res, "Email already in use", 409); return; }
 
-    let orgId: number | null = null;
-    if (organizationName) {
-      const slug = organizationName.toLowerCase().replace(/[^a-z0-9]+/g, "-") + "-" + Date.now();
-      const [org] = await db.insert(organizations).values({ name: organizationName, slug }).returning();
-      orgId = org.id;
-    }
-
     const passwordHash = await bcrypt.hash(password, 12);
-    const [user] = await db.insert(users).values({ email, name, role, passwordHash, organizationId: orgId }).returning();
-
-    const accessToken = signAccessToken({ userId: user.id, organizationId: orgId, role });
-    const refreshToken = generateRefreshToken();
-    await db.insert(refreshTokens).values({
-      userId: user.id,
-      tokenHash: hashToken(refreshToken),
-      expiresAt: refreshTokenExpiresAt(),
+    const result = await db.transaction(async tx => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(4414, hashtext(${email}))`);
+      const existing = await tx.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
+      if (existing.length) return null;
+      const organization = organizationName || `${name}'s workspace`;
+      const [org] = await tx.insert(organizations).values({ name: organization,
+        slug: `workspace-${randomUUID()}` }).returning();
+      const [user] = await tx.insert(users).values({ email, name, role, passwordHash, organizationId: org.id }).returning();
+      const accessToken = signAccessToken({ userId: user.id, organizationId: org.id, role });
+      const refreshToken = generateRefreshToken();
+      await tx.insert(refreshTokens).values({ userId: user.id, tokenHash: hashToken(refreshToken), expiresAt: refreshTokenExpiresAt() });
+      return { user: safeUser(user), accessToken, refreshToken };
     });
-
-    ok(res, { user: safeUser(user), accessToken, refreshToken }, 201);
+    if (!result) { fail(res, "Email already in use", 409); return; }
+    ok(res, result, 201);
   } catch (err) {
     req.log.error({ err }, "register error");
     fail(res, "Internal server error", 500);
@@ -76,7 +78,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   const { email, password } = parsed.data;
 
   try {
-    const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const [user] = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
     if (!user) { fail(res, "Invalid credentials", 401); return; }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
@@ -103,34 +105,20 @@ router.post("/auth/refresh", async (req: Request, res: Response) => {
   const { refreshToken } = parsed.data;
 
   try {
-    const tokenHash = hashToken(refreshToken);
-    const [revoked] = await db
-      .update(refreshTokens)
-      .set({ isRevoked: true })
-      .where(and(
-        eq(refreshTokens.tokenHash, tokenHash),
-        eq(refreshTokens.isRevoked, false),
-        gte(refreshTokens.expiresAt, new Date())
-      ))
-      .returning();
-
-    if (!revoked) {
-      fail(res, "Invalid, expired, or already-revoked refresh token", 401);
-      return;
-    }
-
-    const [user] = await db.select().from(users).where(eq(users.id, revoked.userId)).limit(1);
-    if (!user) { fail(res, "User not found", 404); return; }
-
-    const newAccessToken = signAccessToken({ userId: user.id, organizationId: user.organizationId, role: user.role });
-    const newRefreshToken = generateRefreshToken();
-    await db.insert(refreshTokens).values({
-      userId: user.id,
-      tokenHash: hashToken(newRefreshToken),
-      expiresAt: refreshTokenExpiresAt(),
+    const result = await db.transaction(async tx => {
+      const [revoked] = await tx.update(refreshTokens).set({ isRevoked: true })
+        .where(and(eq(refreshTokens.tokenHash, hashToken(refreshToken)), eq(refreshTokens.isRevoked, false),
+          gte(refreshTokens.expiresAt, new Date()))).returning();
+      if (!revoked) return null;
+      const [user] = await tx.select().from(users).where(eq(users.id, revoked.userId)).limit(1);
+      if (!user) throw new Error("Refresh user is unavailable");
+      const accessToken = signAccessToken({ userId: user.id, organizationId: user.organizationId, role: user.role });
+      const replacement = generateRefreshToken();
+      await tx.insert(refreshTokens).values({ userId: user.id, tokenHash: hashToken(replacement), expiresAt: refreshTokenExpiresAt() });
+      return { accessToken, refreshToken: replacement };
     });
-
-    ok(res, { accessToken: newAccessToken, refreshToken: newRefreshToken });
+    if (!result) { fail(res, "Invalid, expired, or already-revoked refresh token", 401); return; }
+    ok(res, result);
   } catch (err) {
     req.log.error({ err }, "refresh error");
     fail(res, "Internal server error", 500);

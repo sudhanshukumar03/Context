@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateLocalConfig } from "./local-test-config.mjs";
+import { readLocalConfig } from "./local-runtime.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const config = validateLocalConfig(JSON.parse(await readFile(resolve(root, "tmp/local-test/config.json"), "utf8")), root);
+const config = await readLocalConfig(root);
 const api = `http://127.0.0.1:${config.apiPort}`;
 async function request(path, options = {}) {
   const response = await fetch(`${api}/api${path}`, { ...options, signal: AbortSignal.timeout(10000), redirect: "error" });
@@ -20,8 +19,10 @@ async function runSmoke() {
   const proxied = await fetch(`http://127.0.0.1:${config.dashboardPort}/api/healthz`, { signal: AbortSignal.timeout(10000), redirect: "error" });
   assert.equal(proxied.status, 200); assert.equal((await proxied.json()).status, "ok");
   console.log("PASS: Dashboard and its API proxy respond");
-  for (const file of ["config.json", "accounts.env", "ai.env"]) {
-    const target = resolve(root, "tmp/local-test", file).replaceAll("\\", "/");
+  for (const file of ["runtime/config/config.json", "runtime/config/accounts.env", "runtime/config/ai.env",
+    "runtime/state/processes.json", "runtime/logs/api.out", "runtime/backups/private.dump",
+    "tmp/local-test/config.json", "tmp/local-test/accounts.env", "tmp/local-test/ai.env"]) {
+    const target = resolve(root, file).replaceAll("\\", "/");
     const response = await fetch(`http://127.0.0.1:${config.dashboardPort}/@fs/${target}`,
       { signal: AbortSignal.timeout(10000), redirect: "error" });
     assert.equal(response.status, 403, "Local configuration files must not be served by Vite");

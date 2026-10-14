@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../lib/auth-session";
+import { abortable } from "../lib/abortable";
 
 type Key = { id: number; name: string; prefix: string };
+const errorMessage = (error: unknown, fallback: string) => error instanceof DOMException && error.name === "TimeoutError"
+  ? "Webhook request timed out. Please retry." : error instanceof Error ? error.message : fallback;
 export default function WebhookKeySettings() {
   const { getToken, orgId, orgRole } = useAuth();
   const canManage = !orgId || orgRole === "org:admin";
@@ -11,50 +14,61 @@ export default function WebhookKeySettings() {
   const [busy, setBusy] = useState(true);
   const [message, setMessage] = useState("Loading webhook keys…");
   const mounted = useRef(true);
+  const generation = useRef(0);
+  const workspaceController = useRef(new AbortController());
   const createButton = useRef<HTMLButtonElement>(null);
   async function request(path: string, method = "GET", body?: object, signal?: AbortSignal) {
-    const token = await getToken();
-    if (!mounted.current) throw new Error("Workspace changed. Open webhook settings in the current workspace.");
-    const response = await fetch(`/api/webhook-keys${path}`, { method, signal,
+    const started = generation.current;
+    const deadline = AbortSignal.any([workspaceController.current.signal, AbortSignal.timeout(60_000), ...(signal ? [signal] : [])]);
+    const token = await abortable(getToken(), deadline);
+    if (!mounted.current || generation.current !== started) throw new Error("Workspace changed. Open webhook settings in the current workspace.");
+    const response = await fetch(`/api/webhook-keys${path}`, { method, signal: deadline,
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: body ? JSON.stringify(body) : undefined });
     const result = await response.json() as { data: unknown; error?: string };
+    if (generation.current !== started) throw new Error("Workspace changed.");
     if (!response.ok) throw new Error(result.error || "Unable to manage webhook keys");
     return result.data;
   }
   useEffect(() => {
+    generation.current++;
     mounted.current = true;
-    setKeys([]); setSecret(null); setBusy(true); setMessage("Loading webhook keys…");
-    if (!canManage) { setBusy(false); setMessage("An organization admin can create and revoke webhook keys."); return; }
     const controller = new AbortController();
-    request("", "GET", undefined, controller.signal).then((data) => {
+    workspaceController.current = controller;
+    setKeys([]); setSecret(null); setBusy(true); setMessage("Loading webhook keys…");
+    if (!canManage) { setBusy(false); setMessage("An organization admin can create and revoke webhook keys."); }
+    else request("", "GET", undefined, controller.signal).then((data) => {
       if (!controller.signal.aborted && mounted.current) { setKeys(data as Key[]); setMessage(""); }
-    }).catch((error) => { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "Unable to load keys"); })
+    }).catch((error) => { if (!controller.signal.aborted) setMessage(errorMessage(error, "Unable to load keys")); })
       .finally(() => { if (!controller.signal.aborted && mounted.current) setBusy(false); });
-    return () => { mounted.current = false; controller.abort(); };
+    return () => { generation.current++; mounted.current = false; controller.abort(); };
   }, [getToken, orgId, canManage]);
   async function create() {
     if (busy) return;
+    const started = generation.current;
+    const isCurrent = () => mounted.current && generation.current === started;
     setBusy(true); setMessage("Creating key…");
     try {
       const key = await request("", "POST", { name }) as Key & { token: string };
-      if (!mounted.current) return;
+      if (!isCurrent()) return;
       setKeys((current) => [{ id: key.id, name: key.name, prefix: key.prefix }, ...current]); setSecret({ id: key.id, token: key.token });
       setMessage("Key created. Copy it now; it is shown only once.");
-    } catch (error) { if (mounted.current) setMessage(error instanceof Error ? error.message : "Unable to create key"); }
-    finally { if (mounted.current) setBusy(false); }
+    } catch (error) { if (isCurrent()) setMessage(errorMessage(error, "Unable to create key")); }
+    finally { if (isCurrent()) setBusy(false); }
   }
   async function revoke(id: number) {
     if (busy) return;
+    const started = generation.current;
+    const isCurrent = () => mounted.current && generation.current === started;
     setBusy(true); setMessage("Revoking key…");
     try {
       await request(`/${id}`, "DELETE");
-      if (!mounted.current) return;
+      if (!isCurrent()) return;
       setKeys((current) => current.filter((key) => key.id !== id));
       setSecret((current) => current?.id === id ? null : current); setMessage("Key revoked. It can no longer ingest events.");
       requestAnimationFrame(() => createButton.current?.focus());
-    } catch (error) { if (mounted.current) setMessage(error instanceof Error ? error.message : "Unable to revoke key"); }
-    finally { if (mounted.current) setBusy(false); }
+    } catch (error) { if (isCurrent()) setMessage(errorMessage(error, "Unable to revoke key")); }
+    finally { if (isCurrent()) setBusy(false); }
   }
   const control = "min-h-11 rounded-lg border px-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400 disabled:opacity-50";
   if (!canManage) return <p className="mt-3 text-sm" role="status">An organization admin can create and revoke webhook keys.</p>;

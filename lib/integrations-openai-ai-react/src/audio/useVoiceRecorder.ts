@@ -2,7 +2,7 @@
  * React hook for voice recording using MediaRecorder API.
  * Negotiates a supported MIME type across browsers (Chrome, Firefox, Safari).
  */
-import { useRef, useCallback, useState } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 
 export type RecordingState = "idle" | "recording" | "stopped";
 
@@ -27,9 +27,25 @@ export function useVoiceRecorder() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const mimeTypeRef = useRef<string | undefined>(undefined);
+  const generation = useRef(0);
+  const starting = useRef(false);
+  useEffect(() => () => {
+    generation.current++;
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+    recorder.ondataavailable = null;
+    if (recorder.state === "recording") { recorder.onstop = null; recorder.stop(); }
+    recorder.stream.getTracks().forEach(track => track.stop());
+  }, []);
 
   const startRecording = useCallback(async (): Promise<void> => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (starting.current || mediaRecorderRef.current?.state === "recording") return;
+    starting.current = true;
+    const started = generation.current;
+    let stream: MediaStream | undefined;
+    try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (started !== generation.current) { stream.getTracks().forEach(track => track.stop()); return; }
     const mimeType = getSupportedMimeType();
     mimeTypeRef.current = mimeType;
 
@@ -46,6 +62,8 @@ export function useVoiceRecorder() {
 
     recorder.start(100);
     setState("recording");
+    } catch (error) { stream?.getTracks().forEach(track => track.stop()); throw error; }
+    finally { starting.current = false; }
   }, []);
 
   const stopRecording = useCallback((): Promise<Blob> => {

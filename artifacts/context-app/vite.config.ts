@@ -26,7 +26,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           "vendor-react": ["react", "react-dom", "wouter"],
-          "vendor-charts": ["recharts"],
           "vendor-motion": ["framer-motion"],
           "vendor-icons": ["lucide-react"],
         },
@@ -36,10 +35,10 @@ export default defineConfig({
   server: {
     port,
     strictPort: true,
-    host: "0.0.0.0",
-    allowedHosts: true,
+    host: "127.0.0.1",
     fs: {
       strict: true,
+      deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "**/runtime/**", "**/tmp/**"],
     },
     proxy: {
       "/api": {
@@ -50,7 +49,6 @@ export default defineConfig({
   },
   preview: {
     port,
-    host: "0.0.0.0",
-    allowedHosts: true,
+    host: "127.0.0.1",
   },
 });

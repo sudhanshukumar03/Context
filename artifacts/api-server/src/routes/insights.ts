@@ -1,3 +1,4 @@
+import { serviceRiskSignals } from "../services/incident-risk.js";
 import { Router, type Request, type Response } from "express";
 import { eq, desc, inArray, and, gte } from "drizzle-orm";
 import { db, services, serviceDependencies, serviceEvents, serviceMessages } from "@workspace/db";
@@ -72,7 +73,7 @@ router.get("/insights/risks", requireAuth, async (req: Request, res: Response) =
               eq(serviceEvents.serviceId, svc.id),
               gte(serviceEvents.createdAt, since)
             ))
-            .orderBy(desc(serviceEvents.createdAt))
+            .orderBy(desc(serviceEvents.createdAt), desc(serviceEvents.id))
             .limit(1);
 
           return {
@@ -142,7 +143,9 @@ router.get("/insights/graph", requireAuth, async (req: Request, res: Response) =
 
 router.get("/insights/timeline", requireAuth, async (req: Request, res: Response) => {
   const orgId = req.auth!.organizationId ?? 0;
-  const limit = Math.min(Number(req.query.limit ?? 40), 100);
+  const query = summaryQuery.safeParse({ ...req.query, limit: req.query.limit ?? "40" });
+  if (!query.success) return fail(res, "limit must be an integer between 1 and 100", 400);
+  const limit = query.data.limit;
 
   try {
     const events = await db.select({
@@ -155,7 +158,7 @@ router.get("/insights/timeline", requireAuth, async (req: Request, res: Response
       createdAt: serviceEvents.createdAt,
     }).from(serviceEvents)
       .where(eq(serviceEvents.organizationId, orgId))
-      .orderBy(desc(serviceEvents.createdAt))
+      .orderBy(desc(serviceEvents.createdAt), desc(serviceEvents.id))
       .limit(limit);
 
     const messages = await db.select({
@@ -167,7 +170,7 @@ router.get("/insights/timeline", requireAuth, async (req: Request, res: Response
       createdAt: serviceMessages.createdAt,
     }).from(serviceMessages)
       .where(eq(serviceMessages.organizationId, orgId))
-      .orderBy(desc(serviceMessages.createdAt))
+      .orderBy(desc(serviceMessages.createdAt), desc(serviceMessages.id))
       .limit(limit);
 
     const allServices = await db.select({ id: services.id, name: services.name }).from(services)
@@ -287,8 +290,8 @@ router.post("/ai/incident-ask", requireAuth, async (req: Request, res: Response)
     const { question, role } = input.data;
     const [allServices, recentEvents, recentMessages] = await Promise.all([
       db.select().from(services).where(eq(services.organizationId, orgId)),
-      db.select().from(serviceEvents).where(and(eq(serviceEvents.organizationId, orgId), gte(serviceEvents.createdAt, since))).orderBy(desc(serviceEvents.createdAt)).limit(30),
-      db.select().from(serviceMessages).where(and(eq(serviceMessages.organizationId, orgId), gte(serviceMessages.createdAt, since))).orderBy(desc(serviceMessages.createdAt)).limit(20),
+      db.select().from(serviceEvents).where(and(eq(serviceEvents.organizationId, orgId), gte(serviceEvents.createdAt, since))).orderBy(desc(serviceEvents.createdAt), desc(serviceEvents.id)).limit(30),
+      db.select().from(serviceMessages).where(and(eq(serviceMessages.organizationId, orgId), gte(serviceMessages.createdAt, since))).orderBy(desc(serviceMessages.createdAt), desc(serviceMessages.id)).limit(20),
     ]);
 
     const orgServiceIds = allServices.map((s) => s.id);
@@ -388,10 +391,10 @@ router.get("/insights/summary", requireAuth, async (req: Request, res: Response)
       db.select().from(services).where(eq(services.organizationId, orgId)),
       db.select().from(serviceEvents)
         .where(and(eq(serviceEvents.organizationId, orgId), gte(serviceEvents.createdAt, since48h)))
-        .orderBy(desc(serviceEvents.createdAt)).limit(Math.max(60, limit)),
+        .orderBy(desc(serviceEvents.createdAt), desc(serviceEvents.id)).limit(Math.max(60, limit)),
       db.select().from(serviceMessages)
         .where(and(eq(serviceMessages.organizationId, orgId), gte(serviceMessages.createdAt, since48h)))
-        .orderBy(desc(serviceMessages.createdAt)).limit(Math.max(40, limit)),
+        .orderBy(desc(serviceMessages.createdAt), desc(serviceMessages.id)).limit(Math.max(40, limit)),
       db.select().from(serviceEvents)
         .where(and(eq(serviceEvents.organizationId, orgId), gte(serviceEvents.createdAt, since6h))),
     ]);
@@ -466,28 +469,7 @@ router.get("/insights/summary", requireAuth, async (req: Request, res: Response)
     ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit);
 
     // ── Predictions ────────────────────────────────────────────────────────────
-    const eventCountBySvc = new Map<number, number>();
-    for (const e of allEvents6h) {
-      const service = e.serviceId ? svcMap.get(e.serviceId) : undefined;
-      const alert = e.type === "failure" || e.type === "alert";
-      const sinceRecovery = !service || service.status !== "healthy" || new Date(e.createdAt) >= service.updatedAt;
-      if (e.serviceId && alert && sinceRecovery) eventCountBySvc.set(e.serviceId, (eventCountBySvc.get(e.serviceId) ?? 0) + 1);
-    }
-    const predictions: Array<{ service: string; serviceId: number; riskLevel: string; timeToFailure: string; reason: string }> = [];
-    for (const svc of updatedServices) {
-      if (svc.status === "failing") continue;
-      const deps = allDeps.filter((d) => d.serviceId === svc.id).map((d) => svcMap.get(d.dependsOnId) ?? updatedServices.find((s) => s.id === d.dependsOnId)).filter(Boolean) as typeof allServices;
-      const failingDeps = deps.filter((d) => d.status === "failing");
-      const degradedDeps = deps.filter((d) => d.status === "degraded");
-      const eventCount = eventCountBySvc.get(svc.id) ?? 0;
-      if (failingDeps.length > 0 && svc.status !== "at_risk") {
-        predictions.push({ service: svc.name, serviceId: svc.id, riskLevel: "high", timeToFailure: "< 5 min", reason: `Depends on failing ${failingDeps[0].name}` });
-      } else if (svc.status === "at_risk" || degradedDeps.length > 0) {
-        predictions.push({ service: svc.name, serviceId: svc.id, riskLevel: "medium", timeToFailure: "10–30 min", reason: degradedDeps.length ? `Upstream ${degradedDeps[0].name} is degraded` : "Status trending downward" });
-      } else if (eventCount >= 3) {
-        predictions.push({ service: svc.name, serviceId: svc.id, riskLevel: "low", timeToFailure: "> 1 hour", reason: `${eventCount} alerts in last 6h` });
-      }
-    }
+    const predictions = serviceRiskSignals(updatedServices, allDeps, allEvents6h);
 
     ok(res, {
       risks,

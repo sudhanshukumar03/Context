@@ -1,9 +1,11 @@
-# Context typeface
+# The typeface used by Context
 
-Inter variable (weight axis 100–900, optical size 14–32), distributed locally so the UI does not require a runtime font CDN request.
+Context serves Inter from this directory so reading the dashboard does not depend on a font CDN request.
 
-Official font source: https://github.com/google/fonts/tree/main/ofl/inter
+`inter-variable.woff2` is the active Inter 4.1 variable font, downloaded unchanged on 14 October 2026 from the [official Inter distribution](https://rsms.me/inter/font-files/InterVariable.woff2?v=4.1). Its weight axis spans 100–900 and its optical-size axis spans 14–32.
 
-Original binary: https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf
+`OFL-Inter-Web.txt` contains the accompanying SIL Open Font License and must stay with the font when it is redistributed.
 
-The UI uses the official compressed Inter 4.1 WOFF2, downloaded from https://rsms.me/inter/font-files/InterVariable.woff2?v=4.1 and accompanied by the project's `OFL-Inter-Web.txt` license. The Google Fonts TTF and `OFL-Inter.txt` are retained as source material. Downloaded on 14 October 2026. Both fonts are unchanged. The previous Manrope asset and its license remain available but are no longer preloaded or used by the app.
+The unused Manrope font and unused TTF source copy were removed during repository cleanup. The dashboard stylesheet and page preload both use the WOFF2 file.
+
+The product's typography and spacing decisions are described in [Dashboard design](../../../../DASHBOARD_REDESIGN.md).

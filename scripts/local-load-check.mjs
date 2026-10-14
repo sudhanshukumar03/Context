@@ -1,8 +1,8 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { validateLocalConfig } from './local-test-config.mjs';
+import { readLocalConfig } from "./local-runtime.mjs";
 const root = process.cwd();
-const config = validateLocalConfig(JSON.parse(await readFile(resolve(root, 'tmp/local-test/config.json'), 'utf8')), root);
+const config = await readLocalConfig(root);
 const base = `http://127.0.0.1:${config.dashboardPort}`;
 const results = []; let next = 0;
 async function worker() {

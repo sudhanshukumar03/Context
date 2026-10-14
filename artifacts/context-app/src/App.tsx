@@ -63,7 +63,7 @@ import { GraphView, computeLayout } from "./features/graph/DependencyGraph.js";
 if (!clerkPubKey && !isDevAuthBypass) throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY");
 
 const clerkAppearance = {
-  baseTheme: dark, cssLayerName: "clerk",
+  theme: dark, cssLayerName: "clerk",
   options: { logoPlacement: "inside" as const, logoLinkUrl: basePath || "/", logoImageUrl: `${window.location.origin}${basePath}/logo.svg`, socialButtonsPlacement: "top" as const, socialButtonsVariant: "blockButton" as const },
   variables: { colorPrimary: "#6366f1", colorForeground: "#f8fafc", colorMutedForeground: "#94a3b8", colorDanger: "#f87171", colorBackground: "#0f172a", colorInput: "#1e293b", colorInputForeground: "#f8fafc", colorNeutral: "#e2e8f0", fontFamily: "'Inter', 'Segoe UI', sans-serif", borderRadius: "0.75rem" },
   elements: {
@@ -752,8 +752,9 @@ function Dashboard({ onBack }: { onBack: () => void }) {
   const fetching = useRef(false);
   const [incidentElapsed, setIncidentElapsed] = useState(0);
   const [postmortemLoading, setPostmortemLoading] = useState(false);
+  const workspaceAbort = useRef(new AbortController());
   const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => { mounted.current = true; workspaceAbort.current = new AbortController(); return () => { mounted.current = false; workspaceAbort.current.abort(); }; }, []);
 
   // ── Greeting toast on mount ────────────────────────────────────────────────
   useEffect(() => {
@@ -804,7 +805,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
     fetching.current = true;
     setRefreshing(true);
     try {
-      const signal = AbortSignal.timeout(60_000);
+      const signal = AbortSignal.any([workspaceAbort.current.signal, AbortSignal.timeout(60_000)]);
       const token = await abortable(getToken(), signal);
       if (!mounted.current) return;
       const [summary, rc] = await Promise.allSettled([
@@ -848,13 +849,15 @@ function Dashboard({ onBack }: { onBack: () => void }) {
 
   const handleScenarioStep = useCallback(async (step: number) => {
     try {
-      const token = await getToken();
+      const signal = AbortSignal.any([workspaceAbort.current.signal, AbortSignal.timeout(60_000)]);
+      const token = await abortable(getToken(), signal);
+      if (!mounted.current) return;
       if (!mounted.current) throw new Error("Workspace changed. Start the scenario in the current workspace.");
       if (step === 0) {
-        await apiFetch("/demo/reset", token, { method: "POST" });
+        await apiFetch("/demo/reset", token, { method: "POST", signal });
         setTab("overview");
       }
-      await apiFetch("/demo/advance", token, { method: "POST", body: JSON.stringify({ step }) });
+      await apiFetch("/demo/advance", token, { method: "POST", body: JSON.stringify({ step }), signal });
       setLastRefresh(n => n + 1);
     } catch (error) {
       if (mounted.current) setActionFeedback(error instanceof Error ? error.message : "The demo step failed. Please retry.");
@@ -864,10 +867,12 @@ function Dashboard({ onBack }: { onBack: () => void }) {
 
   const handleAction = useCallback(async (action: string, svcName: string) => {
     try {
-      const token = await getToken();
+      const signal = AbortSignal.any([workspaceAbort.current.signal, AbortSignal.timeout(60_000)]);
+      const token = await abortable(getToken(), signal);
+      if (!mounted.current) return;
       const svc = services.find(s => s.name === svcName);
       if (!svc) return;
-      await apiFetch("/insights/simulate-action", token, { method: "POST", body: JSON.stringify({ action, serviceId: svc.id }) });
+      await apiFetch("/insights/simulate-action", token, { method: "POST", body: JSON.stringify({ action, serviceId: svc.id }), signal });
       setActionFeedback(`${action} preview: ${svcName} could recover. Live telemetry is unchanged; verify recovery after executing the command.`);
       setTimeout(() => { setActionFeedback(null); setLastRefresh(n => n + 1); }, 8000);
     } catch (error) { setActionFeedback(error instanceof Error ? error.message : "The simulation preview failed. Please retry."); }
@@ -877,8 +882,10 @@ function Dashboard({ onBack }: { onBack: () => void }) {
     if (postmortemLoading) return;
     setPostmortemLoading(true);
     try {
-      const token = await getToken();
-      const data = await apiFetch("/insights/postmortem", token, { method: "POST" }) as { markdown: string };
+      const signal = AbortSignal.any([workspaceAbort.current.signal, AbortSignal.timeout(60_000)]);
+      const token = await abortable(getToken(), signal);
+      if (!mounted.current) return;
+      const data = await apiFetch("/insights/postmortem", token, { method: "POST", signal }) as { markdown: string };
       if (!mounted.current) return;
       const blob = new Blob([data.markdown], { type: "text/markdown" });
       const url = URL.createObjectURL(blob);
@@ -950,7 +957,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
           <div className="flex items-center justify-between md:justify-start gap-3 min-w-0 w-full md:w-auto">
             <ContextLogo compact />
             {!isDevAuthBypass ? <OrganizationSwitcher appearance={{ variables: { colorForeground: isDark ? "#f8fafc" : "#17243b", colorMutedForeground: isDark ? "#b6c2d4" : "#475569", colorBackground: isDark ? "#101a2f" : "#ffffff", colorInput: isDark ? "#1e293b" : "#eef2f7", colorInputForeground: isDark ? "#f8fafc" : "#17243b", colorNeutral: isDark ? "#e2e8f0" : "#17243b" }, elements: { organizationSwitcherTrigger: "ctx-organization-trigger min-h-11 min-w-11 max-w-[220px] rounded-xl text-sm", organizationSwitcherTriggerIcon: "text-indigo-400" } }}
-              organizationProfileProps={{ appearance: { ...organizationProfileAppearance, baseTheme: isDark ? dark : undefined, variables: { colorForeground: isDark ? "#f8fafc" : "#17243b", colorBackground: isDark ? "#101a2f" : "#ffffff", colorInputForeground: isDark ? "#f8fafc" : "#17243b" }, elements: { cardBox: "ctx-organization-profile !w-[min(960px,calc(100vw-2rem))] !max-w-full rounded-2xl overflow-hidden border shadow-2xl" } } }} /> : <span className="ctx-muted text-sm">Personal workspace</span>}
+              organizationProfileProps={{ appearance: { ...organizationProfileAppearance, theme: isDark ? dark : undefined, variables: { colorForeground: isDark ? "#f8fafc" : "#17243b", colorBackground: isDark ? "#101a2f" : "#ffffff", colorInputForeground: isDark ? "#f8fafc" : "#17243b" }, elements: { cardBox: "ctx-organization-profile !w-[min(960px,calc(100vw-2rem))] !max-w-full rounded-2xl overflow-hidden border shadow-2xl" } } }} /> : <span className="ctx-muted text-sm">Personal workspace</span>}
           </div>
           <div className="flex items-center justify-between md:justify-start gap-2 w-full md:w-auto" aria-label="Workspace controls">
             <RoleSelector role={role} onChange={next => { setRole(next); if (user) saveAudience(() => window.localStorage, user.id, orgId, next); }} />

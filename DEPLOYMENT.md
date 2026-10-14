@@ -1,197 +1,113 @@
-# Setup and deployment
+# Prepare a Context installation
 
-The dashboard runs on port 3000 in development; the API runs on port 8080.
-The API serves the built dashboard in the production container. Database
-readiness is `GET /api/healthz`.
+Context currently runs locally. When you choose to host it, the same API can serve the built dashboard behind HTTPS. This guide takes that installation from an empty database to a reviewable release, without treating prepared files as a completed deployment.
 
-For the isolated Windows demo with its own local database, run `pnpm local:start`
-and open http://127.0.0.1:31800. See [LOCAL_TEST.md](LOCAL_TEST.md) for start/stop
-commands, verified behavior, and the difference between demo and real-account testing.
-This path does not use the database or account keys in existing environment files.
-For real Clerk test-instance sign-in on that isolated database, follow the
-`local:clerk-setup`, `local:clerk-check`, and `local:clerk` instructions in the guide.
-The API's Clerk session origin allowlist uses `ALLOWED_ORIGINS`.
-The isolated copy can enable backend-only Gemini with `local:ai-setup`,
-`local:ai-check`, `local:ai-verify`, and `local:ai-on`; see the guide for provider
-quota and data flow. AI is off by default and independent of Clerk/demo mode.
+For the existing Windows test app, start with [Local testing](LOCAL_TEST.md). The manual setup below is for a database and environment you choose yourself.
 
-## Local setup
+## Put the configuration in place
 
-1. Install Node 24+, pnpm 10+, and PostgreSQL.
-2. Run `pnpm install --frozen-lockfile`.
-3. Copy `.env.example` to `artifacts/api-server/.env`; copy the frontend example
-   to `artifacts/context-app/.env`. Set real database/auth/provider values locally.
-4. For a **new empty database**, from the repository root run:
+Install Node.js 24 or later, pnpm 11.18.0, and PostgreSQL, then install the workspace dependencies:
 
-   ```powershell
-   pnpm --filter @workspace/db exec node --env-file=../../artifacts/api-server/.env initialize.mjs
-   ```
-
-   Initialization refuses nonempty databases. For an **existing pre-fix Context
-   installation**, use the reviewed additive migration instead:
-
-   ```powershell
-   pnpm --filter @workspace/db exec node --env-file=../../artifacts/api-server/.env migrate.mjs
-   ```
-
-   Do not run initialization on an existing installation or use `push-force`.
-   Neither command has been run against the user's configured database by this task.
-5. Run `pnpm run typecheck`, then start the API and dashboard in separate terminals:
-
-   ```powershell
-   pnpm --filter @workspace/api-server run dev
-   pnpm --filter @workspace/context-app run dev
-   ```
-
-   Open `http://localhost:3000`; API readiness is `http://localhost:8080/api/healthz`.
-
-For local demo authentication, omit `CLERK_SECRET_KEY` on the API and enable both
-`ALLOW_DEV_AUTH_BYPASS=true` and frontend `VITE_ALLOW_DEV_AUTH_BYPASS=true`. The
-frontend flag works only in Vite development; the API rejects bypass in production.
-PostgreSQL is still required. Root-cause heuristics work without an AI key; AI
-chat, document tools and postmortems require a configured provider.
-
-## Authentication and teams
-
-Enable Organizations in the Clerk dashboard, configure the application domain,
-and use the dashboard organization switcher to create/select teams and access
-Clerk's member/invitation management. No invitations were sent by this task.
-
-The API maps verified Clerk organization IDs to local `clerk-org-<orgId>` slugs.
-User records retain their personal organization association; selecting a team
-does not move or merge personal data. Returning to a personal account restores
-that workspace. Shared uploads, key management and demo mutations require
-`org:admin`; all members may investigate incidents and preview remediation.
-Engineer/SRE/Manager view selection grants no permissions.
-
-Shared webhook keys belong to the selected team and their creator. Each delivery
-checks that the creator is still a Clerk organization admin (5-second network
-deadline); provider failure rejects ingestion rather than bypassing authorization.
-This adds a Clerk API call per shared-key delivery; plan quotas accordingly.
-Switching workspaces does not revoke keys. Removal, demotion, or explicit key
-revocation blocks their use. Rotation requires updating senders with a new key.
-
-## Webhooks and GitHub Actions
-
-Create a named key under Integrations → Webhook keys. Copy it once; secrets are
-not stored in browser storage or returned by list endpoints. The database stores
-only SHA-256 digests and display prefixes. Old user-ID/numeric-ID credentials
-are rejected. Send the secret in `X-API-Key` (preferred). `Authorization: Bearer`
-and `?apiKey=` remain supported for senders requiring those formats; configure
-reverse proxies to redact credential query parameters from their logs.
-
-Endpoints:
-
-- `POST /api/ingest/webhook`: service/title, optional severity/type/status,
-  `eventId` and ISO `occurredAt`. Stable event IDs enable replay protection.
-- `POST /api/ingest/webhook/pagerduty`: actual PagerDuty V3 envelopes, plus the
-  legacy messages/payload format. V3 event IDs deduplicate redelivery.
-- `POST /api/ingest/github-actions`: repository, service, environment, commit SHA,
-  run ID, optional attempt (default 1), status (`started`, `success`, `failure`),
-  and optional ISO timestamp. A deployment does not change service health.
-
-Copy `examples/github-actions/context-deployment.yml` into the deployment
-repository's `.github/workflows/`. Store `CONTEXT_WEBHOOK_KEY` and the HTTPS
-endpoint `CONTEXT_INGEST_URL` as Actions secrets. Call the reusable workflow
-after an actual deploy job, passing that job's result:
-
-```yaml
-report-context:
-  needs: deploy
-  if: ${{ always() && (needs.deploy.result == 'success' || needs.deploy.result == 'failure') }}
-  uses: ./.github/workflows/context-deployment.yml
-  with:
-    service: checkout-service
-    environment: production
-    status: ${{ needs.deploy.result }}
-  secrets:
-    CONTEXT_INGEST_URL: ${{ secrets.CONTEXT_INGEST_URL }}
-    CONTEXT_WEBHOOK_KEY: ${{ secrets.CONTEXT_WEBHOOK_KEY }}
+```powershell
+pnpm install --frozen-lockfile
+if (!(Test-Path artifacts/api-server/.env)) { Copy-Item .env.example artifacts/api-server/.env }
+if (!(Test-Path artifacts/context-app/.env)) { Copy-Item artifacts/context-app/.env.example artifacts/context-app/.env }
 ```
 
-Retries share a stable event identity across repository/run/attempt/service/
-environment/status. Matrix services and reruns stay distinct. The example has
-not been installed in another repository or connected to a live workflow.
-See [GitHub's reusable workflow guidance](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows).
+The copy commands keep existing environment files. Fill the API environment file with the intended database URL, a strong session secret, and paired Clerk keys. The dashboard needs the public Clerk key and the API port. Put provider secrets in the API environment only.
 
-## Background briefs and simulation
+| Setting | What to decide |
+| --- | --- |
+| `DATABASE_URL` | The specific database this installation owns. |
+| `SESSION_SECRET` | A generated secret suitable for the environment. |
+| `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY` | Keys from the same Clerk instance. |
+| `VITE_CLERK_PUBLISHABLE_KEY` | The matching public key used to build the dashboard. |
+| `ALLOWED_ORIGINS` | The dashboard origins allowed to use Clerk sessions. |
+| `GEMINI_API_KEY` or `OPENAI_API_KEY` | The provider used for generation. |
+| `GEMINI_MODEL` or `OPENAI_MODEL` | A model available to that provider account. |
+| `GEMINI_TRANSPORT` | `native` or `openai` compatibility when using Gemini. |
 
-`POST /api/generate-brief` returns a 202 job acknowledgement; duplicate active
-user/team/role submissions reuse the same job. Poll `/api/brief/live` or
-`/api/brief/:id`. Supported roles are backend/frontend/pm. Historical reads
-require both ownership and the current organization.
+For development demo authentication, omit the API Clerk secret and enable both `ALLOW_DEV_AUTH_BYPASS` and `VITE_ALLOW_DEV_AUTH_BYPASS`. The frontend bypass is limited to Vite development; the API rejects bypass in production.
 
-Workers scan the oldest 64 pending/processing rows at startup and every ten
-seconds, with four active jobs per process and two per tenant per process.
-Session advisory locks prevent two replicas from working the same job.
-Use a direct PostgreSQL connection or session pooler; **transaction pooling is
-incompatible with these worker locks**. Compatibility-provider attempts have
-15-second deadlines; explicit native Gemini attempts can use up to 50 seconds.
-Retries share a 55-second operation budget, with at most three classified attempts
-and no nested SDK retries. Invalid output
-cannot be persisted as done; failure-state writes and dispatch errors are contained.
-Completed data is returned as persisted, including additional valid fields.
+## Give the database its schema
 
-Remediation simulation is an illustrative response preview. It writes no service
-health or incident events, executes no production command, and verifies no actual
-recovery. Confirm production recovery using new telemetry after a human executes
-an appropriate command. Financial estimates elsewhere remain illustrative
-heuristics rather than measured business loss.
+For a new, empty database:
 
-## Container and operations
-
-```sh
-docker build --build-arg VITE_CLERK_PUBLISHABLE_KEY=YOUR_PUBLIC_KEY -t context:local .
-docker run --env-file artifacts/api-server/.env -p 8080:8080 context:local
+```powershell
+pnpm --filter @workspace/db exec node --env-file=../../artifacts/api-server/.env initialize.mjs
 ```
 
-Use production Clerk keys/domain settings, a strong session secret, production
-`ALLOWED_ORIGINS`, and a PostgreSQL connection suitable for session locks.
-Provide secrets at runtime; `.dockerignore` excludes environment files. The image
-runs as a non-root user and handles shutdown while active requests/jobs finish.
-Place it behind HTTPS and a correctly configured reverse proxy (one trusted hop).
-The application must connect to an initialized/migrated database before starting.
+Initialization refuses a nonempty database. For an existing Context installation, back up and review the additive migration, then use:
 
-Before changing a live database, take a PostgreSQL custom-format backup using
-your normal secret/connection management (`pg_dump -Fc`), retain it outside the
-container with restricted access, and verify restoration into a separate empty
-test database. Configure backup scheduling/retention and monitoring in your host.
-Monitor `/api/healthz`, failed brief logs, and pending/processing job age/count.
-Readiness checks database connectivity; it does not certify AI/Clerk availability.
+```powershell
+pnpm --filter @workspace/db exec node --env-file=../../artifacts/api-server/.env migrate.mjs
+```
 
-Migration rollback: stop webhook traffic and new application workers, preserve
-new key/event records, revert consuming application code, then review/apply
-`001_webhook_credentials.down.sql`. Remove its migration ledger row only when
-the down migration has completed. Never roll back against unreviewed live data.
+The migration runner records checksums and stops if an already-applied migration has changed. Use the reviewed migration path for an existing database rather than a forced schema push.
 
-## Verification
+## Bring up the development app
 
-`pnpm test`, `pnpm run typecheck`, and API/dashboard builds run in CI. The CI
-PostgreSQL service is an isolated container with test-only credentials.
+```powershell
+pnpm run typecheck
+```
 
-On Windows, `powershell -NoProfile -File scripts/test-disposable-db.ps1` initializes
-a fresh loopback-only PostgreSQL cluster on a random port, tests migrations,
-keys, transactions, concurrent jobs/team mapping and initialization, then stops
-that cluster. No configured database is used. Generated clusters/logs stay under
-ignored `tmp/` for diagnostics.
+Start these in separate terminals:
 
-`pnpm test:container` builds and runs the production image using synthetic Clerk
-keys and a disposable PostgreSQL 16 database. It checks non-root startup, database
-readiness, dashboard deep links and assets, authentication guards, JSON 404 and
-SIGTERM shutdown. The database has no host port and stays on an internal network;
-only the app joins an ingress network and publishes a random loopback port.
-Cleanup checks ownership labels before removing the fixture's containers and
-networks. The built image is retained locally; generated environment files stay
-under ignored `tmp/`. This command passed locally and is included in CI.
+```powershell
+pnpm --filter @workspace/api-server run dev
+```
 
-Hosted CI, real Clerk invitations, live GitHub delivery and online deployment
-remain unverified. Personal Clerk sign-in and Gemini incident answers/postmortem
-export were verified against the separate local test app; no production database
-was accessed or migrated.
+```powershell
+pnpm --filter @workspace/context-app run dev
+```
 
-The later shared-team checks verified the approved development organization,
-invitations, Member removal/restoration and disposable shared-key lifecycle. The
-latest state is in `REMAINING_WORK.md`; older pending statements above are
-historical. Online deployment is explicitly deferred by the user. Prepared
-`deployment/` templates and the safe configuration preflight are documented in
-`OPERATIONS.md`, alongside verified local backup/restore and load checks.
+The manual defaults are **http://localhost:3000** for the dashboard and **http://localhost:8080/api/healthz** for API readiness. These differ from the isolated runner's 31800/31801 ports.
+
+Enable Organizations in the Clerk application to use shared teams. Configure the application origins and select a team through the dashboard switcher. Members can investigate; shared uploads, demo mutations, notification settings, and key management require admin access.
+
+Clerk's application settings also control provider branding. The local development application has branding removal enabled. Production availability depends on the [Clerk plan](https://clerk.com/pricing).
+
+## Connect an event source
+
+In Overview, open **Connections & ingestion** and create a named key. Copy the secret when it appears; list endpoints return metadata rather than the secret. The database stores its SHA-256 digest.
+
+Prefer `X-API-Key` for delivery. The Bearer and query-parameter forms remain supported for senders that require them. If a sender uses `?apiKey=`, redact that parameter in proxy logs.
+
+| Endpoint | Accepted evidence |
+| --- | --- |
+| `/api/ingest/webhook` | Generic service/title payloads, with optional severity, type, status, event ID, and occurrence time. |
+| `/api/ingest/webhook/pagerduty` | PagerDuty V3 and supported legacy incident envelopes. |
+| `/api/ingest/github-actions` | Repository, service, environment, commit SHA, run ID, attempt, status, and optional occurrence time. |
+
+Keep a stable external event ID when retrying. GitHub Actions deployment records do not change health. Shared-key deliveries recheck the issuing admin's membership, so senders should retry appropriately during a Clerk outage.
+
+The [GitHub Actions example](examples/github-actions/README.md) explains how to call the reporting job after a real deployment. Slack notifications use a separate outbound destination configured in the selected workspace.
+
+## Prepare the hosted environment
+
+Choose the HTTPS domain, hosting account, and production database before filling `deployment/production.env.example`. Store the completed file outside version control.
+
+```powershell
+node scripts/deployment-preflight.mjs --env-file C:\private\context.env --public-url https://context.example.com
+pnpm release:prepare
+```
+
+Preflight prints configuration checks without secret values. It does not prove key validity, database connectivity, DNS, migrations, or provider quota. Release preparation creates a local bundle of reviewed configuration files and a checksum manifest; it does not build or deploy the application.
+
+The prepared Compose stack uses Caddy for HTTPS and keeps the app port inside its network. Set `CONTEXT_IMAGE`, `CONTEXT_ENV_FILE`, and `CONTEXT_DOMAIN` for `deployment/compose.yaml`. The provider must allow the selected model to generate, and PostgreSQL must support the brief worker's session advisory locks.
+
+Build the image using the public Clerk key for that environment:
+
+```powershell
+docker build --build-arg VITE_CLERK_PUBLISHABLE_KEY=YOUR_PUBLIC_KEY -t context:review .
+```
+
+Supply secrets at runtime. The image excludes private environment files, runs as a non-root user, and serves the API and built dashboard from one process. The application must connect to an initialized or migrated database before serving requests.
+
+## Plan the return path
+
+Before a hosted migration, take a custom-format PostgreSQL backup and restore it into a separate test database. Keep it outside the app container with restricted access.
+
+If the webhook migration must be reversed, stop ingestion and new workers, preserve newly written key/event records, revert the consuming application code, then review and apply `001_webhook_credentials.down.sql`. Remove its migration ledger entry only after the reversal completes.
+
+Continue with [Operations](OPERATIONS.md) for health checks, backup drills, and monitoring. Hosted CI, DNS, production credentials, and live source delivery still need verification in the chosen environment.

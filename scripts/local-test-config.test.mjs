@@ -6,7 +6,7 @@ import { validateClerkTestCredentials } from "./local-clerk-credentials.mjs";
 import { validateLocalAiCredentials } from "./local-ai-credentials.mjs";
 const root = resolve(".");
 const runId = "a".repeat(32);
-const config = { runId, cluster: resolve(root, "tmp/local-test", `cluster-${runId}`),
+const config = { runId, cluster: resolve(root, "runtime/data", `cluster-${runId}`),
   databaseUrl: `postgresql://context_test@127.0.0.1:31802/context_local_${runId}`,
   databasePort: 31802, apiPort: 31801, dashboardPort: 31800, sessionSecret: "b".repeat(64) };
 test("local demo rejects other database targets and unexpected cluster paths", () => {

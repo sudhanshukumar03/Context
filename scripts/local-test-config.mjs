@@ -1,9 +1,10 @@
 import { isAbsolute, resolve } from "node:path";
 
 // These scripts only operate on the isolated database created by local-test.ps1.
-export function validateLocalConfig(config, root) {
+export function validateLocalConfig(config, root, { legacy = false } = {}) {
   if (!config || !/^[a-f0-9]{32}$/.test(config.runId)) throw new Error("Invalid local test identity");
-  const expected = resolve(root, "tmp", "local-test", `cluster-${config.runId}`);
+  const expected = legacy ? resolve(root, "tmp/local-test", `cluster-${config.runId}`)
+    : resolve(root, "runtime/data", `cluster-${config.runId}`);
   if (!isAbsolute(config.cluster) || resolve(config.cluster) !== expected) throw new Error("Unexpected database directory");
   const url = new URL(config.databaseUrl);
   if (url.protocol !== "postgresql:" || url.hostname !== "127.0.0.1" || url.username !== "context_test"

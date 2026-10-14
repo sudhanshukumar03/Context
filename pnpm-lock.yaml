@@ -262,35 +262,11 @@ importers:
         specifier: ^0.31.11
         version: 0.31.11
 
-  lib/integrations-openai-ai-react:
-    devDependencies:
-      '@testing-library/dom':
-        specifier: ^10.4.2
-        version: 10.4.2
-      '@testing-library/react':
-        specifier: ^16.3.3
-        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.1.9(react@19.1.9))(react@19.1.9)
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.3.0
-      react:
-        specifier: 'catalog:'
-        version: 19.1.9
-      react-dom:
-        specifier: 'catalog:'
-        version: 19.1.9(react@19.1.9)
-
   lib/integrations-openai-ai-server:
     dependencies:
       openai:
         specifier: ^6.49.0
         version: 6.49.0(zod@4.6.5)
-      p-limit:
-        specifier: ^7.3.3
-        version: 7.3.3
-      p-retry:
-        specifier: ^7.1.1
-        version: 7.1.1
     devDependencies:
       '@types/node':
         specifier: ^22.20.5
@@ -1749,10 +1725,6 @@ packages:
     resolution: {integrity: sha512-xelSayHH36ZgE7ZWhli7pW34hNbNl8Ojv5KVmkJD4hBdD3th8Tfk9vYasLM+mXWOZhFkgZfxhLSnrwRr4elSSg==}
     engines: {node: '>=0.10.0'}
 
-  is-network-error@1.3.2:
-    resolution: {integrity: sha512-PhBY86zaxNZUuWP6h13Vu5oFe0XY6/UlKzQnYFELzGVHygP3MxmvTfYSG7GN3aIab/iWudSMgjSnG9Dq+nHrgA==}
-    engines: {node: '>=16'}
-
   is-number@7.0.0:
     resolution: {integrity: sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==}
     engines: {node: '>=0.12.0'}
@@ -2089,14 +2061,6 @@ packages:
         optional: true
       typedoc-plugin-markdown:
         optional: true
-
-  p-limit@7.3.3:
-    resolution: {integrity: sha512-SKgVvDU5TNIxQ4r30U75BNLC6a+6GOEjngrk/ysM5+Zu3oJuk1SC5ApzIzY/7PjCEjoVPMWJ0zho/4QUiEB7TQ==}
-    engines: {node: '>=20'}
-
-  p-retry@7.1.1:
-    resolution: {integrity: sha512-J5ApzjyRkkf601HpEeykoiCvzHQjWxPAHhyjFcEUP2SWq0+35NKh8TLhpLw+Dkq5TZBFvUM6UigdE9hIVYTl5w==}
-    engines: {node: '>=20'}
 
   parse-ms@4.0.0:
     resolution: {integrity: sha512-TXfryirbmq34y8QBwgqCVLi+8oA3oWx2eAnSn62ITyEhEYaWRlVZ2DvMM9eZbMs/RfxPu/PK/aBLyGj4IrqMHw==}
@@ -2657,10 +2621,6 @@ packages:
     resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
     engines: {node: '>= 14.6'}
     hasBin: true
-
-  yocto-queue@1.2.2:
-    resolution: {integrity: sha512-4LCcse/U2MHZ63HAJVE+v71o7yOdIe4cZ70Wpf8D/IyjDKYQLV5GD46B+hSTjJsvV5PztjvHoU580EftxjDZFQ==}
-    engines: {node: '>=12.20'}
 
   yoctocolors@2.2.0:
     resolution: {integrity: sha512-xYqdZFUK/VYazNl/oCDYN+3WloWQwMfZxBoiNt6qNyk+xfOdi598muWE42rNZFp1kNOiqW936q5RhUdnpqElSg==}
@@ -3945,8 +3905,6 @@ snapshots:
     dependencies:
       is-extglob: 2.1.1
 
-  is-network-error@1.3.2: {}
-
   is-number@7.0.0: {}
 
   is-plain-obj@4.1.0: {}
@@ -4236,14 +4194,6 @@ snapshots:
       - swr
       - typescript
       - zod
-
-  p-limit@7.3.3:
-    dependencies:
-      yocto-queue: 1.2.2
-
-  p-retry@7.1.1:
-    dependencies:
-      is-network-error: 1.3.2
 
   parse-ms@4.0.0: {}
 
@@ -4754,8 +4704,6 @@ snapshots:
   yallist@3.1.1: {}
 
   yaml@2.9.1: {}
-
-  yocto-queue@1.2.2: {}
 
   yoctocolors@2.2.0: {}
 

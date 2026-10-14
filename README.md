@@ -24,7 +24,7 @@ Open **Graph** when you need to understand a connection. An arrow runs from a se
 
 Open **Timeline** when order matters. Changes, alerts, investigations, responses, recovery reports, and team updates appear with their sources and timestamps. Highlights give you a shorter reading path; All activity keeps every loaded record available.
 
-Use **AI** to ask a specific question about this workspace. New answers follow the selected audience. You can review their sources and suggested next steps, and move between tabs without losing the conversation. AI features need a configured provider with available quota.
+Use **AI** to ask a specific question about this workspace. Answers begin with a summary, then separate recorded state, reported events, and possible explanations. Impact, next steps, and open questions follow. Source buttons open the supporting record; the data coverage section shows the time window and record limits. Copy saves the full analysis. Refresh regenerates the latest answer, while New chat clears the conversation and cancels a pending response. New answers follow the selected audience, and moving between tabs keeps the conversation. AI features need a configured provider with available quota.
 
 Use **History** to review the activity windows built from the loaded records. A recovery report remains a report for its recorded scope; it does not establish the closure of every related incident.
 

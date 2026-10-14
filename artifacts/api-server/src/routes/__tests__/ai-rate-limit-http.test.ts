@@ -57,6 +57,32 @@ async function post(path: string, body: object) {
 
 const incidentBody = { question: "Is Checkout recovered?" };
 describe("incident audience handling", () => {
+  it("requests a report with evidence, chronological records and unassigned proposed actions", async () => {
+    mocks.create.mockResolvedValue({ choices: [{ message: { content: "# Incident report\n\nProvisional analysis." } }] });
+    const response = await post("/insights/postmortem", {});
+    expect(response.status).toBe(200);
+    const prompt = JSON.stringify(mocks.create.mock.calls[0][0]);
+    for (const text of ["## Findings & Evidence", "Time (UTC)", "## Open Questions", "Owners, priorities and due dates are Unknown", "Coverage: 1 services, 1 events", "<untrusted_context>", "do not map event severity to P0/P1/P2"]) expect(prompt).toContain(text);
+  });
+  it("links report findings to supplied records and removes invented source IDs", async () => {
+    mocks.create.mockResolvedValue({ choices: [{ message: { content: JSON.stringify({ answer: "Checkout is recorded healthy.", confidence: .8,
+      findings: [{ statement: "Service healthy", basis: "observed", sourceIds: ["service:1"] },
+        { statement: "Recovery was reported", basis: "observed", sourceIds: ["event:1", "event:999"] },
+        { statement: "Cause is uncertain", basis: "observed", sourceIds: ["event:999"] }],
+      unknowns: ["Current latency was not supplied"] }) } }] });
+    const response = await post("/ai/incident-ask", incidentBody);
+    expect(response.status).toBe(200);
+    expect((response.body as { data: unknown }).data).toMatchObject({
+      findings: [{ basis: "observed", sourceIds: ["service:1"] }, { basis: "reported", sourceIds: ["event:1"] }, { basis: "inferred", sourceIds: [] }],
+      unknowns: ["Current latency was not supplied", "Some analysis statements could not be linked to a supplied source record."],
+      coverage: { services: 1, events: 1, messages: 0, windowHours: 48, eventLimit: 30, messageLimit: 20 },
+      evidence: [{ id: "service:1", label: "Checkout" }, { id: "event:1", label: "Synthetic recovery" }],
+    });
+    const prompt = JSON.stringify(mocks.create.mock.calls[0][0]);
+    expect(prompt).toContain("[service:1]"); expect(prompt).toContain("[event:1]");
+    expect(prompt).toContain("<untrusted_context>"); expect(prompt).toContain("chronology and dependency edges alone do not prove causality");
+    expect(prompt).toContain("A rollback start does not prove rollback completion");
+  });
   it.each(["engineer", "sre", "manager"])("passes the %s audience to the provider for an ordinary member", async role => {
     const answer = { answer: "Checkout is healthy.", confidence: .8, reasoning: [], impact: [], actions: [], sources: ["Checkout"] };
     mocks.create.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(answer) } }] });
@@ -126,7 +152,7 @@ describe("AI provider availability responses", () => {
     expect((await post("/ai/incident-ask", incidentBody)).status).toBe(503);
     const answer = { answer: "Checkout is healthy.", confidence: 0.9, reasoning: [], impact: [], actions: [], sources: ["Checkout"] };
     mocks.create.mockResolvedValue({ choices: [{ message: { content: JSON.stringify(answer) } }] });
-    expect(await post("/ai/incident-ask", incidentBody)).toEqual({ status: 200, body: {
+    expect(await post("/ai/incident-ask", incidentBody)).toMatchObject({ status: 200, body: {
       success: true, data: answer, error: null,
     } });
     expect(mocks.create).toHaveBeenCalledTimes(2);

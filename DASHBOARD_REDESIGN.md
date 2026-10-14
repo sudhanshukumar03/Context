@@ -28,7 +28,7 @@ Status always has a text label as well as a color. Zoom controls and keyboard fo
 
 ## Keep a question in view
 
-AI has a bounded reading column for the conversation, a composer, and a quieter context rail. Starter questions follow the selected audience. Long answers use paragraph spacing, with reasoning and sources available through disclosure.
+AI has a bounded reading column for the conversation, a composer, and a quieter context rail. Starter questions follow the selected audience. Each analysis uses a summary, findings, impact, next steps, and open questions. Findings distinguish recorded state from reported observations and possible explanations. Supporting record buttons open source details without leaving the answer; the disclosure also shows the data window and record limits. Copy includes the full report. Refresh replaces the latest answer while preserving earlier turns and the draft. New chat clears the transcript and returns focus to the question field, including when a response is pending.
 
 Pending, timeout, provider failure, and retry states keep the composer understandable. Navigation preserves the conversation; workspace changes clear it. An older answer keeps its original audience label when the view changes.
 

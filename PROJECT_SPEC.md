@@ -128,7 +128,6 @@ lib/
   api-client-react/   Generated client contracts and hooks
   api-zod/            Generated validation contracts
   integrations-openai-ai-server/  Shared provider and transport utilities
-  integrations-openai-ai-react/   Audio utilities with their own tests
 scripts/              Local setup, release preparation and verification
 deployment/           Compose, HTTPS proxy and production environment template
 examples/             GitHub Actions reporting workflow

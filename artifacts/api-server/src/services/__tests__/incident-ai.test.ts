@@ -22,6 +22,30 @@ describe("incident AI reliability", () => {
     mocks.create.mockResolvedValue(output({ answer: "Evidence", confidence: 0.8, reasoning: "Observed" }));
     expect(await requestIncidentAnswer("context", "question")).toEqual({ answer: "Evidence", confidence: 0.8, reasoning: ["Observed"], actions: [], impact: [], sources: [] });
   });
+  it("preserves structured evidence findings and open questions", async () => {
+    const data = { answer: "Checkout is recorded healthy.", confidence: .8,
+      findings: [{ statement: "Checkout status is healthy", basis: "observed", sourceIds: ["service:1"] }], unknowns: ["Live error rate is not supplied"] };
+    mocks.create.mockResolvedValue(output(data));
+    expect(await requestIncidentAnswer("context", "question")).toMatchObject(data);
+    expect(mocks.create.mock.calls[0][0].max_completion_tokens).toBe(4096);
+  });
+  it("accepts aggregate findings supported by more than five source records", async () => {
+    const sourceIds = Array.from({ length: 10 }, (_, i) => `service:${i + 1}`);
+    const data = { answer: "All recorded services are healthy", confidence: .8,
+      findings: [{ statement: "Ten service records report healthy status", basis: "observed", sourceIds }] };
+    mocks.create.mockResolvedValue(output(data));
+    expect(await requestIncidentAnswer("context", "question")).toMatchObject(data);
+    expect(mocks.create).toHaveBeenCalledOnce();
+  });
+  it.each([
+    { statement: "Unverified", basis: "confirmed", sourceIds: [] },
+    { statement: "", basis: "observed", sourceIds: [] },
+    { statement: "Unverified", basis: "observed", sourceIds: [12] },
+  ])("rejects malformed evidence findings", async finding => {
+    mocks.create.mockResolvedValue(output({ answer: "Answer", confidence: .8, findings: [finding] }));
+    const assertion = expect(requestIncidentAnswer("context", "question")).rejects.toThrow();
+    await vi.runAllTimersAsync(); await assertion;
+  });
   it("fails immediately for permanent provider errors", async () => {
     mocks.create.mockRejectedValue(Object.assign(new Error("private body"), { status: 401 }));
     await expect(requestPostmortem("context")).rejects.toThrow("provider request failed");

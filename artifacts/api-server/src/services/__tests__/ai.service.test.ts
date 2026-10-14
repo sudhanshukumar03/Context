@@ -140,6 +140,16 @@ describe("evidence context", () => {
 });
 
 describe("provider retry policy", () => {
+  it("logs schema field names without exposing model output", async () => {
+    vi.useFakeTimers();
+    mocks.create.mockResolvedValue(response(JSON.stringify({ answer: "private answer body", confidence: "private invalid value", sources: [] })));
+    const pending = askQuestion({ question: "Next?", contextData: "Runbook" });
+    const assertion = expect(pending).rejects.toThrow("expected output");
+    await vi.runAllTimersAsync(); await assertion;
+    try { await pending; } catch (error) { logAiError("ask", error); }
+    expect(mocks.error).toHaveBeenCalledWith(expect.objectContaining({ responseFailure: "schema_mismatch", invalidFields: ["confidence:invalid_type"] }), "AI tool error");
+    expect(JSON.stringify(mocks.error.mock.calls)).not.toContain("private");
+  });
   it("logs safe metadata for callers without a request logger", () => {
     logAiError("ask", new Error("private provider data"));
     expect(mocks.error).toHaveBeenCalledWith(expect.objectContaining({ tool: "ask", errorType: "operation_error" }), "AI tool error");

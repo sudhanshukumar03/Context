@@ -5,15 +5,10 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./config": "./src/config.ts",
-    "./batch": "./src/batch/index.ts",
-    "./image": "./src/image/index.ts",
-    "./audio": "./src/audio/index.ts"
+    "./config": "./src/config.ts"
   },
   "dependencies": {
-    "openai": "^6.49.0",
-    "p-limit": "^7.3.3",
-    "p-retry": "^7.1.1"
+    "openai": "^6.49.0"
   },
   "devDependencies": {
     "@types/node": "^22.20.5"

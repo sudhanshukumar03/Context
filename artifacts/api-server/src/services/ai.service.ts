@@ -15,7 +15,7 @@ const ATTEMPT_TIMEOUT_MS = 15_000;
 const operationDeadline = new AsyncLocalStorage<number>();
 
 class InvalidAiResponseError extends Error {
-  constructor() { super("Model response does not match the expected output"); }
+  constructor(readonly reason: "empty" | "truncated" | "invalid_json" | "schema_mismatch", readonly fields: string[] = []) { super("Model response does not match the expected output"); }
 }
 
 const confidence = z.number().min(0).max(100);
@@ -37,12 +37,12 @@ export const outputSchemas = {
 export function safeParseJson<T>(raw: string, schema: z.ZodType<T>): T {
   const match = raw.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
   if (!match) {
-    throw new InvalidAiResponseError();
+    throw new InvalidAiResponseError("invalid_json");
   }
   let parsed: unknown;
-  try { parsed = JSON.parse(match[0]); } catch { throw new InvalidAiResponseError(); }
+  try { parsed = JSON.parse(match[0]); } catch { throw new InvalidAiResponseError("invalid_json"); }
   const result = schema.safeParse(parsed);
-  if (!result.success) throw new InvalidAiResponseError();
+  if (!result.success) throw new InvalidAiResponseError("schema_mismatch", result.error.issues.map(issue => `${issue.path.join(".")}:${issue.code}`));
   return result.data;
 }
 
@@ -104,7 +104,8 @@ export async function callAi(systemPrompt: string, userMessage: string, maxToken
   if (AI_CONFIG.transport === "native") {
     const nativeTimeout = timeoutMs === ATTEMPT_TIMEOUT_MS ? 50_000 : timeoutMs;
     const result = await requestNativeGemini(AI_CONFIG.apiKey, MODEL, systemPrompt, userMessage, maxTokens, Math.min(nativeTimeout, remaining));
-    if (!result.content.trim() || result.truncated) throw new InvalidAiResponseError();
+    if (result.truncated) throw new InvalidAiResponseError("truncated");
+    if (!result.content.trim()) throw new InvalidAiResponseError("empty");
     return result.content;
   }
   const response = await openai.chat.completions.create({
@@ -117,7 +118,8 @@ export async function callAi(systemPrompt: string, userMessage: string, maxToken
     ],
   }, { timeout: Math.min(timeoutMs, remaining), maxRetries: 0 });
   const content = response.choices[0]?.message?.content;
-  if (!content?.trim() || response.choices[0]?.finish_reason === "length") throw new InvalidAiResponseError();
+  if (response.choices[0]?.finish_reason === "length") throw new InvalidAiResponseError("truncated");
+  if (!content?.trim()) throw new InvalidAiResponseError("empty");
   return content;
 }
 
@@ -420,5 +422,6 @@ export function logAiError(toolName: string, err: unknown, req?: Request): void 
     errorType: err instanceof AiOperationError
       ? err.cause instanceof InvalidAiResponseError ? "invalid_model_response" : "provider_error"
       : "operation_error",
+    ...(err instanceof AiOperationError && err.cause instanceof InvalidAiResponseError ? { responseFailure: err.cause.reason, invalidFields: err.cause.fields } : {}),
   }, "AI tool error");
 }

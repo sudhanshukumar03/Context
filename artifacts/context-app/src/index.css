@@ -400,7 +400,11 @@ html:not(.dark) .ctx-dashboard :is([class~="bg-slate-900/60"], [class~="bg-slate
 /* Focused AI conversation with supporting signals on a secondary rail. */
 .ctx-assistant-layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 24px; align-items: start; }
 .ctx-assistant-heading { display: flex; align-items: center; gap: 12px; padding: 20px 24px; border-bottom: 1px solid var(--ctx-border); }
-.ctx-assistant-heading > div { flex: 1; min-width: 0; }
+.ctx-assistant-title { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.ctx-assistant-heading > .ctx-assistant-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
+.ctx-assistant-actions button { white-space: nowrap; }
+.ctx-assistant-actions button[aria-busy="true"] svg { animation: ctx-chat-refresh 1s linear infinite; }
+@keyframes ctx-chat-refresh { to { transform: rotate(360deg); } }
 .ctx-assistant-heading p { font-size: 13px; color: var(--ctx-muted); margin-top: 4px; }
 .ctx-ai-avatar { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px; color: var(--ctx-focus); background: var(--ctx-input-bg); }
 .ctx-conversation { max-height: 65vh; min-height: 270px; overflow-y: auto; overscroll-behavior: contain; padding: 24px; display: flex; flex-direction: column; gap: 24px; }
@@ -418,6 +422,27 @@ html:not(.dark) .ctx-dashboard :is([class~="bg-slate-900/60"], [class~="bg-slate
 .ctx-answer-error { border-left: 3px solid var(--ctx-danger); padding: 10px 16px; }
 .ctx-answer-error .ctx-answer-heading > span { color: var(--ctx-danger); }
 .ctx-answer-section { margin-top: 18px; }
+.ctx-analysis-summary { margin-top: 12px; }
+.ctx-analysis-note { color: var(--ctx-muted); font-size: 13px; line-height: 1.65; }
+.ctx-analysis-report .ctx-analysis-findings { list-style: none; padding: 0; display: grid; gap: 12px; }
+.ctx-analysis-findings > li { padding: 12px 16px; border: 1px solid var(--ctx-border); border-radius: 8px; background: var(--ctx-subtle); }
+.ctx-analysis-basis { display: inline-block; font-size: 12px; font-weight: 600; color: var(--ctx-muted); }
+.ctx-analysis-inferred { color: var(--ctx-warning); }
+.ctx-analysis-findings p { margin-top: 4px; }
+.ctx-analysis-references { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.ctx-analysis-references button { min-height: 44px; padding: 8px 12px; border: 1px solid var(--ctx-border); border-radius: 6px; background: var(--ctx-panel); color: var(--ctx-focus); font-size: 13px; cursor: pointer; text-align: left; overflow-wrap: anywhere; }
+.ctx-analysis-references button:hover { background: var(--ctx-input-bg); }
+.ctx-analysis-unknowns { border-left: 3px solid var(--ctx-warning); padding: 12px 16px; background: var(--ctx-subtle); }
+.ctx-analysis-coverage dl { display: flex; flex-wrap: wrap; gap: 12px 24px; font-size: 13px; margin: 10px 0; }
+.ctx-analysis-coverage dt { color: var(--ctx-muted); }
+.ctx-analysis-coverage dd { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ctx-analysis-coverage p { font-size: 13px; color: var(--ctx-muted); line-height: 1.65; margin-top: 6px; }
+.ctx-answer-evidence > div > section + section { margin-top: 18px; }
+.ctx-answer-evidence > div > .ctx-analysis-note { margin-top: 16px; }
+.ctx-analysis-sources > li { padding-block: 10px; overflow-wrap: anywhere; scroll-margin-block: 16px; }
+.ctx-analysis-sources > li + li { border-top: 1px solid var(--ctx-border); }
+.ctx-analysis-sources span { display: block; color: var(--ctx-muted); font-size: 12px; }
+.ctx-analysis-sources p { margin-top: 4px; white-space: pre-wrap; }
 .ctx-answer-section h4, .ctx-answer-evidence h4 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
 .ctx-answer-section ul, .ctx-answer-section ol, .ctx-answer-evidence ul, .ctx-answer-evidence ol { padding-left: 20px; font-size: 14px; line-height: 1.75; }
 .ctx-answer-section ul, .ctx-answer-evidence ul { list-style: disc; }
@@ -531,7 +556,7 @@ html:not(.dark) .ctx-dashboard :is([class~="bg-slate-900/60"], [class~="bg-slate
   .ctx-history-note { margin-inline: 16px; }
   .ctx-detail-grid { grid-template-columns: minmax(0, 1fr); }
   .ctx-assistant-heading { padding: 16px; flex-wrap: wrap; }
-  .ctx-assistant-heading > .ctx-badge { margin-left: 56px; }
+  .ctx-assistant-heading > .ctx-assistant-actions { flex-basis: 100%; }
   .ctx-conversation { padding: 18px 16px; min-height: 220px; max-height: 60vh; }
   .ctx-composer { padding: 16px; }
   .ctx-composer button { padding-inline: 12px; }

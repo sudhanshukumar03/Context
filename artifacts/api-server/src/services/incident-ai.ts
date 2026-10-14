@@ -6,13 +6,17 @@ const rootCauseSchema = z.object({ cause: z.string().min(1), confidence: z.numbe
   suggestedFixes: strings.max(4), estimatedLoss: z.string(), reasoning: strings.max(4) });
 const answerSchema = z.object({ answer: z.string().min(1), confidence: z.number().min(0).max(1),
   sources: strings.default([]), reasoning: z.preprocess((value) => typeof value === "string" ? [value] : value, strings.default([])),
-  impact: strings.default([]), actions: strings.default([]) });
+  impact: strings.default([]), actions: strings.default([]),
+  findings: z.array(z.object({ statement: z.string().trim().min(1).max(1200),
+    basis: z.enum(["observed", "reported", "inferred"]), sourceIds: z.array(z.string().max(80)).max(64).default([]) })).max(6).optional(),
+  unknowns: strings.max(6).optional() });
 
 export function requestRootCause(systemPrompt: string) {
   return withRetry("root-cause", async () => safeParseJson(await callAi(systemPrompt, "Analyse now.", 1024), rootCauseSchema));
 }
 export function requestIncidentAnswer(systemPrompt: string, question: string) {
-  return withRetry("incident-ask", async () => safeParseJson(await callAi(systemPrompt, question, 2048), answerSchema));
+  // Structured findings and source IDs need more room than a short prose answer.
+  return withRetry("incident-ask", async () => safeParseJson(await callAi(systemPrompt, question, 4096), answerSchema));
 }
 export function requestPostmortem(systemPrompt: string) {
   // Reports need more generation time than short JSON answers. All attempts and
